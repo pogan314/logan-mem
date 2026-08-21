@@ -383,7 +383,7 @@ static int ipc_test_win_lock_child(const char *kind, const char *key, const char
         return -1;
     }
     const char *const argv[] = {
-        self, "__cbm_daemon_ipc_lock_probe", kind, key, parent, NULL,
+        self, "__lsm_daemon_ipc_lock_probe", kind, key, parent, NULL,
     };
     lsm_proc_opts_t options = {
         .bin = self,

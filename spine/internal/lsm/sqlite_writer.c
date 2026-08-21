@@ -160,7 +160,7 @@ enum {
 #define BTREE_INTERIOR_INDEX 0x02
 
 // SQLite 100-byte database header field offsets.
-#define HDR_OFF_CBM_PAGE_SIZE 16
+#define HDR_OFF_LSM_PAGE_SIZE 16
 #define HDR_OFF_WRITE_VERSION 18
 #define HDR_OFF_READ_VERSION 19
 #define HDR_OFF_RESERVED 20
@@ -1890,7 +1890,7 @@ static void write_metadata_tables(write_db_ctx_t *w, uint32_t *projects_root,
 /* Write the SQLite file header on page 1 with master entries. */
 static void write_sqlite_file_header(uint8_t *page1, uint32_t total_pages) {
     memcpy(page1, "SQLite format 3\000", 16);
-    put_u16(page1 + HDR_OFF_CBM_PAGE_SIZE,
+    put_u16(page1 + HDR_OFF_LSM_PAGE_SIZE,
             LSM_PAGE_SIZE == SQLITE_MAX_PAGE_SIZE ? (uint16_t)SKIP_ONE : (uint16_t)LSM_PAGE_SIZE);
     page1[HDR_OFF_WRITE_VERSION] = FILE_FORMAT;
     page1[HDR_OFF_READ_VERSION] = FILE_FORMAT;

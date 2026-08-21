@@ -1,9 +1,9 @@
 ---
 title: Raw — hunt for the owner's original seed-repo list
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:07 CDT"
-updated: "2026-08-21 13:07 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [session transcripts under /home/ubuntu/.claude/projects/, read 2026-08-21]
 ---

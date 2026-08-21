@@ -738,7 +738,7 @@ TEST(version_cohort_crash_releases_process_lifetime_lease) {
     bool launch_ready = self_length > 0 && self_length < sizeof(self) && ready_length > 0 &&
                         ready_length < (int)sizeof(ready_path);
     const char *const argv[] = {
-        self, "__cbm_version_cohort_crash_holder", "0123456789abcdef", fixture.parent, ready_path,
+        self, "__lsm_version_cohort_crash_holder", "0123456789abcdef", fixture.parent, ready_path,
         NULL,
     };
     lsm_proc_opts_t options = {

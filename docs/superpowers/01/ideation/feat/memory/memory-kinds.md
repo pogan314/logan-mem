@@ -1,9 +1,9 @@
 ---
 title: Memory kinds — what is worth remembering
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:00 CDT"
-updated: "2026-08-21 13:00 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [owner-requirements.md #9, findings/live-store-evidence.md, the 29 inbox drafts at /home/ubuntu/.pogan/memory/org/members/lgerard42/inbox/ read 2026-08-21]
 ---

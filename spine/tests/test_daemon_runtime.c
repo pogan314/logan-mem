@@ -313,7 +313,7 @@ static bool runtime_test_windows_spawn_image_holder(const char *image_path, cons
     memset(process_out, 0, sizeof(*process_out));
     char command_line[RUNTIME_TEST_PATH_CAP * 2];
     int written = snprintf(command_line, sizeof(command_line),
-                           "\"%s\" __cbm_runtime_image_holder \"%s\"", image_path, ready_event);
+                           "\"%s\" __lsm_runtime_image_holder \"%s\"", image_path, ready_event);
     wchar_t *application = lsm_path_to_wide(image_path);
     wchar_t *command =
         written > 0 && written < (int)sizeof(command_line) ? lsm_utf8_to_wide(command_line) : NULL;
@@ -681,7 +681,7 @@ static bool runtime_test_run_hello_image(const char *image_path,
     char command_line[RUNTIME_TEST_PATH_CAP * 3];
     int written =
         snprintf(command_line, sizeof(command_line),
-                 "\"%s\" __cbm_runtime_hello_client \"%s\" %s %s %s", image_path, fixture->parent,
+                 "\"%s\" __lsm_runtime_hello_client \"%s\" %s %s %s", image_path, fixture->parent,
                  fixture->key, identity->semantic_version, identity->build_fingerprint);
     wchar_t *application = lsm_utf8_to_wide(image_path);
     wchar_t *command =
@@ -711,7 +711,7 @@ static bool runtime_test_run_hello_image(const char *image_path,
     pid_t child = fork();
     if (child == 0) {
         (void)alarm(TF_RUNTIME_IMAGE_WATCHDOG_SECONDS);
-        execl(image_path, image_path, "__cbm_runtime_hello_client", fixture->parent, fixture->key,
+        execl(image_path, image_path, "__lsm_runtime_hello_client", fixture->parent, fixture->key,
               identity->semantic_version, identity->build_fingerprint, (char *)NULL);
         _exit(127);
     }
@@ -746,7 +746,7 @@ static bool runtime_test_run_activation_image(const char *image_path,
 #ifdef _WIN32
     char command_line[RUNTIME_TEST_PATH_CAP * 3];
     int written = snprintf(command_line, sizeof(command_line),
-                           "\"%s\" __cbm_runtime_activation_client \"%s\" %s %s %s %u", image_path,
+                           "\"%s\" __lsm_runtime_activation_client \"%s\" %s %s %s %u", image_path,
                            fixture->parent, fixture->key, identity->semantic_version,
                            identity->build_fingerprint, (unsigned int)action);
     wchar_t *application = lsm_utf8_to_wide(image_path);
@@ -779,7 +779,7 @@ static bool runtime_test_run_activation_image(const char *image_path,
     pid_t child = action_written > 0 && action_written < (int)sizeof(action_text) ? fork() : -1;
     if (child == 0) {
         (void)alarm(TF_RUNTIME_IMAGE_WATCHDOG_SECONDS);
-        execl(image_path, image_path, "__cbm_runtime_activation_client", fixture->parent,
+        execl(image_path, image_path, "__lsm_runtime_activation_client", fixture->parent,
               fixture->key, identity->semantic_version, identity->build_fingerprint, action_text,
               (char *)NULL);
         _exit(127);
@@ -816,7 +816,7 @@ static bool runtime_test_run_mapped_hello_image(const char *image_path,
     *exit_code_out = -1;
     pid_t child = fork();
     if (child == 0) {
-        execl(image_path, image_path, "__cbm_runtime_mapped_hello_client", mapped_image_path,
+        execl(image_path, image_path, "__lsm_runtime_mapped_hello_client", mapped_image_path,
               fixture->parent, fixture->key, identity->semantic_version,
               identity->build_fingerprint, (char *)NULL);
         _exit(127);

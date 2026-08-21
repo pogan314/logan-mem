@@ -740,7 +740,7 @@ TEST(popen_isolated_propagates_exit_code) {
  *
  * We open a real listening socket, mark it inheritable, then spawn THIS test
  * binary through lsm_popen (a cmd.exe grandchild — exactly git's spawn shape) in
- * `__cbm_sockprobe` mode, passing the socket's numeric handle value. The child
+ * `__lsm_sockprobe` mode, passing the socket's numeric handle value. The child
  * reports via exit code whether that handle is a live socket in its address space:
  *   - isolated spawn (the fix): cmd.exe inherits only {pipe, NUL}, the socket is
  *     absent, getsockopt fails  → child exit 0  → GREEN.
@@ -768,7 +768,7 @@ TEST(popen_isolates_listening_socket) {
     ASSERT(GetModuleFileNameA(NULL, self, sizeof(self)) > 0);
 
     char cmd[MAX_PATH + 64];
-    snprintf(cmd, sizeof(cmd), "\"%s\" __cbm_sockprobe %llu", self,
+    snprintf(cmd, sizeof(cmd), "\"%s\" __lsm_sockprobe %llu", self,
              (unsigned long long)(uintptr_t)ls);
 
     FILE *fp = lsm_popen(cmd, "r");

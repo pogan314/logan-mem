@@ -9843,7 +9843,7 @@ TEST(index_supervisor_start_failure_is_fail_closed_in_real_host) {
     char self_path[LSM_SZ_4K] = {0};
     ASSERT_TRUE(idxfailclosed_self_path(self_path));
     char *const child_argv[] = {
-        self_path, "__cbm_mcp_idxfailclosed_probe", repo_dir, cache_dir, NULL,
+        self_path, "__lsm_mcp_idxfailclosed_probe", repo_dir, cache_dir, NULL,
     };
     (void)fflush(NULL);
     pid_t child = -1;

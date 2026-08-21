@@ -135,7 +135,7 @@ done
 CFLAGS_EXTRA=""
 if [[ -n "$VERSION" ]]; then
     CLEAN_VERSION="${VERSION#v}"
-    CFLAGS_EXTRA="-DCBM_VERSION=\"\\\"$CLEAN_VERSION\\\"\""
+    CFLAGS_EXTRA="-DLSM_VERSION=\"\\\"$CLEAN_VERSION\\\"\""
 fi
 
 print_env "build.sh"

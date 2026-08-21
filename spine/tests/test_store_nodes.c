@@ -25,7 +25,7 @@
  *
  * This pins the SQL mirrors to the C predicate in BOTH directions, so the next
  * type-like label fails here instead of quietly shrinking query results. */
-TEST(sql_label_allowlists_match_cbm_label_is_type_like) {
+TEST(sql_label_allowlists_match_lsm_label_is_type_like) {
     /* Every label the C predicate accepts must appear in the SQL fragment. */
     static const char *const type_like[] = {"Class", "Struct", "Interface",
                                             "Enum",  "Type",   "Trait"};
@@ -2176,7 +2176,7 @@ SUITE(store_nodes) {
     RUN_TEST(store_coverage_meta_zero_row_truncation_and_delete);
     RUN_TEST(store_coverage_replace_rejects_invalid_row_arguments);
     RUN_TEST(store_coverage_replace_rolls_back_when_shadow_rebuild_fails);
-    RUN_TEST(sql_label_allowlists_match_cbm_label_is_type_like);
+    RUN_TEST(sql_label_allowlists_match_lsm_label_is_type_like);
     RUN_TEST(store_open_memory);
     RUN_TEST(store_close_null);
     RUN_TEST(store_open_memory_twice);

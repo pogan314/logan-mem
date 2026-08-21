@@ -218,7 +218,7 @@ static bool tf_setup_cache_sentinel(void) {
 /* Fast real-process probes for the async index-supervisor contract. They run
  * only in a child admitted by the exact build-bound worker grammar. */
 static void tf_index_worker_probe(const char *args_json, const char *response_out) {
-    if (!args_json || !strstr(args_json, "\"__cbm_test_worker\"")) {
+    if (!args_json || !strstr(args_json, "\"__lsm_test_worker\"")) {
         return;
     }
     if (strstr(args_json, "\"clean\"")) {
@@ -383,7 +383,7 @@ static int tf_maybe_run_index_worker(int argc, char **argv) {
  * Returns an exit code (>=0) when it handled a probe invocation, else -1. */
 static int tf_maybe_run_socket_probe(int argc, char **argv) {
 #ifdef _WIN32
-    if (argc < 3 || strcmp(argv[1], "__cbm_sockprobe") != 0) {
+    if (argc < 3 || strcmp(argv[1], "__lsm_sockprobe") != 0) {
         return -1;
     }
     WSADATA wsa;
@@ -410,7 +410,7 @@ static int tf_maybe_run_socket_probe(int argc, char **argv) {
  * 21 validation/OS error. */
 static int tf_maybe_run_daemon_ipc_lock_probe(int argc, char **argv) {
 #ifdef _WIN32
-    if (argc != 5 || strcmp(argv[1], "__cbm_daemon_ipc_lock_probe") != 0) {
+    if (argc != 5 || strcmp(argv[1], "__lsm_daemon_ipc_lock_probe") != 0) {
         return -1;
     }
     lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[3], argv[4]);
@@ -440,7 +440,7 @@ static int tf_maybe_run_daemon_ipc_lock_probe(int argc, char **argv) {
 
 static int tf_maybe_run_version_cohort_crash_holder(int argc, char **argv) {
 #ifdef _WIN32
-    if (argc != 5 || strcmp(argv[1], "__cbm_version_cohort_crash_holder") != 0) {
+    if (argc != 5 || strcmp(argv[1], "__lsm_version_cohort_crash_holder") != 0) {
         return -1;
     }
     lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[2], argv[3]);
@@ -486,7 +486,7 @@ static int tf_maybe_run_version_cohort_crash_holder(int argc, char **argv) {
 
 static int tf_maybe_run_runtime_image_holder(int argc, char **argv) {
 #ifdef _WIN32
-    if (argc != 3 || strcmp(argv[1], "__cbm_runtime_image_holder") != 0) {
+    if (argc != 3 || strcmp(argv[1], "__lsm_runtime_image_holder") != 0) {
         return -1;
     }
     HANDLE ready = OpenEventA(EVENT_MODIFY_STATE, FALSE, argv[2]);
@@ -510,7 +510,7 @@ static int tf_maybe_run_runtime_image_holder(int argc, char **argv) {
  * test runner avoids any production-only test hook: the daemon authenticates
  * and fingerprints an ordinary, separately executed process image. */
 static int tf_maybe_run_runtime_hello_client(int argc, char **argv) {
-    if (argc != 6 || strcmp(argv[1], "__cbm_runtime_hello_client") != 0) {
+    if (argc != 6 || strcmp(argv[1], "__lsm_runtime_hello_client") != 0) {
         return -1;
     }
     lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[3], argv[2]);
@@ -539,7 +539,7 @@ static int tf_maybe_run_runtime_hello_client(int argc, char **argv) {
  * executing copy so the daemon must authenticate that peer image rather than
  * require the active generation's build fingerprint. */
 static int tf_maybe_run_runtime_activation_client(int argc, char **argv) {
-    if (argc != 7 || strcmp(argv[1], "__cbm_runtime_activation_client") != 0) {
+    if (argc != 7 || strcmp(argv[1], "__lsm_runtime_activation_client") != 0) {
         return -1;
     }
     char *action_end = NULL;
@@ -568,7 +568,7 @@ static int tf_maybe_run_runtime_activation_client(int argc, char **argv) {
  * main image, not merely find its own vnode in an arbitrary executable map. */
 static int tf_maybe_run_runtime_mapped_hello_client(int argc, char **argv) {
 #ifdef __APPLE__
-    if (argc != 7 || strcmp(argv[1], "__cbm_runtime_mapped_hello_client") != 0) {
+    if (argc != 7 || strcmp(argv[1], "__lsm_runtime_mapped_hello_client") != 0) {
         return -1;
     }
     int image_fd = open(argv[2], O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
@@ -585,7 +585,7 @@ static int tf_maybe_run_runtime_mapped_hello_client(int argc, char **argv) {
         return 28;
     }
 
-    char *hello_argv[] = {argv[0], "__cbm_runtime_hello_client", argv[3], argv[4], argv[5],
+    char *hello_argv[] = {argv[0], "__lsm_runtime_hello_client", argv[3], argv[4], argv[5],
                           argv[6]};
     int result = tf_maybe_run_runtime_hello_client(6, hello_argv);
     if (munmap(mapping, 1) != 0) {
@@ -601,7 +601,7 @@ static int tf_maybe_run_runtime_mapped_hello_client(int argc, char **argv) {
 
 static int tf_maybe_run_mcp_idxfailclosed_probe(int argc, char **argv) {
 #ifndef _WIN32
-    if (argc != 4 || strcmp(argv[1], "__cbm_mcp_idxfailclosed_probe") != 0) {
+    if (argc != 4 || strcmp(argv[1], "__lsm_mcp_idxfailclosed_probe") != 0) {
         return -1;
     }
     extern int mcp_test_idxfailclosed_supervisor_start_check(const char *repo_dir,

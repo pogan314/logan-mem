@@ -83,9 +83,9 @@ bool lsm_validate_project_name(const char *name);
 #define LSM_SNPRINTF_APPEND(buf, sz, off, ...)                                       \
     do {                                                                             \
         if ((off) >= 0 && (off) < (int)(sz)) {                                       \
-            int _cbm_r = snprintf((buf) + (off), (sz) - (size_t)(off), __VA_ARGS__); \
-            if (_cbm_r > 0)                                                          \
-                (off) += _cbm_r;                                                     \
+            int _lsm_r = snprintf((buf) + (off), (sz) - (size_t)(off), __VA_ARGS__); \
+            if (_lsm_r > 0)                                                          \
+                (off) += _lsm_r;                                                     \
             if ((off) >= (int)(sz))                                                  \
                 (off) = (int)(sz) - 1;                                               \
         }                                                                            \

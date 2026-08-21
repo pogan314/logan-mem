@@ -3595,7 +3595,7 @@ static void rust_expand_user_macro(RustLSPContext *ctx, const char *mname, TSNod
     lsm_negmemo_insert(&ctx->macro_memo, ctx->arena, mm_key);
 
     /* Wrap and parse. */
-    char *wrapped = lsm_arena_sprintf(ctx->arena, "fn __cbm_macro_expand() { %s; }\n", substituted);
+    char *wrapped = lsm_arena_sprintf(ctx->arena, "fn __lsm_macro_expand() { %s; }\n", substituted);
     if (!wrapped)
         return;
 
@@ -3710,7 +3710,7 @@ static void rust_resolve_macro_arg_exprs(RustLSPContext *ctx, TSNode invocation)
      * thing parses as one valid expression (a trailing format-spec arg like
      * `width = w` would otherwise break statement parsing). Calls inside any
      * element are still walked. */
-    static const char macro_arg_prefix[] = "fn __cbm_macro_args() { let _ = (";
+    static const char macro_arg_prefix[] = "fn __lsm_macro_args() { let _ = (";
     char *wrapped = lsm_arena_sprintf(ctx->arena, "%s%s); }\n", macro_arg_prefix, arg_text);
     if (!wrapped)
         return;

@@ -226,7 +226,7 @@ TEST(index_supervisor_worker_argv_requires_exact_build_bound_grammar) {
         LSM_INDEX_WORKER_BUILD_ARG,
         (char *)captured,
         "index_repository",
-        "{\"__cbm_test_worker\":\"hang-tree\"}",
+        "{\"__lsm_test_worker\":\"hang-tree\"}",
         "--response-out",
         "/tmp/r",
         LSM_INDEX_WORKER_MEMORY_BUDGET_ARG,
@@ -343,7 +343,7 @@ TEST(index_supervisor_async_jobs_are_isolated_cancellable_and_terminal_cached) {
         LSM_INDEX_WORKER_BUILD_ARG,
         (char *)captured,
         "index_repository",
-        "{\"__cbm_test_worker\":\"hang-tree\"}",
+        "{\"__lsm_test_worker\":\"hang-tree\"}",
         "--response-out",
         "/tmp/r",
         LSM_INDEX_WORKER_SINGLE_THREAD_ARG,
@@ -380,7 +380,7 @@ TEST(index_supervisor_async_jobs_are_isolated_cancellable_and_terminal_cached) {
     (void)lsm_setenv("LSM_INDEX_MARKER_FILE", "parent-marker", 1);
     (void)lsm_setenv("LSM_INDEX_QUARANTINE_FILE", "parent-quarantine", 1);
 
-    const char args[] = "{\"__cbm_test_worker\":\"hang-tree\"}";
+    const char args[] = "{\"__lsm_test_worker\":\"hang-tree\"}";
     lsm_index_worker_handle_t *first = NULL;
     lsm_index_worker_handle_t *second = NULL;
     index_supervisor_log_capture_t first_capture = {0};
@@ -541,7 +541,7 @@ TEST(index_supervisor_sync_wrapper_forwards_cancel_and_drains_tree) {
     atomic_init(&cancel_requested, 1);
     lsm_index_worker_result_t result = {0};
     int run_status =
-        lsm_index_spawn_worker_with_log_cancel("{\"__cbm_test_worker\":\"hang-tree\"}", false, NULL,
+        lsm_index_spawn_worker_with_log_cancel("{\"__lsm_test_worker\":\"hang-tree\"}", false, NULL,
                                                NULL, NULL, NULL, &cancel_requested, &result);
     bool contained = run_status == 0 && result.cancellation_requested && result.tree_quiesced &&
                      !result.supervision_failed && result.response == NULL;
@@ -557,7 +557,7 @@ static bool index_supervisor_test_run_probe(const char *mode, bool profiling,
                                             lsm_proc_outcome_t *outcome_out, bool *has_response_out,
                                             bool *log_exists_out, bool *response_path_exists_out) {
     char args[128];
-    (void)snprintf(args, sizeof(args), "{\"__cbm_test_worker\":\"%s\"}", mode);
+    (void)snprintf(args, sizeof(args), "{\"__lsm_test_worker\":\"%s\"}", mode);
     lsm_profile_active = profiling;
     lsm_index_worker_handle_t *handle = NULL;
     if (lsm_index_worker_start(args, 0, false, NULL, NULL, &handle) != 0 || !handle) {
@@ -657,7 +657,7 @@ TEST(index_supervisor_drains_terminal_backlog_into_request_progress_callback) {
     lsm_progress_sink_init(progress);
     lsm_index_worker_handle_t *handle = NULL;
     int start_rc =
-        lsm_index_worker_start_with_log("{\"__cbm_test_worker\":\"clean\"}", 0, false, NULL, NULL,
+        lsm_index_worker_start_with_log("{\"__lsm_test_worker\":\"clean\"}", 0, false, NULL, NULL,
                                         index_supervisor_test_capture_log, &capture, &handle);
     char log_path[INDEX_SUPERVISOR_TEST_PATH_CAP] = {0};
     if (handle) {
@@ -727,7 +727,7 @@ TEST(index_supervisor_oversized_response_is_contained_and_log_is_retained) {
     (void)lsm_setenv("LSM_CACHE_DIR", cache, 1);
 
     lsm_index_worker_handle_t *handle = NULL;
-    int start_rc = lsm_index_worker_start("{\"__cbm_test_worker\":\"oversize\"}", 0, false, NULL,
+    int start_rc = lsm_index_worker_start("{\"__lsm_test_worker\":\"oversize\"}", 0, false, NULL,
                                           NULL, &handle);
     char log_path[INDEX_SUPERVISOR_TEST_PATH_CAP] = {0};
     char response_path[INDEX_SUPERVISOR_TEST_PATH_CAP] = {0};
@@ -791,7 +791,7 @@ TEST(index_supervisor_killed_worker_log_is_never_empty_and_names_the_run) {
     (void)snprintf(repo_path, sizeof(repo_path), "%s/some repo", cache);
     char args[INDEX_SUPERVISOR_TEST_PATH_CAP];
     (void)snprintf(args, sizeof(args),
-                   "{\"__cbm_test_worker\":\"buffered-kill\",\"repo_path\":\"%s\"}", repo_path);
+                   "{\"__lsm_test_worker\":\"buffered-kill\",\"repo_path\":\"%s\"}", repo_path);
 
     lsm_index_worker_handle_t *handle = NULL;
     int start_rc = lsm_index_worker_start(args, 0, false, NULL, NULL, &handle);

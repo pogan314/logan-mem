@@ -1,9 +1,9 @@
 ---
 title: Raw — independent rebuild-vs-refactor analysis
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:14 CDT"
-updated: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [../pogan-toolkit/src and github.com/obra/episodic-memory, analysed 2026-08-21 by an agent with no prior context]
 ---

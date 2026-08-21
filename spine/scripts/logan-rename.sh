@@ -18,8 +18,8 @@ s/codebase_memory/logan_spine/g;
 s/CodebaseMemory/LoganSpine/g;
 s/Codebase Memory/Logan Spine/g;
 s/codebase memory/logan spine/g;
-s/\bCBM_/LSM_/g;
-s/\bcbm_/lsm_/g;
+s/CBM_/LSM_/g;
+s/cbm_/lsm_/g;
 s/\bCBM\b/LSM/g;
 s/\bcbm\b/lsm/g;
 s/\bCbm/Lsm/g;
@@ -29,7 +29,7 @@ s/cbmignore/lsmignore/g;
 '
 git ls-files -z \
   | grep -zvE "$skip" \
-  | xargs -0 grep -lIE 'codebase.memory|Codebase.Memory|CodebaseMemory|\b[Cc][Bb][Mm]\b|\bCBM_|\bcbm_|\bCbm|\b[Cc][Bb][Mm]\w|cbmignore' 2>/dev/null \
+  | xargs -0 grep -lIE 'codebase.memory|Codebase.Memory|CodebaseMemory|\b[Cc][Bb][Mm]\b|CBM_|cbm_|\bCbm|\b[Cc][Bb][Mm]\w|cbmignore' 2>/dev/null \
   | { while IFS= read -r f; do perl -pi -e "$rules" "$f"; done; } || true
 
 # 2. Paths. Deepest first so a renamed parent does not invalidate a child path.

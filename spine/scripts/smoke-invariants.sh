@@ -643,7 +643,7 @@ inv_every_tool() {
         "detect_changes|{\"project\":\"$p\"}"
         "manage_adr|{\"project\":\"$p\",\"mode\":\"get\"}"
         "ingest_traces|{\"project\":\"$p\",\"traces\":[]}"
-        "delete_project|{\"project\":\"__cbm_smoke_nonexistent__\"}"
+        "delete_project|{\"project\":\"__lsm_smoke_nonexistent__\"}"
     )
 
     local entry name args
@@ -678,7 +678,7 @@ inv_every_tool() {
     done
 
     # Unknown tool must produce a graceful response, not a crash.
-    local ureq="{\"jsonrpc\":\"2.0\",\"id\":$((MCP_ID++)),\"method\":\"tools/call\",\"params\":{\"name\":\"__cbm_no_such_tool__\",\"arguments\":{}}}"
+    local ureq="{\"jsonrpc\":\"2.0\",\"id\":$((MCP_ID++)),\"method\":\"tools/call\",\"params\":{\"name\":\"__lsm_no_such_tool__\",\"arguments\":{}}}"
     if mcp_send_recv "$ureq" 15 && printf '%s' "$MCP_RESP" | is_json; then
         pass "tool/unknown (graceful response, no crash)"
     else

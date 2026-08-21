@@ -68,36 +68,36 @@ CXXFLAGS_COMMON = -std=c++14 -Wall -Wextra -Werror \
 # need it; the test-runner always has them.
 TEST_SEAM_DEFINE :=
 ifeq ($(TEST_SEAMS),1)
-TEST_SEAM_DEFINE := -DCBM_ENABLE_TEST_SEAMS=1
+TEST_SEAM_DEFINE := -DLSM_ENABLE_TEST_SEAMS=1
 endif
 
-# Production flags (CFLAGS_EXTRA allows CI to inject -DCBM_VERSION)
+# Production flags (CFLAGS_EXTRA allows CI to inject -DLSM_VERSION)
 # LSM_BIND_TS_ALLOCATOR=1: bind the tree-sitter runtime to mimalloc (#424). Only
 # the prod build uses mimalloc (MI_OVERRIDE=1); the test build is CRT+ASan, where
 # binding would create an alloc/free mismatch, so the guard is prod-only.
-CFLAGS_PROD = $(CFLAGS_COMMON) -O2 -DCBM_BIND_TS_ALLOCATOR=1 $(TEST_SEAM_DEFINE) \
+CFLAGS_PROD = $(CFLAGS_COMMON) -O2 -DLSM_BIND_TS_ALLOCATOR=1 $(TEST_SEAM_DEFINE) \
               $(GLOBAL_OVERRIDE_DEFINE) $(CFLAGS_EXTRA)
 CXXFLAGS_PROD = $(CXXFLAGS_COMMON) -O2
 
 # Test flags: debug + sanitizers (override SANITIZE= to disable on Windows)
 SANITIZE = -fsanitize=address,undefined -fno-omit-frame-pointer
-EDITOR_TEST_DEFINES = -DCBM_JSON_LIKE_ENABLE_TEST_API=1 \
-	-DCBM_TOML_EDIT_ENABLE_TEST_API=1 -DCBM_YAML_ENABLE_TEST_API=1 \
-	-DCBM_TEXT_EDIT_ENABLE_TEST_API=1 -DCBM_CLI_ENABLE_TEST_API=1 \
-	-DCBM_DIAGNOSTICS_ENABLE_TEST_API=1 -DCBM_ENABLE_TEST_SEAMS=1
+EDITOR_TEST_DEFINES = -DLSM_JSON_LIKE_ENABLE_TEST_API=1 \
+	-DLSM_TOML_EDIT_ENABLE_TEST_API=1 -DLSM_YAML_ENABLE_TEST_API=1 \
+	-DLSM_TEXT_EDIT_ENABLE_TEST_API=1 -DLSM_CLI_ENABLE_TEST_API=1 \
+	-DLSM_DIAGNOSTICS_ENABLE_TEST_API=1 -DLSM_ENABLE_TEST_SEAMS=1
 # The build system is the single source of truth for "is this binary
 # instrumented": compiler-specific probes (__SANITIZE_ADDRESS__) miss
 # clang's feature-check spelling and every non-ASan sanitizer, so the
 # trap-UBSan leg once ran NATIVE timing budgets on an instrumented
 # binary. Any non-empty SANITIZE ⇒ sanitized budgets everywhere.
 ifneq ($(strip $(SANITIZE)),)
-SANITIZED_DEFINE = -DCBM_SANITIZED_BUILD=1
+SANITIZED_DEFINE = -DLSM_SANITIZED_BUILD=1
 else
 SANITIZED_DEFINE =
 endif
-KOTLIN_DEDUP_TEST_DEFINE = -DCBM_KOTLIN_DEDUP_TEST_API=1
-CALL_REFERENCE_LOOKUP_TEST_DEFINE = -DCBM_CALL_REFERENCE_LOOKUP_TEST_API=1
-INCREMENTAL_TEST_DEFINE = -DCBM_INCREMENTAL_TEST_API=1
+KOTLIN_DEDUP_TEST_DEFINE = -DLSM_KOTLIN_DEDUP_TEST_API=1
+CALL_REFERENCE_LOOKUP_TEST_DEFINE = -DLSM_CALL_REFERENCE_LOOKUP_TEST_API=1
+INCREMENTAL_TEST_DEFINE = -DLSM_INCREMENTAL_TEST_API=1
 CFLAGS_TEST = $(CFLAGS_COMMON) $(EDITOR_TEST_DEFINES) $(SANITIZED_DEFINE) \
 	$(KOTLIN_DEDUP_TEST_DEFINE) $(CALL_REFERENCE_LOOKUP_TEST_DEFINE) \
 	$(INCREMENTAL_TEST_DEFINE) -g -O1 $(SANITIZE)
@@ -118,8 +118,8 @@ TSAN_SANITIZE = -fsanitize=thread -fno-omit-frame-pointer
 # macro of ours.
 CFLAGS_TSAN = $(CFLAGS_COMMON) $(EDITOR_TEST_DEFINES) $(KOTLIN_DEDUP_TEST_DEFINE) \
 	$(CALL_REFERENCE_LOOKUP_TEST_DEFINE) $(INCREMENTAL_TEST_DEFINE) \
-	-DCBM_SANITIZED_BUILD=1 -g -O1 $(TSAN_SANITIZE)
-CXXFLAGS_TSAN = $(CXXFLAGS_COMMON) -DCBM_SANITIZED_BUILD=1 -g -O1 \
+	-DLSM_SANITIZED_BUILD=1 -g -O1 $(TSAN_SANITIZE)
+CXXFLAGS_TSAN = $(CXXFLAGS_COMMON) -DLSM_SANITIZED_BUILD=1 -g -O1 \
                 $(TSAN_SANITIZE)
 
 # Windows needs ws2_32 (Winsock), psapi (GetProcessMemoryInfo), shell32
@@ -436,7 +436,7 @@ MIMALLOC_OVERRIDE_DEFINE :=
 GLOBAL_OVERRIDE_DEFINE :=
 ifneq ($(filter yes,$(IS_MINGW) $(IS_LINUX)),)
 MIMALLOC_OVERRIDE_DEFINE := -DMI_MALLOC_OVERRIDE=1
-GLOBAL_OVERRIDE_DEFINE := -DCBM_MEM_GLOBAL_OVERRIDE=1
+GLOBAL_OVERRIDE_DEFINE := -DLSM_MEM_GLOBAL_OVERRIDE=1
 endif
 MIMALLOC_CFLAGS = -std=c11 -O2 -w \
                   -Ivendored/mimalloc/include \
@@ -713,9 +713,9 @@ BUILD_DIR = build/c
 # Grammar + tree-sitter runtime: compiled without -Werror (upstream code has warnings)
 GRAMMAR_CFLAGS = -std=c11 -D_DEFAULT_SOURCE -O2 -w -I$(LSM_DIR) -I$(TS_INCLUDE) -I$(TS_SRC)
 GRAMMAR_CFLAGS_TEST = -std=c11 -D_DEFAULT_SOURCE -g -O1 -w -I$(LSM_DIR) -I$(TS_INCLUDE) -I$(TS_SRC) \
-                      -DCBM_ENABLE_TEST_SEAMS=1 $(SANITIZED_DEFINE) $(SANITIZE)
+                      -DLSM_ENABLE_TEST_SEAMS=1 $(SANITIZED_DEFINE) $(SANITIZE)
 GRAMMAR_CFLAGS_TSAN = -std=c11 -D_DEFAULT_SOURCE -g -O1 -w -I$(LSM_DIR) -I$(TS_INCLUDE) -I$(TS_SRC) \
-                      -DCBM_ENABLE_TEST_SEAMS=1 -DCBM_SANITIZED_BUILD=1 $(TSAN_SANITIZE)
+                      -DLSM_ENABLE_TEST_SEAMS=1 -DLSM_SANITIZED_BUILD=1 $(TSAN_SANITIZE)
 
 # Object files for grammars + ts_runtime + lsp_all + preprocessor
 GRAMMAR_OBJS_TEST = $(patsubst $(LSM_DIR)/%.c,$(BUILD_DIR)/%.o,$(GRAMMAR_SRCS))
@@ -1022,7 +1022,7 @@ MAIN_SRC = src/main.c
 # property no reviewer can see by reading the diff. The stamp's CONTENT is the
 # configuration and it is rewritten only when that content changes, so ordinary
 # incremental builds are unaffected. (Single-quoted: the signature may contain
-# the escaped quotes of -DCBM_VERSION, which are literal inside '', but must not
+# the escaped quotes of -DLSM_VERSION, which are literal inside '', but must not
 # contain a literal single quote.)
 # SANITIZE belongs here: it changes the instrumentation compiled into every
 # object, so a build that only changes it MUST rebuild. Its absence made

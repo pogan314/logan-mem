@@ -107,20 +107,20 @@ fi
 # foreign cache can only MISS, never return wrong output. No CCACHE_BASEDIR
 # and no path rewriting: debug-info and sanitizer report paths stay exact.
 if [[ "${LSM_NO_CCACHE:-0}" != "1" ]] && command -v ccache >/dev/null 2>&1; then
-    for _cbm_ccache_masq in \
+    for _lsm_ccache_masq in \
         /usr/lib/ccache \
         /opt/homebrew/opt/ccache/libexec \
         /usr/local/opt/ccache/libexec \
         /clang64/lib/ccache/bin \
         /clangarm64/lib/ccache/bin; do
-        if [[ -d "$_cbm_ccache_masq" ]]; then
+        if [[ -d "$_lsm_ccache_masq" ]]; then
             case ":$PATH:" in
-            *":$_cbm_ccache_masq:"*) ;;
-            *) PATH="$_cbm_ccache_masq:$PATH" ;;
+            *":$_lsm_ccache_masq:"*) ;;
+            *) PATH="$_lsm_ccache_masq:$PATH" ;;
             esac
         fi
     done
-    unset _cbm_ccache_masq
+    unset _lsm_ccache_masq
     export PATH
     export CCACHE_COMPILERCHECK=content
 fi

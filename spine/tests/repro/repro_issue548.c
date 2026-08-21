@@ -65,7 +65,7 @@
  *     resolves to the wrong directory.
  *
  * WHY RED on current code:
- *   test_repro_issue548_cbm_is_dir_rejects_backslash_path:
+ *   test_repro_issue548_lsm_is_dir_rejects_backslash_path:
  *     Creates a real tmpdir on disk.  Converts the forward-slash path to a
  *     backslash form (simulating what the Windows UI sends).  Asserts that
  *     lsm_is_dir() returns true for the backslash form — exactly what
@@ -117,7 +117,7 @@
 /* ── TEST A: lsm_is_dir rejects a backslash path (the gate handle_browse uses) */
 
 /*
- * repro_issue548_cbm_is_dir_rejects_backslash_path
+ * repro_issue548_lsm_is_dir_rejects_backslash_path
  *
  * WHY RED on current code (DEFECT A):
  *   handle_browse() (src/ui/http_server.c:411) calls lsm_is_dir(path) before
@@ -144,7 +144,7 @@
  *   After the fix, handle_browse() converts backslashes first, so lsm_is_dir()
  *   sees forward-slash paths and succeeds → handler returns 200 → test GREEN.
  */
-TEST(repro_issue548_cbm_is_dir_rejects_backslash_path) {
+TEST(repro_issue548_lsm_is_dir_rejects_backslash_path) {
     /*
      * Create a real tmpdir on POSIX so lsm_is_dir() would succeed on the
      * forward-slash path.  The test then converts it to backslash form to
@@ -336,7 +336,7 @@ SUITE(repro_issue548) {
      * lsm_is_dir().  A real tmpdir exists on disk; the forward-slash form
      * would pass the gate, but handle_browse() passes the raw backslash form.
      */
-    RUN_TEST(repro_issue548_cbm_is_dir_rejects_backslash_path);
+    RUN_TEST(repro_issue548_lsm_is_dir_rejects_backslash_path);
 
     /*
      * RED: handle_browse() parent-computation strips the trailing slash from

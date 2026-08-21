@@ -12,7 +12,7 @@ if [[ ! -x "$RUNNER" ]]; then
 fi
 
 set +e
-output="$(LSM_REPRO_ONLY='__cbm_no_such_repro_suite__' "$RUNNER" 2>&1)"
+output="$(LSM_REPRO_ONLY='__lsm_no_such_repro_suite__' "$RUNNER" 2>&1)"
 status=$?
 set -e
 
