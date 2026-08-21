@@ -2,8 +2,8 @@
 title: feat/plugin — one plugin, one install, one uninstall
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 version: "01"
 sources: [owner-requirements.md #14, what-went-wrong.md, docs/wiki/claude-code-harness-facts.md, docs/wiki/obra-episodic-memory.md]
 ---

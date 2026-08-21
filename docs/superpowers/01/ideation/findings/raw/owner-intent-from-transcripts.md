@@ -2,8 +2,8 @@
 title: Raw — owner statements mined from session transcripts
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:07 CDT"
+updated: "2026-08-21 13:07 CDT"
 version: "01"
 sources: [/home/ubuntu/.claude/projects/-home-ubuntu-projects-org-pogan-mem/*.jsonl and -home-ubuntu-projects-org-pogan-toolkit/*.jsonl, read 2026-08-21]
 ---

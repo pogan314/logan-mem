@@ -2,8 +2,8 @@
 title: Live pogan store evidence
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:02 CDT"
+updated: "2026-08-21 13:02 CDT"
 version: "01"
 sources: [live read-only inspection of /home/ubuntu/.pogan/memory/ on 2026-08-21]
 ---

@@ -2,8 +2,8 @@
 title: obra/episodic-memory
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 12:58 CDT"
+updated: "2026-08-21 12:58 CDT"
 sources: [live `gh api` calls against github.com/obra/episodic-memory, HEAD tree; README.md; CLAUDE.md; .claude-plugin/plugin.json; .codex-plugin/plugin.json; .mcp.json; package.json; hooks/hooks.json; agents/search-conversations.md; skills/remembering-conversations/SKILL.md; src/paths.ts; src/db.ts; src/mcp-server.ts; src/embeddings.ts; src/summarizer.ts; src/indexer.ts; src/parser.ts]
 ---
 

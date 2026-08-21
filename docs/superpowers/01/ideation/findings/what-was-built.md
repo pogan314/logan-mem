@@ -2,8 +2,8 @@
 title: What pogan-mem actually built
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:08 CDT"
+updated: "2026-08-21 13:08 CDT"
 version: "01"
 sources: [docs/superpowers/01/ideation/findings/raw/built-inventory.md]
 ---

@@ -2,8 +2,8 @@
 title: Research extract — repos studied in the old repo's top-level docs
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 sources: [../pogan-toolkit/docs/ai-agent-memory-unified-report.md, ../pogan-toolkit/docs/ai-memory-and-context-ecosystem-gemini.html, ../pogan-toolkit/docs/reports/2026-08-07-compare-*.md, read 2026-08-21]
 ---
 

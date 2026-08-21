@@ -2,8 +2,8 @@
 title: In-run learning — the coordinator that stops repeating mistakes
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:06 CDT"
+updated: "2026-08-21 13:06 CDT"
 version: "01"
 sources: [owner-requirements.md #5, feat/memory/capture-paths.md]
 ---

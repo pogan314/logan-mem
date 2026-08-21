@@ -2,8 +2,8 @@
 title: feat/spine — a code map that lives in the repo and carries human notes
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:02 CDT"
+updated: "2026-08-21 13:02 CDT"
 version: "01"
 sources: [owner-requirements.md #8, what-went-wrong.md, docs/wiki/seed-repos/codebase-memory-mcp.md, docs/wiki/memory-systems-survey.md (Aider repo map)]
 ---

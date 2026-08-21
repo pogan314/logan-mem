@@ -7,12 +7,17 @@ A memory system for AI coding agents, rebuilt from scratch. This repo replaces `
 - **Stage: ideation.** Nothing is designed, nothing is built, nothing is installed on any machine.
 - Brainstorming has not started. When it does, everything under `docs/superpowers/01/ideation/` becomes stale.
 - Do not install anything from this repo on any machine (hooks, MCP servers, skills, symlinks, git hooks) until the owner says so in that session.
+- **There is no code and no build.** No `package.json`, no test suite, no dev server, nothing to run. If you are about to run `npm install` or look for a build command, stop — this repo is Markdown only.
+- **Entry point for the next session:** `docs/superpowers/01/ideation/START-HERE.md`. It gives the reading order, the decision order, and the one document the first brainstorming session must produce.
 
 ## Folder map
 
 | Path | What it is | Is it fact? |
 |---|---|---|
-| `docs/wiki/` | Research facts about things we do **not** control — other repos, Claude Code's features, retrieval methods. Re-running the research would give the same answer. | Yes, as of the `updated` date in each file's frontmatter |
+| `README.md` | One-screen orientation for a human landing on the repo. Points here. | — |
+| `docs/wiki/` | Research facts about things we do **not** control — other repos, Claude Code's features, retrieval methods. Re-running the research would give the same answer. | Yes, as of the `updated` timestamp in each file's frontmatter |
+| `docs/wiki/seed-repos/` | One file per memory system we may borrow ideas from (claude-mem, codebase-memory-mcp, ECC, LangMem, supermemory). | Yes |
+| `docs/wiki/research-extracts/` | Lists of every repo the old build's research rounds studied, pulled out of those reports so we do not have to re-read them. | Yes, as an inventory — the old reports' *opinions* are not facts |
 | `docs/superpowers/01/` | Everything for build version 01. Later versions get `02/`, `03/`, … | — |
 | `docs/superpowers/01/ideation/` | Pre-brainstorming scratchpad: notes, findings, recommendations, ideas. | **Never.** See rule below |
 | `docs/superpowers/01/ideation/feat/<name>/` | Idea scratchpads for one feature area (memory, spine, episodic, plugin, learning). | Never |
@@ -38,14 +43,16 @@ A memory system for AI coding agents, rebuilt from scratch. This repo replaces `
 title: Short name of the file
 type: wiki | ideation
 status: research-fact | ideation | stale | superseded
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:15 CDT"   # date, 24-hour time, and zone — always quoted
+updated: "2026-08-21 13:15 CDT"
 version: "01"            # ideation files only — which build version this belongs to
 sources: []              # where the content came from; for wiki, what was verified and how
 ---
 ```
 
 - `status` is the one field agents must read before trusting a file. `research-fact` means verified as of `updated`. `ideation` means scratchpad. `stale` and `superseded` mean do not rely on it.
+- `created` and `updated` are **timestamps, not dates**: `YYYY-MM-DD HH:MM ZONE`, US Central, 24-hour clock. Get the value from `date '+%Y-%m-%d %H:%M %Z'` on the machine — never type one from memory. The zone prints as `CDT` in summer and `CST` in winter; both mean US Central, so write whatever `date` reports rather than forcing one of them.
+- Always wrap both values in double quotes. Unquoted, a bare `2026-08-21` is a YAML date object while `2026-08-21 13:15 CDT` is a string, so the same field would change type between files.
 - Bump `updated` on every edit. Never edit a file's `created`.
 
 ## Writing rules for this repo

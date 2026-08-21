@@ -2,8 +2,8 @@
 title: Glossary
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:15 CDT"
+updated: "2026-08-21 13:15 CDT"
 sources: [live Claude Code docs via claude-code-docs MCP (code.claude.com/docs/en/glossary, /en/hooks.mdx, /en/skills.mdx, /en/plugins-reference.mdx) verified 2026-08-21, general knowledge of established database/IR/CS terms, /home/ubuntu/projects/org/logan-mem/CLAUDE.md for this repo's own usage of "memory" and "spine"]
 ---
 

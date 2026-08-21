@@ -2,8 +2,8 @@
 title: Starting recommendations — what to consider when brainstorming begins
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 12:59 CDT"
+updated: "2026-08-21 12:59 CDT"
 version: "01"
 sources: [owner-requirements.md, what-went-wrong.md, findings/, docs/wiki/ as of 2026-08-21, the 2026-08-21 second-opinion analysis]
 ---

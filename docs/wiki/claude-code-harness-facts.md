@@ -2,8 +2,8 @@
 title: Claude Code harness facts
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 12:59 CDT"
+updated: "2026-08-21 12:59 CDT"
 sources: [live docs via mcp__claude-code-docs__query_docs_filesystem_claude_code_docs, pages cited inline as /en/*.mdx]
 ---
 

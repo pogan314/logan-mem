@@ -2,8 +2,8 @@
 title: Open questions — things the owner still needs to decide
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 version: "01"
 sources: [owner messages 2026-08-21, what-went-wrong.md, starting-recommendations.md]
 ---

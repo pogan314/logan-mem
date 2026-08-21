@@ -2,8 +2,8 @@
 title: Storage and sharing — where memories live and who sees them
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:00 CDT"
+updated: "2026-08-21 13:00 CDT"
 version: "01"
 sources: [owner-requirements.md #7 #11 #12 #13, what-went-wrong.md, findings/what-was-built.md]
 ---

@@ -2,8 +2,8 @@
 title: Research extract — repos studied in rounds 2–9 and spec reviews
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 sources: [the old repo's research reports under ../pogan-toolkit/docs/superpowers/brainstorming/ (reports/r1 … r9), read 2026-08-21]
 ---
 

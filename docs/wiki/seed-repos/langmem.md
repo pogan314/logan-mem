@@ -2,8 +2,8 @@
 title: LangMem (langchain-ai/langmem)
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:08 CDT"
+updated: "2026-08-21 13:08 CDT"
 sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-rounds-2-9.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/langchain-ai/langmem` and `repos/langchain-ai/langgraph` calls on 2026-08-21]
 ---
 

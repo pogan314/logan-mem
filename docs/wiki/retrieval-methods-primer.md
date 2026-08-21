@@ -2,8 +2,8 @@
 title: Retrieval methods primer
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:08 CDT"
+updated: "2026-08-21 13:08 CDT"
 sources: [general knowledge of established IR/RAG techniques, docs/superpowers/01/ideation/findings/raw/built-inventory.md]
 ---
 

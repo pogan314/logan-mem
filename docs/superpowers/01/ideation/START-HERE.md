@@ -2,8 +2,8 @@
 title: Start here — how to use this folder on day one of brainstorming
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:15 CDT"
+updated: "2026-08-21 13:15 CDT"
 version: "01"
 sources: [every file in this folder; the 2026-08-21 readiness review]
 ---

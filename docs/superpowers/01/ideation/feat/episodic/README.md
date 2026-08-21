@@ -2,8 +2,8 @@
 title: feat/episodic — searchable conversation history
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:02 CDT"
+updated: "2026-08-21 13:02 CDT"
 version: "01"
 sources: [owner-requirements.md #10, docs/wiki/obra-episodic-memory.md, open-questions.md #2]
 ---

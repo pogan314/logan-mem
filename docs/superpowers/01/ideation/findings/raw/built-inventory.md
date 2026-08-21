@@ -2,8 +2,8 @@
 title: Raw — inventory of what the old code actually implements
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:07 CDT"
+updated: "2026-08-21 13:07 CDT"
 version: "01"
 sources: [../pogan-toolkit/src read 2026-08-21, /home/ubuntu/.pogan/memory read 2026-08-21]
 ---

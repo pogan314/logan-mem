@@ -2,8 +2,8 @@
 title: Harness components — turning memories into things that execute
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 version: "01"
 sources: [owner-requirements.md #4 #6, feat/memory/verified-flag.md, docs/wiki/claude-code-harness-facts.md]
 ---

@@ -2,8 +2,8 @@
 title: ECC (affaan-m/ECC)
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:15 CDT"
+updated: "2026-08-21 13:15 CDT"
 sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/affaan-m/ECC` call on 2026-08-21]
 ---
 

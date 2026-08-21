@@ -2,8 +2,8 @@
 title: Wiki — what goes here
 type: wiki
 status: research-fact
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:08 CDT"
+updated: "2026-08-21 13:08 CDT"
 sources: [owner instruction 2026-08-21]
 ---
 

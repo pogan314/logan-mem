@@ -2,8 +2,8 @@
 title: What went wrong — things to avoid from the old build
 type: ideation
 status: ideation
-created: 2026-08-21
-updated: 2026-08-21
+created: "2026-08-21 13:14 CDT"
+updated: "2026-08-21 13:14 CDT"
 version: "01"
 sources: [findings/drift-analysis.md, findings/what-was-built.md, findings/live-store-evidence.md, the 2026-08-21 session's second-opinion analysis]
 ---
