@@ -49,7 +49,7 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 ## A1 + A2 — install wrapper
 
 - `plugin/scripts/install.sh`, run from a clone of this repo on each machine (macOS/Linux; Windows is out of scope for v1). `ROOT="$(cd "$(dirname "$0")/../.." && pwd)"`, the same idiom as `spine/scripts/build.sh:17`. Steps:
-  1. `"$ROOT/spine/scripts/build.sh" --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"`. The stamp reaches the binary through `-DLSM_VERSION` (`spine/scripts/build.sh:138` → `spine/src/main.c:97-98`); verified 2026-08-21: `logan-spine-mcp --version` prints `logan-spine-mcp 0.10.8-logan.2` after a stamped build. `build.sh` is ccache-backed (`build.sh:24-29`), so there is no skip-build flag.
+  1. `"$ROOT/spine/scripts/build.sh" --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"`. The stamp reaches the binary through `-DLSM_VERSION` (`spine/scripts/build.sh:138` → `spine/src/main.c:97-98`); verified 2026-08-21: `logan-spine-mcp --version` prints `logan-spine-mcp 0.10.8-logan.2` after a stamped build. `build.sh` uses ccache when present (`build.sh:24-29`); ccache is not installed on this host as of 2026-08-21, so each build is cold (≈10 min) until it is. No skip-build flag.
   2. Copy `spine/build/c/logan-spine-mcp` to `~/.local/bin/logan-spine-mcp` (mkdir -p; warn if `~/.local/bin` is not on `PATH`).
   3. `logan-spine-mcp install --clients=claude -y`. Verified writes (`spine/src/cli/cli.c:7568-7738`): skill `~/.claude/skills/logan-spine/SKILL.md`, three subagents `~/.claude/agents/logan-spine{-scout,,-auditor}.md`, the MCP entry in `~/.claude.json`, three hook scripts under `~/.claude/hooks/`, and `PreToolUse` (`Grep|Glob`), `PostToolUse` (`Read`), `SessionStart`, `SubagentStart` entries in `~/.claude/settings.json`, each with `timeout: 5`.
   4. `logan-spine-mcp config set auto_index true` (A2). Default is `false` (`spine/src/cli/cli.c:6753`); `config set` persists to `~/.cache/logan-spine-mcp/_config.db` (`cli.c:6603-6612`); the MCP server reads it in `maybe_auto_index` on `initialize` (`spine/src/mcp/mcp.c:11619,11726`) and the daemon reads it at `spine/src/daemon/application.c:1936`, both indexing a project that has no DB yet. `auto_watch` already defaults to `true` (`mcp.c:11501`). The code default is not changed.
@@ -65,13 +65,13 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 - Invocation: `logan-spine-mcp docstrings [--all] <file>...`. Files only; the coverage script supplies the list. Dispatched beside `cli`/`install` in `spine/src/main.c:1056-1075`. No JSON flag — nothing consumes JSON.
 - Per file: `lsm_language_for_filename` (`spine/src/discover/language.c:880`; returns `LSM_LANG_COUNT` for unknown → skip silently), then `lsm_extract_file` (`spine/internal/lsm/lsm.h:637`; callable standalone — it allocates its own arena and resolves the grammar lazily, as `spine/tests/test_extraction.c:78-82` shows). Report:
-  1. `path:1 file <path>` when `LSMFileResult.file_docstring` (new field, B5) is NULL and the language has a B5 rule.
+  1. `path:1 file <path>` when `LSMFileResult.file_docstring` (new field, B5) is NULL. Languages the subcommand checks at all: Python, Go, JavaScript, TypeScript, TSX, Java, C#, Kotlin, Rust, C, C++ (the ones with a B5 rule and a docstring concept). Markdown and the config formats (JSON, YAML, TOML, INI, XML, HCL) are skipped entirely — they have no docstrings, and the config extractors label their tables `Class`, which would otherwise be reported.
   2. `path:<start_line> <kind> <name>` for each definition whose `docstring` is NULL and whose label is Function, Method, Class, Struct, Interface, Enum, Type, or Trait. `kind` is the label lowercased.
 - "Exported" (the default filter; `--all` disables it), per what the extractor actually records:
   1. Go, Python, Java, C#, Kotlin: `is_exported` (`spine/internal/lsm/helpers.c:238-253`; Python is `name[0] != '_'` at `:246`).
   2. JS, TS, JSX, TSX: functions use `is_entry_point`, which `is_js_exported` sets on the `export` keyword (`spine/internal/lsm/extract_defs.c:3768-3774`); classes carry no export signal and are always reported.
   3. Every other language: `lsm_is_exported` returns `true` (`helpers.c` `default:`), so the default and `--all` are identical. `--help` says so in one line.
-- Exit 0 when nothing is missing, 1 when something is, 2 on a usage error or an unreadable file. A file that parses but yields nothing is complete. No indexing, no daemon, no database: it reads the file from disk, so the hook sees just-written content.
+- Exit 0 when nothing is missing, 1 when something is, 2 on a usage error or an unreadable file. A file that parses but yields nothing is complete. A parse error prints `path:0 error <reason>` as a diagnostic and does not by itself set exit 1. No indexing, no daemon, no database: it reads the file from disk, so the hook sees just-written content.
 
 ## A4 — the enforcement hook (plugin)
 
@@ -99,7 +99,7 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 ## Coverage report (plugin)
 
-- `plugin/scripts/docstring-coverage.sh [--all] [dir]`: `git -C "${dir:-.}" ls-files -z | xargs -0 logan-spine-mcp docstrings ${all:+--all}`. Exit code passes through. Anyone wanting a per-directory breakdown pipes to `cut -d/ -f1 | sort | uniq -c`.
+- `plugin/scripts/docstring-coverage.sh [--all] [dir]`: `git -C "$dir" ls-files -z | xargs -0r logan-spine-mcp docstrings $all`. `xargs` reports a child exit of 1 as 123, so the script maps 123 → 1; exit 0 means nothing missing, 1 means findings. Anyone wanting a per-directory breakdown pipes to `cut -d/ -f1 | sort | uniq -c`.
 
 ## B5 — file-level docstring
 
@@ -114,6 +114,11 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 | Markdown | Not applicable; B6 covers it. |
 
 - Text goes through `extract_comment_text` (`extract_defs.c:1217`), so it is capped at `MAX_COMMENT_LEN` 500 like every other docstring.
+
+### Per-definition docstrings on exported JS/TS functions (found during plan review; required for A4)
+
+- Verified 2026-08-21: `extract_docstring` (`extract_defs.c:1270-1288`) takes `ts_node_prev_sibling(node)` of the definition node. For `/** doc */ export function f() {}` the function node's parent is `export_statement` and its previous sibling is the anonymous `export` keyword, so the comment is never found and every documented exported JS/TS function is recorded as undocumented. There is no upstream test for this case.
+- Change: in `extract_docstring`, if the node's parent kind is `export_statement`, take the previous sibling of the parent instead. Four lines, one extraction test (`/** doc */ export function f() {}` → docstring present; `export function g() {}` → NULL). Without it the A4 hook nags on every documented export in TypeScript, which is the language it exists for.
 
 ### Data
 
@@ -152,11 +157,12 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 - The `DOCUMENTS` pass runs in the full pipeline only. An incremental re-index of an edited Markdown file refreshes its Section nodes and docstrings but not its `DOCUMENTS` edges until the next full index.
 - Two headings with identical text in one file share one qualified name (`extract_defs.c:3831`), so one Section node survives and the other body is lost. Pre-existing; now user-visible.
+- Sections nest: an H1's enclosing `section` node spans until the next H1, so a top-level heading's docstring is the whole document (truncated at 1,500 bytes) and its `DOCUMENTS` scan covers every child section's text too. Child sections still get their own, narrower nodes and edges. Accepted; deliberately pinned by a test.
 - BM25 keyword search excludes Section and Module (`mcp.c:3028`); semantic search is the channel.
 
 ### Not in scope
 
-- Links to URLs, images, or other Markdown files; prose matching without backticks; relabeling Section nodes; relaxing the same-extension guard on `SEMANTICALLY_RELATED`.
+- Links to URLs, images, or other Markdown files; prose matching without backticks; excluding fenced code blocks from the backtick scan; relabeling Section nodes; relaxing the same-extension guard on `SEMANTICALLY_RELATED`.
 
 ## Error handling
 
