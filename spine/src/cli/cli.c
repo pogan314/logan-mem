@@ -795,7 +795,7 @@ static int cli_activation_guard(lsm_daemon_runtime_activation_action_t action,
 #define TAR_SIZE_LEN 13     /* octal size field: bytes 124-135 + NUL */
 #define TAR_TYPE_OFFSET 156 /* type flag byte */
 #define TAR_BINARY_NAME "logan-spine-mcp"
-#define TAR_BINARY_NAME_LEN 19
+#define TAR_BINARY_NAME_LEN (sizeof(TAR_BINARY_NAME) - 1) /* was a literal 19 upstream; tied to the name */
 #define TAR_BLOCK_SIZE LSM_SZ_512 /* tar record alignment */
 #define TAR_BLOCK_MASK 511        /* TAR_BLOCK_SIZE - 1 */
 
