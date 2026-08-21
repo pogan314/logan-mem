@@ -59,7 +59,7 @@
  * ~/.cache/logan-spine-mcp/logs/hook-augment-timeouts.log (fd and message
  * prepared at arm time — only async-signal-safe write/_exit in the handler). */
 #ifndef _WIN32
-#define HA_DEADLINE_DEFAULT_MS 2000 /* in-process budget; see ha_deadline_ms()  */
+#define HA_DEADLINE_DEFAULT_MS 3000 /* in-process budget; see ha_deadline_ms()  */
 #define HA_DEADLINE_MIN_MS 50
 #define HA_DEADLINE_MAX_MS 10000
 
