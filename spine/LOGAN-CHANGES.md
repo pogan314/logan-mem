@@ -19,10 +19,13 @@
 |---|---|---|---|---|
 | 1 | 2026-08-21 15:50 CDT | whole tree | Renamed `codebase-memory-mcp` → `logan-spine-mcp` in every file and path, including `CBM_`/`cbm_` → `LSM_`/`lsm_`, `CBMType`-style prefixed identifiers → `LSMType`, `internal/cbm/` → `internal/lsm/`, `.cbmignore` → `.lsmignore`. Done by `scripts/logan-rename.sh`, which is idempotent and is re-run on upstream's tree before every merge. The arXiv paper title "Codebase-Memory: …" is a citation and is left as is. | This is our fork; the binary, MCP server key, cache dir, and config entries should carry our name. |
 
-## Planned, not done
+## Decided, not yet built (2026-08-21)
 
-- File-level descriptions: `internal/lsm/extract_defs.c` extracts a docstring per definition (leading comment; Python first-string; Go type variant) but nothing reads a file's header comment into the File node. Add it.
-- Hook silent abort: the 2 s `LSM_HOOK_DEADLINE_MS` returns empty with no trace. Log it.
-- Installer scope: `install` writes config into every detected agent (43 surfaces). Add an allowlist / Claude-Code-only mode.
-- Docstring coverage report: extend `check_index_coverage` (or a script outside `spine/`) to list symbols with no docstring.
-- `auto_index` default on.
+| # | Tweak | Decision | Where |
+|---|---|---|---|
+| A1 | Installer scope | Keep upstream code; our install wrapper always passes `--clients=claude`. | outside `spine/` |
+| A2 | Auto-index | Must work out of the box; wrapper runs `config set auto_index true` after install (or code default flips if that proves unreliable). | wrapper, maybe `src/cli/cli.h` |
+| A3 | Hook deadline | Raise `HA_DEADLINE_DEFAULT_MS` 2000 → 3000. | `src/cli/hook_augment.c` |
+| A4 | Docstring enforcement | `PostToolUse` hook on Edit/Write reports missing docstrings in the file just changed; same hook enforces B5. | outside `spine/` |
+| B5 | File-level descriptions | Capture the file's leading comment (JSDoc `@file`/`@fileoverview`, Python module docstring, Go package comment, else first comment block) into a `docstring` on the File node; expose via `search_graph`/`get_architecture`. | `internal/lsm/extract_defs.c`, `src/store/store.c`, `src/mcp/mcp.c`, tests |
+| — | Coverage report | Decided by agent: a script outside `spine/` querying the graph for symbols with empty docstring, exported symbols only by default. | outside `spine/` |
