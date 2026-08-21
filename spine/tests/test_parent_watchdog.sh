@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# test_parent_watchdog.sh — regression guard for the parent-death watchdog.
+# Distilled from #407 (fixes #406): when the process that launched the stdio
+# MCP server dies, the orphaned server must exit on its own rather than linger
+# forever blocked on stdin.
+#
+# Strategy: launch the binary under a wrapper "parent" process (stdin kept open
+# via a FIFO so the server doesn't see EOF), record the child's PID, then kill
+# the wrapper. The watchdog should notice the changed ppid and exit within a
+# few seconds. Skipped on Windows-like shells (the watchdog is POSIX-only).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BINARY="${CBM_TEST_BINARY:-${ROOT}/build/c/codebase-memory-mcp}"
+
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    echo "skipping parent watchdog test on Windows"
+    exit 0
+    ;;
+esac
+
+if [[ ! -x "${BINARY}" ]]; then
+  echo "missing binary: ${BINARY}" >&2
+  exit 2
+fi
+
+# shellcheck source=../scripts/test-runtime.sh
+source "${ROOT}/scripts/test-runtime.sh"
+cbm_test_runtime_init
+tmpdir="${CBM_TEST_RUNTIME_ROOT}"
+wrapper_pid=""
+cleanup() {
+  if [[ -s "${tmpdir}/child.pid" ]]; then
+    local child_pid
+    child_pid="$(cat "${tmpdir}/child.pid" 2>/dev/null || true)"
+    [[ -n "${child_pid}" ]] && kill "${child_pid}" 2>/dev/null || true
+  fi
+  [[ -n "${wrapper_pid}" ]] && kill "${wrapper_pid}" 2>/dev/null || true
+  cbm_test_runtime_cleanup "${BINARY}"
+}
+trap cleanup EXIT
+
+# Wrapper "parent": opens the FIFO read-write so it stays open, launches the
+# MCP server with that FIFO as stdin, records the child PID, then waits.
+cat >"${tmpdir}/wrapper.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+exec 3<>"${FIFO}"
+"${CBM_BINARY}" <&3 >"${TMPDIR_PATH}/child.out" 2>"${TMPDIR_PATH}/child.err" &
+echo "$!" >"${TMPDIR_PATH}/child.pid"
+wait
+SH
+chmod +x "${tmpdir}/wrapper.sh"
+mkfifo "${tmpdir}/stdin"
+
+CBM_BINARY="${BINARY}" FIFO="${tmpdir}/stdin" TMPDIR_PATH="${tmpdir}" \
+  "${tmpdir}/wrapper.sh" &
+wrapper_pid=$!
+
+# Wait for the child PID file to appear.
+for _ in {1..50}; do
+  [[ -s "${tmpdir}/child.pid" ]] && break
+  sleep 0.1
+done
+
+if [[ ! -s "${tmpdir}/child.pid" ]]; then
+  echo "child pid file was not written" >&2
+  [[ -s "${tmpdir}/child.err" ]] && cat "${tmpdir}/child.err" >&2
+  exit 3
+fi
+
+child_pid="$(cat "${tmpdir}/child.pid")"
+if ! kill -0 "${child_pid}" 2>/dev/null; then
+  echo "child did not start" >&2
+  exit 3
+fi
+
+# Complete one MCP request before killing the parent. A response proves that
+# the frontend reached its stdio loop after installing the parent watchdog.
+# The old mem.init log sync point belonged to the pre-daemon architecture: the
+# shared daemon now owns memory initialization, so a frontend need not emit it.
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"parent-watchdog-test","version":"1.0"}}}' \
+  >"${tmpdir}/stdin"
+for _ in {1..150}; do
+  if [[ -s "${tmpdir}/child.out" ]] &&
+    grep -Eq '"id"[[:space:]]*:[[:space:]]*1' "${tmpdir}/child.out"; then
+    break
+  fi
+  sleep 0.1
+done
+if ! grep -Eq '"id"[[:space:]]*:[[:space:]]*1' "${tmpdir}/child.out" 2>/dev/null; then
+  echo "child did not reach watchdog-ready startup point" >&2
+  [[ -s "${tmpdir}/child.err" ]] && cat "${tmpdir}/child.err" >&2
+  [[ -s "${tmpdir}/child.out" ]] && cat "${tmpdir}/child.out" >&2
+  exit 3
+fi
+
+# Kill the wrapper parent: the orphaned child must now self-exit.
+kill -9 "${wrapper_pid}"
+wait "${wrapper_pid}" 2>/dev/null || true
+
+deadline=$((SECONDS + 15))
+while (( SECONDS < deadline )); do
+  if ! kill -0 "${child_pid}" 2>/dev/null; then
+    echo "ok: child ${child_pid} exited after parent death"
+    exit 0
+  fi
+  # A zombie no longer holds stdin or runs the MCP loop; kill -0 still reports
+  # it until launchd/test parent reaps it, so treat that as a successful exit.
+  child_state="$(ps -p "${child_pid}" -o stat= 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "${child_state}" == Z* ]]; then
+    echo "ok: child ${child_pid} exited after parent death (zombie awaiting reap)"
+    exit 0
+  fi
+  sleep 0.2
+done
+
+echo "codebase-memory-mcp child ${child_pid} survived parent death" >&2
+[[ -s "${tmpdir}/child.err" ]] && cat "${tmpdir}/child.err" >&2
+exit 1
