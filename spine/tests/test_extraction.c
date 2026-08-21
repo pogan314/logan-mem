@@ -3017,6 +3017,112 @@ TEST(markdown_no_headings) {
     PASS();
 }
 
+/* ── File-level docstrings (B5) and export-statement docstrings (B5b) ─── */
+
+static const LSMDefinition *module_def(LSMFileResult *r) {
+    for (int i = 0; i < r->defs.count; i++) {
+        if (strcmp(r->defs.items[i].label, "Module") == 0)
+            return &r->defs.items[i];
+    }
+    return NULL;
+}
+
+static const LSMDefinition *def_named(LSMFileResult *r, const char *name) {
+    for (int i = 0; i < r->defs.count; i++) {
+        if (strcmp(r->defs.items[i].name, name) == 0)
+            return &r->defs.items[i];
+    }
+    return NULL;
+}
+
+TEST(file_docstring_js_fileoverview_tag) {
+    LSMFileResult *r = extract("/**\n * @fileoverview Session helpers.\n */\n"
+                               "/** Adds. */\nexport function add(a, b) { return a + b; }\n",
+                               LSM_LANG_JAVASCRIPT, "t", "add.js");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NOT_NULL(r->file_docstring);
+    ASSERT_NOT_NULL(strstr(r->file_docstring, "Session helpers"));
+    const LSMDefinition *m = module_def(r);
+    ASSERT_NOT_NULL(m);
+    ASSERT_NOT_NULL(m->docstring);
+    ASSERT_STR_EQ(m->docstring, r->file_docstring);
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(file_docstring_js_blank_line_separates_header) {
+    LSMFileResult *r = extract("// Session helpers.\n\n"
+                               "export function add(a, b) { return a + b; }\n",
+                               LSM_LANG_JAVASCRIPT, "t", "add.js");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NOT_NULL(r->file_docstring);
+    ASSERT_NOT_NULL(strstr(r->file_docstring, "Session helpers"));
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(file_docstring_js_attached_comment_is_not_header) {
+    LSMFileResult *r = extract("// Adds two numbers.\n"
+                               "export function add(a, b) { return a + b; }\n",
+                               LSM_LANG_JAVASCRIPT, "t", "add.js");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NULL(r->file_docstring);
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(file_docstring_python_module_docstring) {
+    LSMFileResult *r = extract("#!/usr/bin/env python\n"
+                               "\"\"\"Session helpers.\"\"\"\n\n"
+                               "def add(a, b):\n    return a + b\n",
+                               LSM_LANG_PYTHON, "t", "add.py");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NOT_NULL(r->file_docstring);
+    ASSERT_NOT_NULL(strstr(r->file_docstring, "Session helpers"));
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(file_docstring_go_package_comment) {
+    LSMFileResult *r = extract("// Package add has session helpers.\n"
+                               "package add\n\n"
+                               "func Add(a, b int) int { return a + b }\n",
+                               LSM_LANG_GO, "t", "add.go");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NOT_NULL(r->file_docstring);
+    ASSERT_NOT_NULL(strstr(r->file_docstring, "Package add"));
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(file_docstring_absent_when_no_leading_comment) {
+    LSMFileResult *r = extract("export function add(a, b) { return a + b; }\n",
+                               LSM_LANG_JAVASCRIPT, "t", "add.js");
+    ASSERT_NOT_NULL(r);
+    ASSERT_NULL(r->file_docstring);
+    const LSMDefinition *m = module_def(r);
+    ASSERT_NOT_NULL(m);
+    ASSERT_NULL(m->docstring);
+    lsm_free_result(r);
+    PASS();
+}
+
+TEST(js_exported_function_keeps_its_doc_comment) {
+    LSMFileResult *r = extract("/** Adds. */\nexport function add(a, b) { return a + b; }\n"
+                               "export function bare() {}\n",
+                               LSM_LANG_JAVASCRIPT, "t", "add.js");
+    ASSERT_NOT_NULL(r);
+    const LSMDefinition *add = def_named(r, "add");
+    ASSERT_NOT_NULL(add);
+    ASSERT_NOT_NULL(add->docstring);
+    ASSERT_NOT_NULL(strstr(add->docstring, "Adds."));
+    const LSMDefinition *bare = def_named(r, "bare");
+    ASSERT_NOT_NULL(bare);
+    ASSERT_NULL(bare->docstring);
+    lsm_free_result(r);
+    PASS();
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * Python __init__.py Module QN collision regression
  * ═══════════════════════════════════════════════════════════════════ */
@@ -5597,6 +5703,13 @@ SUITE(extraction) {
     RUN_TEST(markdown_setext_headings);
     RUN_TEST(markdown_heading_content);
     RUN_TEST(markdown_no_headings);
+    RUN_TEST(file_docstring_js_fileoverview_tag);
+    RUN_TEST(file_docstring_js_blank_line_separates_header);
+    RUN_TEST(file_docstring_js_attached_comment_is_not_header);
+    RUN_TEST(file_docstring_python_module_docstring);
+    RUN_TEST(file_docstring_go_package_comment);
+    RUN_TEST(file_docstring_absent_when_no_leading_comment);
+    RUN_TEST(js_exported_function_keeps_its_doc_comment);
 
     /* __init__.py / index.ts Module QN collision regression */
     RUN_TEST(python_init_module_qn_not_collide_with_folder);

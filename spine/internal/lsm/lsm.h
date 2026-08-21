@@ -489,6 +489,7 @@ typedef struct LSMFileResult {
 
     const char *module_qn;      // module qualified name
     const char *namespace_name; // declared namespace/package (Java/Kotlin/C#/PHP), NULL if none
+    const char *file_docstring; // B5: leading file comment / module docstring, NULL if none
     const char **exports;       // NULL-terminated (NULL if none)
     const char **constants;     // NULL-terminated (NULL if none)
     const char **global_vars;   // NULL-terminated (NULL if none)

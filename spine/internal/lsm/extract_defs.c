@@ -1280,11 +1280,102 @@ static const char *extract_docstring(LSMArena *a, TSNode node, const char *sourc
     if (!ts_node_is_null(prev) && is_comment_node(ts_node_type(prev))) {
         return extract_comment_text(a, prev, source);
     }
+    // B5b: `/** doc */ export function f()` — the comment precedes the
+    // export_statement wrapper, not the function node inside it.
+    TSNode par = ts_node_parent(node);
+    if (!ts_node_is_null(par) && strcmp(ts_node_type(par), "export_statement") == 0) {
+        TSNode pprev = ts_node_prev_sibling(par);
+        if (!ts_node_is_null(pprev) && is_comment_node(ts_node_type(pprev))) {
+            return extract_comment_text(a, pprev, source);
+        }
+    }
 
     if (lang == LSM_LANG_PYTHON) {
         return extract_python_docstring(a, node, source);
     }
     return NULL;
+}
+
+// B5: the file-level docstring. Python: module docstring (first non-comment
+// statement is a string). Go: the comment before package_clause. Everything
+// else: the leading run of comment nodes at the top of the file, taken only if
+// it carries @file/@fileoverview (JS/TS) or is separated from the first real
+// node by a blank line, so a definition's own doc comment is not mistaken for
+// a header.
+static const char *extract_file_docstring(LSMExtractCtx *ctx) {
+    LSMArena *a = ctx->arena;
+    TSNode root = ctx->root;
+    const char *src = ctx->source;
+
+    if (ctx->language == LSM_LANG_PYTHON) {
+        uint32_t n = ts_node_named_child_count(root);
+        for (uint32_t i = 0; i < n; i++) {
+            TSNode c = ts_node_named_child(root, i);
+            if (is_comment_node(ts_node_type(c))) {
+                continue;
+            }
+            if (strcmp(ts_node_type(c), "expression_statement") != 0 ||
+                ts_node_named_child_count(c) == 0) {
+                return NULL;
+            }
+            TSNode str = ts_node_named_child(c, 0);
+            const char *sk = ts_node_type(str);
+            if (strcmp(sk, "string") == 0 || strcmp(sk, "concatenated_string") == 0) {
+                return extract_comment_text(a, str, src);
+            }
+            return NULL;
+        }
+        return NULL;
+    }
+
+    if (ctx->language == LSM_LANG_GO) {
+        uint32_t n = ts_node_named_child_count(root);
+        for (uint32_t i = 0; i < n; i++) {
+            TSNode c = ts_node_named_child(root, i);
+            if (strcmp(ts_node_type(c), "package_clause") != 0) {
+                continue;
+            }
+            TSNode prev = ts_node_prev_sibling(c);
+            if (!ts_node_is_null(prev) && is_comment_node(ts_node_type(prev))) {
+                return extract_comment_text(a, prev, src);
+            }
+            return NULL;
+        }
+        return NULL;
+    }
+
+    bool js = ctx->language == LSM_LANG_JAVASCRIPT || ctx->language == LSM_LANG_TYPESCRIPT ||
+              ctx->language == LSM_LANG_TSX;
+    uint32_t n = ts_node_child_count(root);
+    TSNode first = {0}, last = {0}, next = {0};
+    bool have = false, have_next = false;
+    for (uint32_t i = 0; i < n; i++) {
+        TSNode c = ts_node_child(root, i);
+        if (!is_comment_node(ts_node_type(c))) {
+            next = c;
+            have_next = true;
+            break;
+        }
+        if (js) {
+            char *t = lsm_node_text(a, c, src);
+            if (t && (strstr(t, "@fileoverview") || strstr(t, "@file"))) {
+                return extract_comment_text(a, c, src);
+            }
+        }
+        if (!have) {
+            first = c;
+            have = true;
+        }
+        last = c;
+    }
+    if (!have) {
+        return NULL;
+    }
+    if (!have_next) {
+        return extract_comment_text(a, first, src);
+    }
+    int gap = (int)ts_node_start_point(next).row - (int)ts_node_end_point(last).row;
+    return gap >= 2 ? extract_comment_text(a, first, src) : NULL;
 }
 
 static TSNode find_jvm_modifiers(TSNode node, LSMLanguage lang);
@@ -7444,6 +7535,8 @@ void lsm_extract_definitions(LSMExtractCtx *ctx) {
 
     LSMArena *a = ctx->arena;
 
+    ctx->result->file_docstring = extract_file_docstring(ctx);
+
     // Create module node (always first definition)
     LSMDefinition mod;
     memset(&mod, 0, sizeof(mod));
@@ -7455,6 +7548,7 @@ void lsm_extract_definitions(LSMExtractCtx *ctx) {
     mod.end_line = ts_node_end_point(ctx->root).row + TS_LINE_OFFSET;
     mod.is_exported = true;
     mod.is_test = ctx->result->is_test_file;
+    mod.docstring = ctx->result->file_docstring;
     lsm_defs_push(&ctx->result->defs, a, mod);
 
     // Walk AST for function/class definitions

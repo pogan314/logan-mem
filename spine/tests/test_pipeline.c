@@ -6560,6 +6560,42 @@ TEST(pipeline_docstring_go_function) {
     PASS();
 }
 
+TEST(pipeline_module_node_carries_file_docstring) {
+    const char *files[] = {"lib/add.js"};
+    const char *contents[] = {"/**\n * @fileoverview Session helpers for add.\n */\n"
+                              "export function add(a, b) { return a + b; }\n"};
+    if (setup_lang_repo(files, contents, 1) != 0)
+        FAIL("tmpdir");
+    char db[512];
+    snprintf(db, sizeof(db), "%s/test.db", g_lang_tmpdir);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_lang_tmpdir, db, LSM_MODE_FULL);
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(lsm_pipeline_run(p), 0);
+
+    lsm_store_t *s = lsm_store_open_path(db);
+    ASSERT_NOT_NULL(s);
+    const char *proj = lsm_pipeline_project_name(p);
+
+    lsm_node_t *nodes = NULL;
+    int nc = 0;
+    lsm_store_find_nodes_by_label(s, proj, "Module", &nodes, &nc);
+    bool found = false;
+    for (int i = 0; i < nc; i++) {
+        if (strcmp(nodes[i].file_path, "lib/add.js") == 0 && nodes[i].properties_json &&
+            strstr(nodes[i].properties_json, "\"docstring\"") &&
+            strstr(nodes[i].properties_json, "Session helpers for add")) {
+            found = true;
+        }
+    }
+    ASSERT_TRUE(found);
+
+    lsm_store_free_nodes(nodes, nc);
+    lsm_store_close(s);
+    lsm_pipeline_free(p);
+    teardown_lang_repo();
+    PASS();
+}
+
 TEST(pipeline_docstring_python_function) {
     /* Python function with triple-quoted docstring */
     const char *files[] = {"main.py"};
@@ -12031,6 +12067,7 @@ SUITE(pipeline) {
     RUN_TEST(pipeline_python_type_inference);
     /* Docstring integration (port of TestDocstringIntegration) */
     RUN_TEST(pipeline_docstring_go_function);
+    RUN_TEST(pipeline_module_node_carries_file_docstring);
     RUN_TEST(pipeline_docstring_python_function);
     RUN_TEST(pipeline_docstring_java_method);
     RUN_TEST(pipeline_docstring_kotlin_function);
