@@ -1,0 +1,165 @@
+# PR validation: security gates + lint + full test suite. Builds, smoke and
+# soak stay maintainer-driven via the dry-run workflow_dispatch. Branch
+# protection requires `dco` + `ci-ok` — a single stable summary context that
+# fails unless every PR stage succeeded.
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# A new push to the PR supersedes the running validation — cancel it
+# instead of stacking zombie pipelines.
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+
+jobs:
+  security:
+    uses: ./.github/workflows/_security.yml
+    secrets: inherit
+
+  lint:
+    uses: ./.github/workflows/_lint.yml
+
+  test:
+    needs: [lint]
+    if: ${{ !cancelled() && needs.lint.result == 'success' }}
+    uses: ./.github/workflows/_test.yml
+    with:
+      # Perf assertions are timing-sensitive on shared runners; they stay in
+      # dry runs and releases where a flaky red does not block a merge.
+      skip_perf: true
+      # Iteration speed: split each C-suite leg across parallel shard jobs
+      # (ubuntu x3, windows x2; coverage re-proven every run by the
+      # shard-completeness job). Dry runs and releases shard identically.
+      shard_suites: true
+
+  # ── Which files changed? Gate the (heavier) build+smoke on product code so
+  #    docs / CI / test-only PRs stay fast. ──
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      product: ${{ steps.f.outputs.product }}
+    steps:
+      - name: Detect product-code changes
+        id: f
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The full .diff endpoint rejects large-but-valid PRs at 20k lines.
+          # The paginated files endpoint remains filename-only for this gate.
+          FILES=$(gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" --jq '.[].filename')
+          printf '%s\n' "$FILES"
+          if printf '%s\n' "$FILES" | grep -qE '^(src/|internal/|install\.(sh|ps1)|scripts/build\.sh|scripts/smoke-test\.sh|scripts/smoke-local\.sh|scripts/smoke-fixture-server\.py|scripts/gen-third-party-notices\.sh|scripts/env\.sh|test-infrastructure/vm/(vm-smoke\.sh|windows-user-path-guard\.ps1)|Makefile\.cbm)'; then
+            echo "product=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "product=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Light smoke: build the PRODUCTION binary and run the core smoke on the
+  #    three RELIABLE NATIVE platforms. Catches built-binary regressions at PR
+  #    time (e.g. the Windows CreateProcess argv-quoting class that previously
+  #    only surfaced in the release dry run). The full broad/emulated smoke stays
+  #    in the dry run. Only product-code PRs pay this; every leg gates.
+  #    The maintained local wrappers add a race-free release fixture so the
+  #    download/checksum/install/update phases run here as well. ──
+  pr-smoke:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.product == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install deps (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev ccache
+
+      - name: Install ccache (macOS)
+        if: matrix.os == 'macos-14'
+        run: command -v ccache >/dev/null 2>&1 || brew install ccache
+
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        if: matrix.os == 'windows-latest'
+        with:
+          msystem: CLANG64
+          path-type: inherit
+          install: >-
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-python3
+            mingw-w64-clang-x86_64-ccache
+            make
+            coreutils
+            curl
+            zip
+            unzip
+
+      # Verified compiler cache — content-keyed, stale hits impossible by
+      # construction (see scripts/env.sh).
+      - name: Compiler cache (content-verified)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-smoke-${{ matrix.os }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ccache-smoke-${{ matrix.os }}-${{ github.ref }}-
+
+      - name: Build prod + smoke (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          scripts/build.sh CC=gcc CXX=g++
+          scripts/smoke-local.sh "$(pwd)/build/c/codebase-memory-mcp"
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1000M
+
+      - name: Build prod + smoke (macOS)
+        if: matrix.os == 'macos-14'
+        run: |
+          scripts/build.sh CC=cc CXX=c++
+          codesign --sign - --force build/c/codebase-memory-mcp
+          scripts/smoke-local.sh "$(pwd)/build/c/codebase-memory-mcp"
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1000M
+
+      - name: Build prod + smoke (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          scripts/build.sh CC=clang CXX=clang++
+          SMOKE_ARCH=amd64 bash test-infrastructure/vm/vm-smoke.sh
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1000M
+
+  ci-ok:
+    # The one required context (besides dco) — fails unless every PR stage
+    # succeeded, so matrix renames can never silently deadlock merges. `skipped`
+    # is OK: pr-smoke skips on docs/CI/test-only PRs (changes.product == false).
+    needs: [security, lint, test, changes, pr-smoke]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Needs a checkout (unlike before): the gate logic lives in the canonical
+      # scripts/ci entry, not inline YAML (venue-parity contract).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: All PR stages must have succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: scripts/ci/require-all-green.sh

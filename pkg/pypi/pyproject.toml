@@ -1,0 +1,39 @@
+[build-system]
+# Pinned: `python -m build` resolves the backend fresh in an isolated env, so an
+# unpinned hatchling silently follows upstream. A hatchling release that began
+# emitting Metadata-Version 2.5 broke the v0.10.1 PyPI publish with pinned
+# twine 6.2.0 rejecting it — the whole toolchain must be pinned, not half of it.
+requires = ["hatchling==1.28.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codebase-memory-mcp"
+version = "0.8.1"
+description = "Fast code intelligence for AI coding agents — installs a verified native runtime set"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+keywords = ["mcp", "claude", "code-intelligence", "codebase", "memory", "ai", "llm"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/DeusData/codebase-memory-mcp"
+Repository = "https://github.com/DeusData/codebase-memory-mcp"
+Issues = "https://github.com/DeusData/codebase-memory-mcp/issues"
+
+[project.scripts]
+codebase-memory-mcp = "codebase_memory_mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codebase_memory_mcp"]
