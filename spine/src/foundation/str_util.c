@@ -2,7 +2,7 @@
  * str_util.c — Safe string operations (arena-allocated).
  */
 #include "str_util.h"
-#include "arena.h" // CBMArena, cbm_arena_alloc/strdup/strndup
+#include "arena.h" // LSMArena, lsm_arena_alloc/strdup/strndup
 #include "foundation/constants.h"
 #include <string.h>
 #include <ctype.h>
@@ -14,7 +14,7 @@ enum {
     JSON_CTRL_LIMIT = 0x20, /* ASCII control character upper bound */
 };
 
-char *cbm_path_join(CBMArena *a, const char *base, const char *name) {
+char *lsm_path_join(LSMArena *a, const char *base, const char *name) {
     if (!base || !name) {
         return NULL;
     }
@@ -23,10 +23,10 @@ char *cbm_path_join(CBMArena *a, const char *base, const char *name) {
 
     /* Handle empty components */
     if (blen == 0) {
-        return cbm_arena_strdup(a, name);
+        return lsm_arena_strdup(a, name);
     }
     if (nlen == 0) {
-        return cbm_arena_strdup(a, base);
+        return lsm_arena_strdup(a, base);
     }
 
     /* Strip trailing slash from base */
@@ -40,13 +40,13 @@ char *cbm_path_join(CBMArena *a, const char *base, const char *name) {
     }
 
     if (blen == 0) {
-        return cbm_arena_strndup(a, name, nlen);
+        return lsm_arena_strndup(a, name, nlen);
     }
     if (nlen == 0) {
-        return cbm_arena_strndup(a, base, blen);
+        return lsm_arena_strndup(a, base, blen);
     }
 
-    char *result = (char *)cbm_arena_alloc(a, blen + SKIP_ONE + nlen + SKIP_ONE);
+    char *result = (char *)lsm_arena_alloc(a, blen + SKIP_ONE + nlen + SKIP_ONE);
     if (!result) {
         return NULL;
     }
@@ -57,22 +57,22 @@ char *cbm_path_join(CBMArena *a, const char *base, const char *name) {
     return result;
 }
 
-char *cbm_path_join_n(CBMArena *a, const char **parts, int n) {
+char *lsm_path_join_n(LSMArena *a, const char **parts, int n) {
     if (n <= 0 || !parts) {
-        return cbm_arena_strdup(a, "");
+        return lsm_arena_strdup(a, "");
     }
     if (n == SKIP_ONE) {
-        return cbm_arena_strdup(a, parts[0]);
+        return lsm_arena_strdup(a, parts[0]);
     }
 
-    char *result = cbm_arena_strdup(a, parts[0]);
+    char *result = lsm_arena_strdup(a, parts[0]);
     for (int i = SKIP_ONE; i < n; i++) {
-        result = cbm_path_join(a, result, parts[i]);
+        result = lsm_path_join(a, result, parts[i]);
     }
     return result;
 }
 
-const char *cbm_path_ext(const char *path) {
+const char *lsm_path_ext(const char *path) {
     if (!path) {
         return "";
     }
@@ -96,7 +96,7 @@ const char *cbm_path_ext(const char *path) {
     return dot + SKIP_ONE;
 }
 
-const char *cbm_path_base(const char *path) {
+const char *lsm_path_base(const char *path) {
     if (!path) {
         return "";
     }
@@ -109,9 +109,9 @@ const char *cbm_path_base(const char *path) {
     return last_slash ? last_slash + SKIP_ONE : path;
 }
 
-char *cbm_path_dir(CBMArena *a, const char *path) {
+char *lsm_path_dir(LSMArena *a, const char *path) {
     if (!path) {
-        return cbm_arena_strdup(a, ".");
+        return lsm_arena_strdup(a, ".");
     }
     const char *last_slash = NULL;
     for (const char *p = path; *p; p++) {
@@ -120,12 +120,12 @@ char *cbm_path_dir(CBMArena *a, const char *path) {
         }
     }
     if (!last_slash) {
-        return cbm_arena_strdup(a, ".");
+        return lsm_arena_strdup(a, ".");
     }
-    return cbm_arena_strndup(a, path, (size_t)(last_slash - path));
+    return lsm_arena_strndup(a, path, (size_t)(last_slash - path));
 }
 
-bool cbm_str_starts_with(const char *s, const char *prefix) {
+bool lsm_str_starts_with(const char *s, const char *prefix) {
     if (!s || !prefix) {
         return false;
     }
@@ -133,7 +133,7 @@ bool cbm_str_starts_with(const char *s, const char *prefix) {
     return strncmp(s, prefix, plen) == 0;
 }
 
-bool cbm_str_ends_with(const char *s, const char *suffix) {
+bool lsm_str_ends_with(const char *s, const char *suffix) {
     if (!s || !suffix) {
         return false;
     }
@@ -145,7 +145,7 @@ bool cbm_str_ends_with(const char *s, const char *suffix) {
     return strcmp(s + slen - xlen, suffix) == 0;
 }
 
-bool cbm_str_contains(const char *s, const char *sub) {
+bool lsm_str_contains(const char *s, const char *sub) {
     if (!s || !sub) {
         return false;
     }
@@ -155,12 +155,12 @@ bool cbm_str_contains(const char *s, const char *sub) {
     return strstr(s, sub) != NULL;
 }
 
-char *cbm_str_tolower(CBMArena *a, const char *s) {
+char *lsm_str_tolower(LSMArena *a, const char *s) {
     if (!s) {
         return NULL;
     }
     size_t len = strlen(s);
-    char *result = (char *)cbm_arena_alloc(a, len + SKIP_ONE);
+    char *result = (char *)lsm_arena_alloc(a, len + SKIP_ONE);
     if (!result) {
         return NULL;
     }
@@ -171,12 +171,12 @@ char *cbm_str_tolower(CBMArena *a, const char *s) {
     return result;
 }
 
-char *cbm_str_replace_char(CBMArena *a, const char *s, char from, char to) {
+char *lsm_str_replace_char(LSMArena *a, const char *s, char from, char to) {
     if (!s) {
         return NULL;
     }
     size_t len = strlen(s);
-    char *result = (char *)cbm_arena_alloc(a, len + SKIP_ONE);
+    char *result = (char *)lsm_arena_alloc(a, len + SKIP_ONE);
     if (!result) {
         return NULL;
     }
@@ -187,7 +187,7 @@ char *cbm_str_replace_char(CBMArena *a, const char *s, char from, char to) {
     return result;
 }
 
-char *cbm_str_strip_ext(CBMArena *a, const char *path) {
+char *lsm_str_strip_ext(LSMArena *a, const char *path) {
     if (!path) {
         return NULL;
     }
@@ -202,12 +202,12 @@ char *cbm_str_strip_ext(CBMArena *a, const char *path) {
         }
     }
     if (!dot || (slash && dot < slash)) {
-        return cbm_arena_strdup(a, path);
+        return lsm_arena_strdup(a, path);
     }
-    return cbm_arena_strndup(a, path, (size_t)(dot - path));
+    return lsm_arena_strndup(a, path, (size_t)(dot - path));
 }
 
-char **cbm_str_split(CBMArena *a, const char *s, char delim, int *out_count) {
+char **lsm_str_split(LSMArena *a, const char *s, char delim, int *out_count) {
     if (!s || !out_count) {
         return NULL;
     }
@@ -220,7 +220,7 @@ char **cbm_str_split(CBMArena *a, const char *s, char delim, int *out_count) {
         }
     }
 
-    char **result = (char **)cbm_arena_alloc(a, (size_t)(count + SKIP_ONE) * sizeof(char *));
+    char **result = (char **)lsm_arena_alloc(a, (size_t)(count + SKIP_ONE) * sizeof(char *));
     if (!result) {
         return NULL;
     }
@@ -230,7 +230,7 @@ char **cbm_str_split(CBMArena *a, const char *s, char delim, int *out_count) {
     for (const char *p = s;; p++) {
         if (*p == delim || *p == '\0') {
             size_t part_len = (size_t)(p - start);
-            result[idx++] = cbm_arena_strndup(a, start, part_len);
+            result[idx++] = lsm_arena_strndup(a, start, part_len);
             if (*p == '\0') {
                 break;
             }
@@ -243,7 +243,7 @@ char **cbm_str_split(CBMArena *a, const char *s, char delim, int *out_count) {
     return result;
 }
 
-bool cbm_validate_shell_arg(const char *s) {
+bool lsm_validate_shell_arg(const char *s) {
     if (!s) {
         return false;
     }
@@ -271,8 +271,8 @@ bool cbm_validate_shell_arg(const char *s) {
     return true;
 }
 
-bool cbm_validate_shell_path_arg(const char *path) {
-    if (!cbm_validate_shell_arg(path)) {
+bool lsm_validate_shell_path_arg(const char *path) {
+    if (!lsm_validate_shell_arg(path)) {
         return false;
     }
 #ifdef _WIN32
@@ -288,7 +288,7 @@ bool cbm_validate_shell_path_arg(const char *path) {
     return true;
 }
 
-bool cbm_validate_project_name(const char *name) {
+bool lsm_validate_project_name(const char *name) {
     if (!name || !*name)
         return false;
     /* Reject directory traversal */
@@ -310,7 +310,7 @@ bool cbm_validate_project_name(const char *name) {
     return true;
 }
 
-int cbm_json_escape(char *buf, int bufsize, const char *src) {
+int lsm_json_escape(char *buf, int bufsize, const char *src) {
     if (!buf || bufsize <= 0) {
         return 0;
     }

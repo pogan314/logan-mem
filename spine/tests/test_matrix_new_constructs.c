@@ -27,7 +27,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -48,7 +48,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } MN_LangProj;
 
 typedef struct {
@@ -62,29 +62,29 @@ static void mn_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *mn_open_indexed(MN_LangProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *mn_open_indexed(MN_LangProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *mn_index_files(MN_LangProj *lp, const MN_LangFile *files, int nfiles) {
+static lsm_store_t *mn_index_files(MN_LangProj *lp, const MN_LangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_mn_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_mn_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     mn_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -92,7 +92,7 @@ static cbm_store_t *mn_index_files(MN_LangProj *lp, const MN_LangFile *files, in
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -103,9 +103,9 @@ static cbm_store_t *mn_index_files(MN_LangProj *lp, const MN_LangFile *files, in
     return mn_open_indexed(lp);
 }
 
-static void mn_cleanup(MN_LangProj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void mn_cleanup(MN_LangProj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project);
     lp->project = NULL;
     th_rmtree(lp->tmpdir);
@@ -118,20 +118,20 @@ static void mn_cleanup(MN_LangProj *lp, cbm_store_t *store) {
 }
 
 /* Count nodes with a given label; -1 on error. */
-static int mn_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int mn_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
-static int mn_named_node_match_count(cbm_store_t *store, const char *project, const char *name,
+static int mn_named_node_match_count(lsm_store_t *store, const char *project, const char *name,
                                      const char *label, const char *qn_suffix) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_name(store, project, name, &nodes, &count) != CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_name(store, project, name, &nodes, &count) != LSM_STORE_OK) {
         return -1;
     }
     int matches = 0;
@@ -143,31 +143,31 @@ static int mn_named_node_match_count(cbm_store_t *store, const char *project, co
             matches++;
         }
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return matches;
 }
 
-static int mn_exact_edge_by_qn_suffix(cbm_store_t *store, const char *project,
+static int mn_exact_edge_by_qn_suffix(lsm_store_t *store, const char *project,
                                       const char *edge_type, const char *source_suffix,
                                       const char *target_suffix) {
-    cbm_node_t *sources = NULL;
-    cbm_node_t *targets = NULL;
+    lsm_node_t *sources = NULL;
+    lsm_node_t *targets = NULL;
     int source_count = 0;
     int target_count = 0;
-    if (cbm_store_find_nodes_by_qn_suffix(store, project, source_suffix, &sources, &source_count) !=
-            CBM_STORE_OK ||
-        cbm_store_find_nodes_by_qn_suffix(store, project, target_suffix, &targets, &target_count) !=
-            CBM_STORE_OK ||
+    if (lsm_store_find_nodes_by_qn_suffix(store, project, source_suffix, &sources, &source_count) !=
+            LSM_STORE_OK ||
+        lsm_store_find_nodes_by_qn_suffix(store, project, target_suffix, &targets, &target_count) !=
+            LSM_STORE_OK ||
         source_count != 1 || target_count != 1) {
-        cbm_store_free_nodes(sources, source_count);
-        cbm_store_free_nodes(targets, target_count);
+        lsm_store_free_nodes(sources, source_count);
+        lsm_store_free_nodes(targets, target_count);
         return -1;
     }
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
     int matches = -1;
-    if (cbm_store_find_edges_by_source_type(store, sources[0].id, edge_type, &edges, &edge_count) ==
-        CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_source_type(store, sources[0].id, edge_type, &edges, &edge_count) ==
+        LSM_STORE_OK) {
         matches = 0;
         for (int i = 0; i < edge_count; i++) {
             if (edges[i].target_id == targets[0].id) {
@@ -175,14 +175,14 @@ static int mn_exact_edge_by_qn_suffix(cbm_store_t *store, const char *project,
             }
         }
     }
-    cbm_store_free_edges(edges, edge_count);
-    cbm_store_free_nodes(sources, source_count);
-    cbm_store_free_nodes(targets, target_count);
+    lsm_store_free_edges(edges, edge_count);
+    lsm_store_free_nodes(sources, source_count);
+    lsm_store_free_nodes(targets, target_count);
     return matches;
 }
 
 /* Sum type-like nodes (Class + Struct + Interface + Enum + Trait + Type). */
-static int mn_type_nodes(cbm_store_t *store, const char *project) {
+static int mn_type_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class", "Struct", "Interface", "Enum", "Trait", "Type", NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -193,20 +193,20 @@ static int mn_type_nodes(cbm_store_t *store, const char *project) {
 }
 
 /* Callable nodes (Function + Method) with >=1 outbound edge. */
-static int mn_callables_with_outbound(cbm_store_t *store, const char *project) {
+static int mn_callables_with_outbound(lsm_store_t *store, const char *project) {
     static const char *callable_labels[] = {"Function", "Method", NULL};
     int total = 0;
     for (int i = 0; callable_labels[i]; i++) {
-        cbm_search_params_t p = {0};
+        lsm_search_params_t p = {0};
         p.project    = project;
         p.label      = callable_labels[i];
         p.min_degree = 1;
         p.max_degree = -1;
         p.limit      = 100;
-        cbm_search_output_t out = {0};
-        if (cbm_store_search(store, &p, &out) == CBM_STORE_OK)
+        lsm_search_output_t out = {0};
+        if (lsm_store_search(store, &p, &out) == LSM_STORE_OK)
             total += out.count;
-        cbm_store_search_free(&out);
+        lsm_store_search_free(&out);
     }
     return total;
 }
@@ -226,18 +226,18 @@ typedef struct {
 
 static MN_Metrics mn_metrics_files(const MN_LangFile *files, int nfiles) {
     MN_LangProj lp;
-    cbm_store_t *store = mn_index_files(&lp, files, nfiles);
+    lsm_store_t *store = mn_index_files(&lp, files, nfiles);
     MN_Metrics m = {0};
     if (store) {
         m.ok             = 1;
         m.functions      = mn_count_label(store, lp.project, "Function");
         m.methods        = mn_count_label(store, lp.project, "Method");
         m.types          = mn_type_nodes(store, lp.project);
-        m.calls          = cbm_store_count_edges_by_type(store, lp.project, "CALLS");
+        m.calls          = lsm_store_count_edges_by_type(store, lp.project, "CALLS");
         m.callers        = mn_callables_with_outbound(store, lp.project);
-        m.inherits       = cbm_store_count_edges_by_type(store, lp.project, "INHERITS");
-        m.implements     = cbm_store_count_edges_by_type(store, lp.project, "IMPLEMENTS");
-        m.defines_method = cbm_store_count_edges_by_type(store, lp.project, "DEFINES_METHOD");
+        m.inherits       = lsm_store_count_edges_by_type(store, lp.project, "INHERITS");
+        m.implements     = lsm_store_count_edges_by_type(store, lp.project, "IMPLEMENTS");
+        m.defines_method = lsm_store_count_edges_by_type(store, lp.project, "DEFINES_METHOD");
     }
     mn_cleanup(&lp, store);
     return m;
@@ -1401,7 +1401,7 @@ static MN_TSNamespaceObservation mn_observe_ts_namespace(const char *filename) {
         "function run(): number { return new App.Config(0.5).threshold; }\n";
     MN_LangFile file = {filename, source};
     MN_LangProj lp;
-    cbm_store_t *store = mn_index_files(&lp, &file, 1);
+    lsm_store_t *store = mn_index_files(&lp, &file, 1);
     MN_TSNamespaceObservation o = {0};
     if (store) {
         o.app_module = mn_named_node_match_count(store, lp.project, "App", "Module", ".ns.App");
@@ -1527,9 +1527,9 @@ TEST(mn_module_python_package) {
         {"main.py",
          "from .pkg import add\n\n\ndef run():\n    return add(1, 2)\n"}};
     MN_LangProj lp;
-    cbm_store_t *store = mn_index_files(&lp, f, 3);
+    lsm_store_t *store = mn_index_files(&lp, f, 3);
     int functions = store ? mn_count_label(store, lp.project, "Function") : 0;
-    int imports   = store ? cbm_store_count_edges_by_type(store, lp.project, "IMPORTS") : 0;
+    int imports   = store ? lsm_store_count_edges_by_type(store, lp.project, "IMPORTS") : 0;
     int ok        = (store != NULL);
     mn_cleanup(&lp, store);
     ASSERT_TRUE(ok);

@@ -25,7 +25,7 @@ enum { REG_MAX_CANDIDATES = 256 };
 
 #define DEFAULT_CONFIDENCE 0.5
 #include "pipeline/pipeline.h"
-#include "foundation/compat.h" /* CBM_TLS */
+#include "foundation/compat.h" /* LSM_TLS */
 #include "foundation/hash_table.h"
 #include "foundation/dyn_array.h"
 #include "foundation/platform.h"
@@ -40,7 +40,7 @@ enum { REG_MAX_CANDIDATES = 256 };
 #define CONF_BAND_MEDIUM 0.45
 #define CONF_BAND_SPECULATIVE 0.25
 
-const char *cbm_confidence_band(double score) {
+const char *lsm_confidence_band(double score) {
     if (score >= CONF_BAND_HIGH) {
         return "high";
     }
@@ -72,19 +72,19 @@ const char *cbm_confidence_band(double score) {
 /* ── Internal types ──────────────────────────────────────────────── */
 
 /* Array of QN strings for byName index */
-typedef CBM_DYN_ARRAY(char *) qn_array_t;
+typedef LSM_DYN_ARRAY(char *) qn_array_t;
 
-struct cbm_registry {
+struct lsm_registry {
     /* Interned label strings (<=~30 distinct labels; owned here, freed in
      * _free). The exact map's VALUES point into this pool instead of one
      * strdup per registered definition (~8.5M strdups on the kernel). */
     char *label_pool[64];
     int label_pool_n;
     /* exact: qualifiedName → label string (heap-owned copies) */
-    CBMHashTable *exact;
+    LSMHashTable *exact;
 
     /* byName: simpleName → qn_array_t* (heap-owned) */
-    CBMHashTable *by_name;
+    LSMHashTable *by_name;
 };
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -165,7 +165,7 @@ static int candidate_score(const char *candidate_qn, const char *module_qn) {
 static const char *best_by_import_distance(const char **candidates, int count,
                                            const char *module_qn) {
     const char *best = NULL;
-    int best_score = CBM_NOT_FOUND;
+    int best_score = LSM_NOT_FOUND;
     for (int i = 0; i < count; i++) {
         int score = candidate_score(candidates[i], module_qn);
         if (score > best_score) {
@@ -188,7 +188,7 @@ static const char *best_by_import_distance(const char **candidates, int count,
  * files). resolve_file_calls calls _begin at file entry and _end at
  * file exit. Thread-local so each worker has its own cache without
  * contention. */
-static CBM_TLS CBMHashTable *_reach_cache = NULL;
+static LSM_TLS LSMHashTable *_reach_cache = NULL;
 
 /* Sentinels stored as values in the cache. NULL means "not cached".
  * We need two distinct non-NULL pointers to encode true/false. */
@@ -201,23 +201,23 @@ static void reach_cache_free_key(const char *key, void *val, void *ud) {
     free((char *)key);
 }
 
-void cbm_registry_reach_cache_begin(int estimated_capacity) {
+void lsm_registry_reach_cache_begin(int estimated_capacity) {
     if (_reach_cache) {
         /* Defensive: caller forgot to call _end. Clear and reuse. */
-        cbm_ht_foreach(_reach_cache, reach_cache_free_key, NULL);
-        cbm_ht_clear(_reach_cache);
+        lsm_ht_foreach(_reach_cache, reach_cache_free_key, NULL);
+        lsm_ht_clear(_reach_cache);
         return;
     }
     if (estimated_capacity < 16)
         estimated_capacity = 16;
-    _reach_cache = cbm_ht_create((uint32_t)estimated_capacity);
+    _reach_cache = lsm_ht_create((uint32_t)estimated_capacity);
 }
 
-void cbm_registry_reach_cache_end(void) {
+void lsm_registry_reach_cache_end(void) {
     if (!_reach_cache)
         return;
-    cbm_ht_foreach(_reach_cache, reach_cache_free_key, NULL);
-    cbm_ht_free(_reach_cache);
+    lsm_ht_foreach(_reach_cache, reach_cache_free_key, NULL);
+    lsm_ht_free(_reach_cache);
     _reach_cache = NULL;
 }
 
@@ -231,52 +231,52 @@ void cbm_registry_reach_cache_end(void) {
  * Build a hash from prefix → module_qn ONCE per file at file entry.
  * Each lookup becomes O(1). Keys and values are BORROWED from the
  * caller's import_map — they outlive the cache scope. */
-static CBM_TLS CBMHashTable *_import_map_cache = NULL;
+static LSM_TLS LSMHashTable *_import_map_cache = NULL;
 
-void cbm_registry_import_map_cache_begin(const char **keys, const char **vals, int count) {
+void lsm_registry_import_map_cache_begin(const char **keys, const char **vals, int count) {
     if (_import_map_cache) {
-        cbm_ht_free(_import_map_cache);
+        lsm_ht_free(_import_map_cache);
         _import_map_cache = NULL;
     }
     if (!keys || !vals || count <= 0)
         return;
-    _import_map_cache = cbm_ht_create((uint32_t)count * 2u + 8u);
+    _import_map_cache = lsm_ht_create((uint32_t)count * 2u + 8u);
     if (!_import_map_cache)
         return;
     for (int i = 0; i < count; i++) {
         if (keys[i] && vals[i]) {
-            cbm_ht_set(_import_map_cache, keys[i], (void *)(uintptr_t)vals[i]);
+            lsm_ht_set(_import_map_cache, keys[i], (void *)(uintptr_t)vals[i]);
         }
     }
 }
 
-void cbm_registry_import_map_cache_end(void) {
+void lsm_registry_import_map_cache_end(void) {
     if (!_import_map_cache)
         return;
     /* Keys/values borrowed from caller — no free callback needed. */
-    cbm_ht_free(_import_map_cache);
+    lsm_ht_free(_import_map_cache);
     _import_map_cache = NULL;
 }
 
-/* ── Per-file full-result cache for cbm_registry_resolve ──────────
+/* ── Per-file full-result cache for lsm_registry_resolve ──────────
  *
  * THE big one: 98.7% of resolve_calls CPU on kubernetes lives inside
- * cbm_registry_resolve's strategy chain (suffix_match iterating
+ * lsm_registry_resolve's strategy chain (suffix_match iterating
  * hundreds of candidates per common name like "Get"/"Add"/"New"
  * × 1M LSP-miss calls = ~800s of work).
  *
  * Since module_qn is CONSTANT per file, the resolution for a given
  * callee_name within a file is also constant — same name resolves
- * to the same QN every time. Cache the full cbm_resolution_t result
+ * to the same QN every time. Cache the full lsm_resolution_t result
  * keyed by callee_name; first lookup does the full chain, repeats
  * are O(1). On K8s a typical file has ~200 calls but only ~50
  * unique callee_names → ~75% hit rate → ~75% of the resolve cost
  * eliminated. */
 typedef struct {
-    cbm_resolution_t res;
+    lsm_resolution_t res;
 } resolve_cache_entry_t;
 
-static CBM_TLS CBMHashTable *_resolve_cache = NULL;
+static LSM_TLS LSMHashTable *_resolve_cache = NULL;
 /* Entries are malloc'd; keys are strdup'd. Both freed in _end. */
 
 static void resolve_cache_free_entry(const char *key, void *val, void *ud) {
@@ -285,22 +285,22 @@ static void resolve_cache_free_entry(const char *key, void *val, void *ud) {
     free(val);
 }
 
-void cbm_registry_resolve_cache_begin(int estimated_capacity) {
+void lsm_registry_resolve_cache_begin(int estimated_capacity) {
     if (_resolve_cache) {
-        cbm_ht_foreach(_resolve_cache, resolve_cache_free_entry, NULL);
-        cbm_ht_free(_resolve_cache);
+        lsm_ht_foreach(_resolve_cache, resolve_cache_free_entry, NULL);
+        lsm_ht_free(_resolve_cache);
         _resolve_cache = NULL;
     }
     if (estimated_capacity < 32)
         estimated_capacity = 32;
-    _resolve_cache = cbm_ht_create((uint32_t)estimated_capacity);
+    _resolve_cache = lsm_ht_create((uint32_t)estimated_capacity);
 }
 
-void cbm_registry_resolve_cache_end(void) {
+void lsm_registry_resolve_cache_end(void) {
     if (!_resolve_cache)
         return;
-    cbm_ht_foreach(_resolve_cache, resolve_cache_free_entry, NULL);
-    cbm_ht_free(_resolve_cache);
+    lsm_ht_foreach(_resolve_cache, resolve_cache_free_entry, NULL);
+    lsm_ht_free(_resolve_cache);
     _resolve_cache = NULL;
 }
 
@@ -312,14 +312,14 @@ void cbm_registry_resolve_cache_end(void) {
 static bool is_import_reachable(const char *candidate_qn, const char **import_vals,
                                 int import_count) {
     if (_reach_cache) {
-        void *cached = cbm_ht_get(_reach_cache, candidate_qn);
+        void *cached = lsm_ht_get(_reach_cache, candidate_qn);
         if (cached == REACH_CACHE_TRUE)
             return true;
         if (cached == REACH_CACHE_FALSE)
             return false;
     }
 
-    char cand_mod[CBM_SZ_512];
+    char cand_mod[LSM_SZ_512];
     const char *last = strrchr(candidate_qn, '.');
     if (last) {
         size_t len = (size_t)(last - candidate_qn);
@@ -342,7 +342,7 @@ static bool is_import_reachable(const char *candidate_qn, const char **import_va
     if (_reach_cache) {
         char *kdup = strdup(candidate_qn);
         if (kdup) {
-            cbm_ht_set(_reach_cache, kdup, reachable ? REACH_CACHE_TRUE : REACH_CACHE_FALSE);
+            lsm_ht_set(_reach_cache, kdup, reachable ? REACH_CACHE_TRUE : REACH_CACHE_FALSE);
         }
     }
     return reachable;
@@ -356,8 +356,8 @@ static double candidate_count_penalty(double base, int count) {
     return base * fmin(REG_FULL_CONF, CANDIDATE_PENALTY_CAP / (double)count);
 }
 
-static cbm_resolution_t empty_result(void) {
-    cbm_resolution_t r = {0};
+static lsm_resolution_t empty_result(void) {
+    lsm_resolution_t r = {0};
     return r;
 }
 
@@ -392,7 +392,7 @@ static int perl_builtin_cmp(const void *key, const void *elem) {
  * generic-resolver CALLS edges from Perl builtin invocations to project subs
  * that happen to share the builtin's name. Perl-scoped: callers gate on the
  * file language so no other language's resolution is affected. */
-bool cbm_perl_is_builtin(const char *name) {
+bool lsm_perl_is_builtin(const char *name) {
     if (!name || !name[0]) {
         return false;
     }
@@ -407,15 +407,15 @@ bool cbm_perl_is_builtin(const char *name) {
  * (same_module, import_map, import_map_suffix) are KEPT so a genuine same-file
  * or imported call to a builtin-named sub still resolves — only the weak
  * short-name guesses (suffix_match, unique_name) are dropped. `strategy` is the
- * cbm_resolution_t.strategy of a non-empty match;
+ * lsm_resolution_t.strategy of a non-empty match;
  * NULL/empty (no match) returns false. Pure + side-effect-free so the
  * suppression contract is unit-testable without a full pipeline. */
-bool cbm_perl_suppress_generic_match(bool is_perl, bool is_method, const char *callee_name,
+bool lsm_perl_suppress_generic_match(bool is_perl, bool is_method, const char *callee_name,
                                      const char *strategy) {
     if (!is_perl) {
         return false;
     }
-    if (!(is_method || cbm_perl_is_builtin(callee_name))) {
+    if (!(is_method || lsm_perl_is_builtin(callee_name))) {
         return false;
     }
     if (!strategy || !strategy[0]) {
@@ -439,13 +439,13 @@ bool cbm_perl_suppress_generic_match(bool is_perl, bool is_method, const char *c
  * default-drop) because the parallel resolver runs lsp_* strategies through the
  * same guard variable — a default-drop would silently kill lsp_ts_method. Pure
  * + side-effect-free so the contract is unit-testable without a full pipeline. */
-bool cbm_tsjs_suppress_weak_method_match(bool is_tsjs, bool is_method, const char *strategy) {
+bool lsm_tsjs_suppress_weak_method_match(bool is_tsjs, bool is_method, const char *strategy) {
     if (!is_tsjs || !is_method || !strategy || !strategy[0]) {
         return false;
     }
     /* Weak short-name strategies that actually reach the call-resolution guards:
      * the registry's suffix_match / unique_name and the parallel field_type_hint.
-     * "fuzzy" is listed as defensive insurance only — cbm_registry_fuzzy_resolve
+     * "fuzzy" is listed as defensive insurance only — lsm_registry_fuzzy_resolve
      * is not wired into the sequential/parallel resolvers today, so it never
      * reaches this helper, but naming it keeps a future wiring from silently
      * reintroducing the noise. Everything else — same_module / import_map /
@@ -455,8 +455,8 @@ bool cbm_tsjs_suppress_weak_method_match(bool is_tsjs, bool is_method, const cha
            strcmp(strategy, "field_type_hint") == 0 || strcmp(strategy, "fuzzy") == 0;
 }
 
-static bool js_ts_family(CBMLanguage lang) {
-    return lang == CBM_LANG_JAVASCRIPT || lang == CBM_LANG_TYPESCRIPT || lang == CBM_LANG_TSX;
+static bool js_ts_family(LSMLanguage lang) {
+    return lang == LSM_LANG_JAVASCRIPT || lang == LSM_LANG_TYPESCRIPT || lang == LSM_LANG_TSX;
 }
 
 static const char *path_basename(const char *path) {
@@ -473,7 +473,7 @@ static const char *path_basename(const char *path) {
     return slash ? slash + 1 : path;
 }
 
-bool cbm_suppress_cross_language_suffix_match(CBMLanguage caller_lang, const char *target_file_path,
+bool lsm_suppress_cross_language_suffix_match(LSMLanguage caller_lang, const char *target_file_path,
                                               const char *strategy) {
     /* Two same-named symbols in different languages: suffix_match picks one
      * winner by import-distance and attaches every bare-name call to it
@@ -482,11 +482,11 @@ bool cbm_suppress_cross_language_suffix_match(CBMLanguage caller_lang, const cha
     if (!strategy || strcmp(strategy, "suffix_match") != 0) {
         return false;
     }
-    if (caller_lang == CBM_LANG_COUNT || !target_file_path || !target_file_path[0]) {
+    if (caller_lang == LSM_LANG_COUNT || !target_file_path || !target_file_path[0]) {
         return false;
     }
-    CBMLanguage target_lang = cbm_language_for_filename(path_basename(target_file_path));
-    if (target_lang == CBM_LANG_COUNT) {
+    LSMLanguage target_lang = lsm_language_for_filename(path_basename(target_file_path));
+    if (target_lang == LSM_LANG_COUNT) {
         return false;
     }
     if (caller_lang == target_lang) {
@@ -500,13 +500,13 @@ bool cbm_suppress_cross_language_suffix_match(CBMLanguage caller_lang, const cha
 
 /* ── Lifecycle ──────────────────────────────────────────────────── */
 
-cbm_registry_t *cbm_registry_new(void) {
-    cbm_registry_t *r = calloc(CBM_ALLOC_ONE, sizeof(cbm_registry_t));
+lsm_registry_t *lsm_registry_new(void) {
+    lsm_registry_t *r = calloc(LSM_ALLOC_ONE, sizeof(lsm_registry_t));
     if (!r) {
         return NULL;
     }
-    r->exact = cbm_ht_create(CBM_SZ_1K);
-    r->by_name = cbm_ht_create(CBM_SZ_512);
+    r->exact = lsm_ht_create(LSM_SZ_1K);
+    r->by_name = lsm_ht_create(LSM_SZ_512);
     return r;
 }
 
@@ -521,21 +521,21 @@ static void free_qn_array(const char *key, void *value, void *ud) {
     qn_array_t *arr = value;
     if (arr) {
         /* items borrow the exact map's keys — freed there, not here */
-        cbm_da_free(arr);
+        lsm_da_free(arr);
         free(arr);
     }
     free((void *)key);
 }
 
-void cbm_registry_free(cbm_registry_t *r) {
+void lsm_registry_free(lsm_registry_t *r) {
     if (!r) {
         return;
     }
     /* by_name first: its items borrow exact's keys. */
-    cbm_ht_foreach(r->by_name, free_qn_array, NULL);
-    cbm_ht_free(r->by_name);
-    cbm_ht_foreach(r->exact, free_label, NULL);
-    cbm_ht_free(r->exact);
+    lsm_ht_foreach(r->by_name, free_qn_array, NULL);
+    lsm_ht_free(r->by_name);
+    lsm_ht_foreach(r->exact, free_label, NULL);
+    lsm_ht_free(r->exact);
     for (int i = 0; i < r->label_pool_n; i++) {
         free(r->label_pool[i]);
     }
@@ -544,7 +544,7 @@ void cbm_registry_free(cbm_registry_t *r) {
 
 /* ── Registration ────────────────────────────────────────────────── */
 
-void cbm_registry_add(cbm_registry_t *r, const char *name, const char *qualified_name,
+void lsm_registry_add(lsm_registry_t *r, const char *name, const char *qualified_name,
                       const char *label) {
     (void)name;
     if (!r || !qualified_name || !label) {
@@ -552,7 +552,7 @@ void cbm_registry_add(cbm_registry_t *r, const char *name, const char *qualified
     }
 
     /* Check for duplicate */
-    if (cbm_ht_get(r->exact, qualified_name)) {
+    if (lsm_ht_get(r->exact, qualified_name)) {
         return;
     }
 
@@ -576,42 +576,42 @@ void cbm_registry_add(cbm_registry_t *r, const char *name, const char *qualified
     /* Store in exact map: QN → interned label. The key is the registry's ONE
      * owned copy of the QN; by_name below borrows it (same lifetime) instead
      * of a second strdup — this pair of copies was ~280 MB on the kernel. */
-    cbm_ht_set(r->exact, strdup(qualified_name), (void *)interned);
-    const char *owned_qn = cbm_ht_get_key(r->exact, qualified_name);
+    lsm_ht_set(r->exact, strdup(qualified_name), (void *)interned);
+    const char *owned_qn = lsm_ht_get_key(r->exact, qualified_name);
 
     /* Index by simple name.
      * No array dedup needed: exact-map check above guarantees uniqueness. */
     const char *simple = simple_name(qualified_name);
-    qn_array_t *arr = cbm_ht_get(r->by_name, simple);
+    qn_array_t *arr = lsm_ht_get(r->by_name, simple);
     if (!arr) {
-        arr = calloc(CBM_ALLOC_ONE, sizeof(qn_array_t));
-        cbm_ht_set(r->by_name, strdup(simple), arr);
+        arr = calloc(LSM_ALLOC_ONE, sizeof(qn_array_t));
+        lsm_ht_set(r->by_name, strdup(simple), arr);
     }
-    cbm_da_push(arr, (char *)owned_qn);
+    lsm_da_push(arr, (char *)owned_qn);
 }
 
 /* ── Lookup ──────────────────────────────────────────────────────── */
 
-bool cbm_registry_exists(const cbm_registry_t *r, const char *qn) {
+bool lsm_registry_exists(const lsm_registry_t *r, const char *qn) {
     if (!r || !qn) {
         return false;
     }
-    return cbm_ht_get(r->exact, qn) != NULL;
+    return lsm_ht_get(r->exact, qn) != NULL;
 }
 
-const char *cbm_registry_label_of(const cbm_registry_t *r, const char *qn) {
+const char *lsm_registry_label_of(const lsm_registry_t *r, const char *qn) {
     if (!r || !qn) {
         return NULL;
     }
-    return cbm_ht_get(r->exact, qn);
+    return lsm_ht_get(r->exact, qn);
 }
 
-int cbm_registry_find_by_name(const cbm_registry_t *r, const char *name, const char ***out,
+int lsm_registry_find_by_name(const lsm_registry_t *r, const char *name, const char ***out,
                               int *count) {
     if (!r || !out || !count) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
-    qn_array_t *arr = cbm_ht_get(r->by_name, name);
+    qn_array_t *arr = lsm_ht_get(r->by_name, name);
     if (arr && arr->count > 0) {
         *out = (const char **)arr->items;
         *count = arr->count;
@@ -622,15 +622,15 @@ int cbm_registry_find_by_name(const cbm_registry_t *r, const char *name, const c
     return 0;
 }
 
-int cbm_registry_size(const cbm_registry_t *r) {
-    return r ? (int)cbm_ht_count(r->exact) : 0;
+int lsm_registry_size(const lsm_registry_t *r) {
+    return r ? (int)lsm_ht_count(r->exact) : 0;
 }
 
 /* ── Resolution ──────────────────────────────────────────────────── */
 
 /* Callback context for import_map_suffix scan */
 /* Strategy 1: Import map lookup (exact → suffix fallback) */
-static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *prefix,
+static lsm_resolution_t resolve_import_map(const lsm_registry_t *r, const char *prefix,
                                            const char *suffix, const char **keys, const char **vals,
                                            int map_count) {
     if (!keys || !vals || map_count <= 0) {
@@ -641,7 +641,7 @@ static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *
      * cache (O(1)) over the linear scan when available. */
     const char *resolved = NULL;
     if (_import_map_cache) {
-        resolved = (const char *)cbm_ht_get(_import_map_cache, prefix);
+        resolved = (const char *)lsm_ht_get(_import_map_cache, prefix);
     } else {
         for (int i = 0; i < map_count; i++) {
             if (strcmp(keys[i], prefix) == 0) {
@@ -671,35 +671,35 @@ static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *
      * django-scale graphs by ~11K CALLS/TESTS edges (Signal.send calls
      * degraded to edges onto the signal variables themselves). #1000 */
     if (!suffix || !suffix[0]) {
-        const char *direct = cbm_ht_get_key(r->exact, resolved);
+        const char *direct = lsm_ht_get_key(r->exact, resolved);
         if (direct) {
-            return (cbm_resolution_t){direct, "import_map", CONF_IMPORT_MAP, REG_RESOLVED};
+            return (lsm_resolution_t){direct, "import_map", CONF_IMPORT_MAP, REG_RESOLVED};
         }
     }
-    char candidate[CBM_SZ_512];
+    char candidate[LSM_SZ_512];
     if (suffix && suffix[0]) {
         snprintf(candidate, sizeof(candidate), "%s.%s", resolved, suffix);
     } else {
         snprintf(candidate, sizeof(candidate), "%s.%s", resolved, prefix);
     }
-    /* Use cbm_ht_get_key to get the persistent heap-owned key string */
-    const char *stored_key = cbm_ht_get_key(r->exact, candidate);
+    /* Use lsm_ht_get_key to get the persistent heap-owned key string */
+    const char *stored_key = lsm_ht_get_key(r->exact, candidate);
     if (stored_key) {
-        return (cbm_resolution_t){stored_key, "import_map", CONF_IMPORT_MAP, REG_RESOLVED};
+        return (lsm_resolution_t){stored_key, "import_map", CONF_IMPORT_MAP, REG_RESOLVED};
     }
 
     /* import_map_suffix fallback: find a QN starting with resolved+"." and
      * ending with "."+suffix. Any such QN's last segment equals the last
      * segment of suffix, so probe the by_name index and tail-check the (few)
-     * candidates instead of cbm_ht_foreach over the WHOLE exact table — that
+     * candidates instead of lsm_ht_foreach over the WHOLE exact table — that
      * scan ran per unresolved call and dominated elasticsearch's resolve
      * phase (94% of samples: 700k-entry foreach + strlen per entry). */
     if (suffix && suffix[0]) {
-        char resolved_dot[CBM_SZ_512];
-        char dot_suffix[CBM_SZ_256];
+        char resolved_dot[LSM_SZ_512];
+        char dot_suffix[LSM_SZ_256];
         snprintf(resolved_dot, sizeof(resolved_dot), "%s.", resolved);
         snprintf(dot_suffix, sizeof(dot_suffix), ".%s", suffix);
-        qn_array_t *arr = cbm_ht_get(r->by_name, simple_name(suffix));
+        qn_array_t *arr = lsm_ht_get(r->by_name, simple_name(suffix));
         if (arr) {
             size_t rd_len = strlen(resolved_dot);
             size_t ds_len = strlen(dot_suffix);
@@ -708,7 +708,7 @@ static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *
                 size_t klen = strlen(qn);
                 if (klen >= rd_len + ds_len && strncmp(qn, resolved_dot, rd_len) == 0 &&
                     strcmp(qn + klen - ds_len, dot_suffix) == 0) {
-                    return (cbm_resolution_t){qn, "import_map_suffix", CONF_IMPORT_MAP_SUFFIX,
+                    return (lsm_resolution_t){qn, "import_map_suffix", CONF_IMPORT_MAP_SUFFIX,
                                               REG_RESOLVED};
                 }
             }
@@ -718,50 +718,50 @@ static cbm_resolution_t resolve_import_map(const cbm_registry_t *r, const char *
 }
 
 /* Strategy 2: Same-module match */
-static cbm_resolution_t resolve_same_module(const cbm_registry_t *r, const char *callee_name,
+static lsm_resolution_t resolve_same_module(const lsm_registry_t *r, const char *callee_name,
                                             const char *suffix, const char *module_qn) {
-    char candidate[CBM_SZ_512];
+    char candidate[LSM_SZ_512];
     snprintf(candidate, sizeof(candidate), "%s.%s", module_qn, callee_name);
-    const char *stored_key = cbm_ht_get_key(r->exact, candidate);
+    const char *stored_key = lsm_ht_get_key(r->exact, candidate);
     if (stored_key) {
-        return (cbm_resolution_t){stored_key, "same_module", CONF_SAME_MODULE, REG_RESOLVED};
+        return (lsm_resolution_t){stored_key, "same_module", CONF_SAME_MODULE, REG_RESOLVED};
     }
     if (suffix && suffix[0]) {
         snprintf(candidate, sizeof(candidate), "%s.%s", module_qn, suffix);
-        stored_key = cbm_ht_get_key(r->exact, candidate);
+        stored_key = lsm_ht_get_key(r->exact, candidate);
         if (stored_key) {
-            return (cbm_resolution_t){stored_key, "same_module", CONF_SAME_MODULE, REG_RESOLVED};
+            return (lsm_resolution_t){stored_key, "same_module", CONF_SAME_MODULE, REG_RESOLVED};
         }
     }
     return empty_result();
 }
 
 /* Strategy 4: multiple candidates with import filtering. */
-static cbm_resolution_t resolve_multi_with_imports(const qn_array_t *arr, const char *module_qn,
+static lsm_resolution_t resolve_multi_with_imports(const qn_array_t *arr, const char *module_qn,
                                                    const char **import_vals, int import_count) {
-    const char *filtered[CBM_SZ_256];
+    const char *filtered[LSM_SZ_256];
     int fcount = 0;
-    for (int i = 0; i < arr->count && fcount < CBM_SZ_256; i++) {
+    for (int i = 0; i < arr->count && fcount < LSM_SZ_256; i++) {
         if (is_import_reachable(arr->items[i], import_vals, import_count)) {
             filtered[fcount++] = arr->items[i];
         }
     }
     if (fcount == SKIP_ONE) {
         double conf = candidate_count_penalty(CONF_SUFFIX_MATCH, arr->count);
-        return (cbm_resolution_t){filtered[0], "suffix_match", conf, arr->count};
+        return (lsm_resolution_t){filtered[0], "suffix_match", conf, arr->count};
     }
     if (fcount > SKIP_ONE) {
         const char *best = best_by_import_distance(filtered, fcount, module_qn);
         if (best) {
             double conf = candidate_count_penalty(CONF_SUFFIX_MATCH, fcount);
-            return (cbm_resolution_t){best, "suffix_match", conf, fcount};
+            return (lsm_resolution_t){best, "suffix_match", conf, fcount};
         }
     }
     /* No import-reachable — use all candidates with penalty */
     const char *best = best_by_import_distance((const char **)arr->items, arr->count, module_qn);
     if (best) {
         double conf = candidate_count_penalty(CONF_SUFFIX_MATCH * REG_HALF_PENALTY, arr->count);
-        return (cbm_resolution_t){best, "suffix_match", conf, arr->count};
+        return (lsm_resolution_t){best, "suffix_match", conf, arr->count};
     }
     return empty_result();
 }
@@ -784,7 +784,7 @@ static cbm_resolution_t resolve_multi_with_imports(const qn_array_t *arr, const 
  * leave behavior unchanged. */
 static const char *qualified_suffix_match(const qn_array_t *arr, const char *callee_name) {
     /* Normalize "::" → "." so the tail composes with dotted candidate QNs. */
-    char dotted[CBM_SZ_512];
+    char dotted[LSM_SZ_512];
     size_t w = 0;
     for (const char *s = callee_name; *s && w + SKIP_ONE < sizeof(dotted);) {
         if (s[0] == ':' && s[1] == ':') {
@@ -824,11 +824,11 @@ static const char *qualified_suffix_match(const qn_array_t *arr, const char *cal
 }
 
 /* Strategy 3+4: Name lookup + suffix match */
-static cbm_resolution_t resolve_name_lookup(const cbm_registry_t *r, const char *callee_name,
+static lsm_resolution_t resolve_name_lookup(const lsm_registry_t *r, const char *callee_name,
                                             const char *module_qn, const char **import_vals,
                                             int import_count) {
     const char *lookup = simple_name(callee_name);
-    qn_array_t *arr = cbm_ht_get(r->by_name, lookup);
+    qn_array_t *arr = lsm_ht_get(r->by_name, lookup);
     if (!arr || arr->count == 0) {
         return empty_result();
     }
@@ -842,7 +842,7 @@ static cbm_resolution_t resolve_name_lookup(const cbm_registry_t *r, const char 
     if (arr->count > 1) {
         const char *q = qualified_suffix_match(arr, callee_name);
         if (q) {
-            return (cbm_resolution_t){q, "qualified_suffix", CONF_QUALIFIED_SUFFIX, REG_RESOLVED};
+            return (lsm_resolution_t){q, "qualified_suffix", CONF_QUALIFIED_SUFFIX, REG_RESOLVED};
         }
     }
 
@@ -853,7 +853,7 @@ static cbm_resolution_t resolve_name_lookup(const cbm_registry_t *r, const char 
             !is_import_reachable(arr->items[0], import_vals, import_count)) {
             conf *= DEFAULT_CONFIDENCE;
         }
-        return (cbm_resolution_t){arr->items[0], "unique_name", conf, REG_RESOLVED};
+        return (lsm_resolution_t){arr->items[0], "unique_name", conf, REG_RESOLVED};
     }
 
     /* Strategy 4: multiple candidates */
@@ -863,12 +863,12 @@ static cbm_resolution_t resolve_name_lookup(const cbm_registry_t *r, const char 
     const char *best = best_by_import_distance((const char **)arr->items, arr->count, module_qn);
     if (best) {
         double conf = candidate_count_penalty(CONF_SUFFIX_MATCH, arr->count);
-        return (cbm_resolution_t){best, "suffix_match", conf, arr->count};
+        return (lsm_resolution_t){best, "suffix_match", conf, arr->count};
     }
     return empty_result();
 }
 
-cbm_resolution_t cbm_registry_resolve(const cbm_registry_t *r, const char *callee_name,
+lsm_resolution_t lsm_registry_resolve(const lsm_registry_t *r, const char *callee_name,
                                       const char *module_qn, const char **import_map_keys,
                                       const char **import_map_vals, int import_map_count) {
     if (!r || !callee_name) {
@@ -880,7 +880,7 @@ cbm_resolution_t cbm_registry_resolve(const cbm_registry_t *r, const char *calle
      * cache key only needs callee_name. */
     if (_resolve_cache) {
         resolve_cache_entry_t *cached =
-            (resolve_cache_entry_t *)cbm_ht_get(_resolve_cache, callee_name);
+            (resolve_cache_entry_t *)lsm_ht_get(_resolve_cache, callee_name);
         if (cached) {
             return cached->res;
         }
@@ -891,7 +891,7 @@ cbm_resolution_t cbm_registry_resolve(const cbm_registry_t *r, const char *calle
      * separator appears first ("lib::square" → prefix="lib", suffix="square").
      * Both separators are unambiguous, so handling "::" never affects "."-only
      * callees. */
-    char prefix[CBM_SZ_256] = {0};
+    char prefix[LSM_SZ_256] = {0};
     const char *suffix = NULL;
     const char *dot = strchr(callee_name, '.');
     const char *colons = strstr(callee_name, "::");
@@ -914,7 +914,7 @@ cbm_resolution_t cbm_registry_resolve(const cbm_registry_t *r, const char *calle
     }
 
     /* Strategy 1: import map */
-    cbm_resolution_t res =
+    lsm_resolution_t res =
         resolve_import_map(r, prefix, suffix, import_map_keys, import_map_vals, import_map_count);
     if (!(res.qualified_name && res.qualified_name[0])) {
         /* Strategy 2: same module */
@@ -933,7 +933,7 @@ cbm_resolution_t cbm_registry_resolve(const cbm_registry_t *r, const char *calle
             e->res = res;
             char *kdup = strdup(callee_name);
             if (kdup) {
-                cbm_ht_set(_resolve_cache, kdup, e);
+                lsm_ht_set(_resolve_cache, kdup, e);
             } else {
                 free(e);
             }
@@ -956,18 +956,18 @@ static int filter_import_reachable(const char **candidates, int count, const cha
     return n;
 }
 
-cbm_fuzzy_result_t cbm_registry_fuzzy_resolve(const cbm_registry_t *r, const char *callee_name,
+lsm_fuzzy_result_t lsm_registry_fuzzy_resolve(const lsm_registry_t *r, const char *callee_name,
                                               const char *module_qn, const char **import_map_keys,
                                               const char **import_map_vals, int import_map_count) {
     (void)import_map_keys;
-    cbm_fuzzy_result_t no_match = {{0}, false};
+    lsm_fuzzy_result_t no_match = {{0}, false};
     if (!r || !callee_name) {
         return no_match;
     }
 
     /* Extract simple name (last segment after dots) */
     const char *lookup = simple_name(callee_name);
-    qn_array_t *arr = cbm_ht_get(r->by_name, lookup);
+    qn_array_t *arr = lsm_ht_get(r->by_name, lookup);
     if (!arr || arr->count == 0) {
         return no_match;
     }
@@ -984,17 +984,17 @@ cbm_fuzzy_result_t cbm_registry_fuzzy_resolve(const cbm_registry_t *r, const cha
             !is_import_reachable(arr->items[0], import_map_vals, import_map_count)) {
             conf *= DEFAULT_CONFIDENCE;
         }
-        return (cbm_fuzzy_result_t){{arr->items[0], "fuzzy", conf, REG_RESOLVED}, true};
+        return (lsm_fuzzy_result_t){{arr->items[0], "fuzzy", conf, REG_RESOLVED}, true};
     }
 
     /* Multiple candidates: filter by import reachability */
-    const char *filtered[CBM_SZ_256];
+    const char *filtered[LSM_SZ_256];
     int fcount = arr->count;
     const char **fptr = (const char **)arr->items;
 
     if (have_imports) {
         fcount = filter_import_reachable((const char **)arr->items, arr->count, import_map_vals,
-                                         import_map_count, filtered, CBM_SZ_256);
+                                         import_map_count, filtered, LSM_SZ_256);
         fptr = filtered;
     }
 
@@ -1005,13 +1005,13 @@ cbm_fuzzy_result_t cbm_registry_fuzzy_resolve(const cbm_registry_t *r, const cha
         if (!best) {
             return no_match;
         }
-        return (cbm_fuzzy_result_t){
+        return (lsm_fuzzy_result_t){
             {best, "fuzzy",
              candidate_count_penalty(CONF_FUZZY_MULTI * REG_HALF_PENALTY, arr->count), arr->count},
             true};
     }
     if (fcount == SKIP_ONE) {
-        return (cbm_fuzzy_result_t){
+        return (lsm_fuzzy_result_t){
             {fptr[0], "fuzzy", candidate_count_penalty(CONF_FUZZY_SINGLE, arr->count), arr->count},
             true};
     }
@@ -1019,7 +1019,7 @@ cbm_fuzzy_result_t cbm_registry_fuzzy_resolve(const cbm_registry_t *r, const cha
     if (!best) {
         return no_match;
     }
-    return (cbm_fuzzy_result_t){
+    return (lsm_fuzzy_result_t){
         {best, "fuzzy", candidate_count_penalty(CONF_FUZZY_MULTI, fcount), fcount}, true};
 }
 
@@ -1046,7 +1046,7 @@ static void few_scan(const char *key, void *value, void *ud) {
     }
 }
 
-int cbm_registry_find_ending_with(const cbm_registry_t *r, const char *suffix, const char ***out) {
+int lsm_registry_find_ending_with(const lsm_registry_t *r, const char *suffix, const char ***out) {
     if (!r || !suffix || !out) {
         if (out) {
             *out = NULL;
@@ -1061,7 +1061,7 @@ int cbm_registry_find_ending_with(const cbm_registry_t *r, const char *suffix, c
     memcpy(target + SKIP_ONE, suffix, slen + SKIP_ONE);
 
     struct few_ctx ctx = {target, slen + SKIP_ONE, NULL, 0, 0};
-    cbm_ht_foreach(r->exact, few_scan, &ctx);
+    lsm_ht_foreach(r->exact, few_scan, &ctx);
 
     free(target);
     *out = ctx.results;
@@ -1069,7 +1069,7 @@ int cbm_registry_find_ending_with(const cbm_registry_t *r, const char *suffix, c
 }
 
 /* Public wrapper for is_import_reachable (testing). */
-bool cbm_registry_is_import_reachable(const char *candidate_qn, const char **import_vals,
+bool lsm_registry_is_import_reachable(const char *candidate_qn, const char **import_vals,
                                       int import_count) {
     return is_import_reachable(candidate_qn, import_vals, import_count);
 }

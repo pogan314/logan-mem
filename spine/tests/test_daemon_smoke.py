@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real-binary smoke test for the mandatory per-account CBM daemon.
+"""Real-binary smoke test for the mandatory per-account LSM daemon.
 
 This is intentionally a separate POSIX smoke test rather than part of the C
 unit suite. It owns the account-wide rendezvous point while it runs. Direct
@@ -299,7 +299,7 @@ def probe_future_generation_rendezvous(
     )
     check(len(request) == RENDEZVOUS_REQUEST_SIZE, "bad rendezvous request fixture")
     header = struct.pack(
-        ">4sBBHI", b"CBMD", 1, 1, 1, RENDEZVOUS_REQUEST_SIZE
+        ">4sBBHI", b"LSMD", 1, 1, 1, RENDEZVOUS_REQUEST_SIZE
     )
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
         stream.settimeout(10)
@@ -309,7 +309,7 @@ def probe_future_generation_rendezvous(
         magic, frame_version, frame_type, operation, length = struct.unpack(
             ">4sBBHI", response_header
         )
-        check(magic == b"CBMD", "future probe received wrong frame magic")
+        check(magic == b"LSMD", "future probe received wrong frame magic")
         check(frame_version == 1, "future probe received unstable frame version")
         check(frame_type == 2 and operation == 1, "future probe received wrong response kind")
         check(length == RENDEZVOUS_RESPONSE_SIZE, "future probe received resized response")
@@ -338,9 +338,9 @@ def probe_future_generation_rendezvous(
         "future probe requested build mismatch",
     )
     expected_message = (
-        "CBM could not start because a conflicting CBM process is active "
+        "LSM could not start because a conflicting LSM process is active "
         "(version; active version {}, build {}; requested version {}, build {}). "
-        "Close all CBM sessions and commands, then retry."
+        "Close all LSM sessions and commands, then retry."
     ).format(active_version, active_build, requested_version, requested_build)
     check(
         decode_fixed_wire_text(response, 286, RENDEZVOUS_MESSAGE_CAP) == expected_message,
@@ -569,7 +569,7 @@ def run_successful_activation(
         label + " failed: stdout={!r}, stderr={!r}".format(stdout, stderr),
     )
     check(
-        "Stopping active CBM sessions and operations for {}...".format(action)
+        "Stopping active LSM sessions and operations for {}...".format(action)
         in stdout,
         label + " did not show coordination progress: " + repr(stdout),
     )
@@ -582,7 +582,7 @@ def run_successful_activation(
     records = [
         record
         for record in records
-        if record.get("event") == "cbm.activation"
+        if record.get("event") == "lsm.activation"
         and record.get("requester_pid") == process.pid
     ]
     phases = [record.get("phase") for record in records]
@@ -667,12 +667,12 @@ def create_local_update_release(release_dir, candidate):
         portable = "-portable"
     machine = platform.machine().lower()
     arch = "arm64" if machine in ("arm64", "aarch64") else "amd64"
-    asset_name = "codebase-memory-mcp-{}-{}{}.tar.gz".format(
+    asset_name = "logan-spine-mcp-{}-{}{}.tar.gz".format(
         os_name, arch, portable
     )
     archive = release_dir / asset_name
     with tarfile.open(archive, "w:gz") as stream:
-        stream.add(str(candidate), arcname="codebase-memory-mcp", recursive=False)
+        stream.add(str(candidate), arcname="logan-spine-mcp", recursive=False)
     digest = sha256_file(archive)
     (release_dir / "checksums.txt").write_text(
         "{}  {}\n".format(digest, asset_name), encoding="ascii"
@@ -682,7 +682,7 @@ def create_local_update_release(release_dir, candidate):
 
 def assert_no_activation_artifacts(directory, label):
     artifacts = (
-        sorted(path.name for path in directory.iterdir() if path.name.startswith(".cbm-"))
+        sorted(path.name for path in directory.iterdir() if path.name.startswith(".lsm-"))
         if directory.exists()
         else []
     )
@@ -691,7 +691,7 @@ def assert_no_activation_artifacts(directory, label):
 
 def main():
     if os.name == "nt" or sys.platform.startswith(("cygwin", "msys")):
-        if os.environ.get("CBM_DAEMON_SMOKE_REQUIRE_RUN") == "1":
+        if os.environ.get("LSM_DAEMON_SMOKE_REQUIRE_RUN") == "1":
             raise SmokeFailure(
                 "required daemon smoke is POSIX-only; Windows needs a separate "
                 "real-binary named-pipe/Job Object smoke"
@@ -700,19 +700,19 @@ def main():
         return 0
 
     root = Path(__file__).resolve().parent.parent
-    binary = Path(sys.argv[1] if len(sys.argv) > 1 else root / "build/c/codebase-memory-mcp")
+    binary = Path(sys.argv[1] if len(sys.argv) > 1 else root / "build/c/logan-spine-mcp")
     binary = binary.resolve()
     check(binary.is_file() and os.access(binary, os.X_OK), "missing executable: " + str(binary))
 
     runtime_parent = Path("/private/tmp" if sys.platform == "darwin" else "/tmp")
-    runtime_dir = runtime_parent / ("cbm-daemon-" + str(os.geteuid()))
-    socket_path = runtime_dir / ("cbm-" + RENDEZVOUS_KEY + ".sock")
-    startup_lock = runtime_dir / ("cbm-" + RENDEZVOUS_KEY + ".lock")
-    lifetime_lock = runtime_dir / ("cbm-" + RENDEZVOUS_KEY + ".lifetime.lock")
-    cohort_admission_lock = runtime_dir / "cbm-version-cohort-admission-v1.lock"
-    cohort_lifetime_lock = runtime_dir / "cbm-version-cohort-lifetime-v1.lock"
-    cohort_maintenance_lock = runtime_dir / "cbm-version-cohort-maintenance-v1.lock"
-    cohort_daemon_lock = runtime_dir / "cbm-version-cohort-daemon-v1.lock"
+    runtime_dir = runtime_parent / ("lsm-daemon-" + str(os.geteuid()))
+    socket_path = runtime_dir / ("lsm-" + RENDEZVOUS_KEY + ".sock")
+    startup_lock = runtime_dir / ("lsm-" + RENDEZVOUS_KEY + ".lock")
+    lifetime_lock = runtime_dir / ("lsm-" + RENDEZVOUS_KEY + ".lifetime.lock")
+    cohort_admission_lock = runtime_dir / "lsm-version-cohort-admission-v1.lock"
+    cohort_lifetime_lock = runtime_dir / "lsm-version-cohort-lifetime-v1.lock"
+    cohort_maintenance_lock = runtime_dir / "lsm-version-cohort-maintenance-v1.lock"
+    cohort_daemon_lock = runtime_dir / "lsm-version-cohort-daemon-v1.lock"
     coordination_locks = (
         (startup_lock, False),
         (lifetime_lock, True),
@@ -727,18 +727,18 @@ def main():
         for path, record_lock in coordination_locks
     ]
     if any(status == "held" for _, status in coordination_before):
-        if os.environ.get("CBM_DAEMON_SMOKE_REQUIRE_RUN") == "1":
+        if os.environ.get("LSM_DAEMON_SMOKE_REQUIRE_RUN") == "1":
             raise SmokeFailure(
-                "another CBM process or activation is active or starting; "
+                "another LSM process or activation is active or starting; "
                 "required smoke needs a clean account-wide rendezvous"
             )
-        print("SKIP: another CBM process or activation is active or starting")
+        print("SKIP: another LSM process or activation is active or starting")
         return 0
     for path, status in coordination_before:
         check(status == "free", "unsafe coordination lock {}: {}".format(path, status))
 
     clients = []
-    with tempfile.TemporaryDirectory(prefix="cbm-daemon-smoke-") as raw_tmpdir:
+    with tempfile.TemporaryDirectory(prefix="lsm-daemon-smoke-") as raw_tmpdir:
         tmpdir = Path(raw_tmpdir)
         home = tmpdir / "home"
         cache = tmpdir / "cache"
@@ -766,12 +766,12 @@ def main():
         (success_repo / "tiny.py").write_text(
             "def daemon_index_smoke():\n    return 1\n", encoding="utf-8"
         )
-        target_binary = target_dir / "codebase-memory-mcp"
+        target_binary = target_dir / "logan-spine-mcp"
         target_binary.write_bytes(b"installed binary sentinel\n")
         index_path = cache / "smoke-project.db"
         index_path.write_bytes(b"index sentinel\n")
         descendant_pid_path = tmpdir / "worker-descendant.pid"
-        daemon_log = cache / "logs/cbm-daemon.log"
+        daemon_log = cache / "logs/lsm-daemon.log"
         conflict_log = cache / "logs/daemon-conflicts.ndjson"
         activation_log = cache / "logs/activation-events.ndjson"
 
@@ -779,11 +779,11 @@ def main():
         env.update(
             {
                 "HOME": str(home),
-                "CBM_CACHE_DIR": str(cache_alias),
-                "CBM_LOG_LEVEL": "info",
-                "CBM_LOG_FORMAT": "json",
-                "CBM_TEST_HANG_ON": "hang_me",
-                "CBM_TEST_WORKER_DESCENDANT_PID_FILE": str(descendant_pid_path),
+                "LSM_CACHE_DIR": str(cache_alias),
+                "LSM_LOG_LEVEL": "info",
+                "LSM_LOG_FORMAT": "json",
+                "LSM_TEST_HANG_ON": "hang_me",
+                "LSM_TEST_WORKER_DESCENDANT_PID_FILE": str(descendant_pid_path),
             }
         )
 
@@ -809,7 +809,7 @@ def main():
                 check=False,
             )
             check(version_result.returncode == 0, "--version failed: " + version_result.stderr)
-            version_prefix = "codebase-memory-mcp "
+            version_prefix = "logan-spine-mcp "
             check(version_result.stdout.startswith(version_prefix), "unexpected --version output")
             semantic_version = version_result.stdout.strip()[len(version_prefix) :]
 
@@ -829,7 +829,7 @@ def main():
             except json.JSONDecodeError as exc:
                 raise SmokeFailure("local CLI polluted JSON stdout: " + repr(local_cli.stdout)) from exc
             check(
-                "Preparing one-shot local CBM command" in local_cli.stderr,
+                "Preparing one-shot local LSM command" in local_cli.stderr,
                 "local CLI did not emit coordination feedback: "
                 + repr(local_cli.stderr),
             )
@@ -856,7 +856,7 @@ def main():
             initialize_params = {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "cbm-daemon-smoke", "version": "1"},
+                "clientInfo": {"name": "lsm-daemon-smoke", "version": "1"},
             }
             c1.send(
                 {"jsonrpc": "2.0", "id": 101, "method": "initialize", "params": initialize_params}
@@ -935,7 +935,7 @@ def main():
             # process configured with another root must fail before it joins
             # the daemon generation, while the active sessions remain healthy.
             mismatched_env = env.copy()
-            mismatched_env["CBM_CACHE_DIR"] = str(mismatched_cache)
+            mismatched_env["LSM_CACHE_DIR"] = str(mismatched_cache)
             mismatched_log = mismatched_cache / "logs/daemon-conflicts.ndjson"
             active_cache_fingerprint = hashlib.sha256(
                 str(cache.resolve()).encode("utf-8")
@@ -964,12 +964,12 @@ def main():
             )
             check(
                 mismatched_result.returncode != 0,
-                "mismatched CBM_CACHE_DIR unexpectedly joined the account daemon",
+                "mismatched LSM_CACHE_DIR unexpectedly joined the account daemon",
             )
             check(
                 "active account daemon uses a different cache directory"
                 in mismatched_result.stderr
-                and "CBM_CACHE_DIR" in mismatched_result.stderr,
+                and "LSM_CACHE_DIR" in mismatched_result.stderr,
                 "cache-root conflict did not emit visible remediation guidance: "
                 + repr(mismatched_result.stderr),
             )
@@ -1005,7 +1005,7 @@ def main():
             )
 
             # A process must keep using the canonical cache root it admitted,
-            # even if the original CBM_CACHE_DIR symlink is retargeted later.
+            # even if the original LSM_CACHE_DIR symlink is retargeted later.
             # Otherwise a daemon worker can silently move storage while the
             # cohort still advertises the old root fingerprint.
             cache_alias.unlink()
@@ -1132,7 +1132,7 @@ def main():
                 "future-generation stable-envelope conflict log",
             )
 
-            conflict_binary = tmpdir / "codebase-memory-mcp-conflict"
+            conflict_binary = tmpdir / "logan-spine-mcp-conflict"
             shutil.copy2(binary, conflict_binary)
             if sys.platform == "darwin":
                 # Current Apple linkers ad-hoc sign arm64 executables. Appending
@@ -1146,7 +1146,7 @@ def main():
                         "--sign",
                         "-",
                         "--identifier",
-                        "com.deusdata.cbm.daemon-smoke-conflict",
+                        "com.deusdata.lsm.daemon-smoke-conflict",
                         str(conflict_binary),
                     ],
                     stdout=subprocess.PIPE,
@@ -1170,9 +1170,9 @@ def main():
                 "conflict fixture hash did not change",
             )
             expected_conflict = (
-                "CBM could not start because a conflicting CBM process is active "
+                "LSM could not start because a conflicting LSM process is active "
                 "(build; active version {}, build {}; requested version {}, build {}). "
-                "Close all CBM sessions and commands, then retry."
+                "Close all LSM sessions and commands, then retry."
             ).format(
                 semantic_version,
                 active_fingerprint,
@@ -1202,7 +1202,7 @@ def main():
                 "conflicting one-shot CLI unexpectedly ran beside the active daemon",
             )
             check(
-                "codebase-memory-mcp: " + expected_conflict
+                "logan-spine-mcp: " + expected_conflict
                 in conflict_cli_result.stderr,
                 "conflicting one-shot CLI did not emit the exact visible diagnostic: "
                 + repr(conflict_cli_result.stderr),
@@ -1496,10 +1496,10 @@ def main():
                 tmpdir / "cli-first-worker-project-lock.pid"
             )
             cli_first_env = env.copy()
-            cli_first_env["CBM_TEST_WORKER_DESCENDANT_PID_FILE"] = str(
+            cli_first_env["LSM_TEST_WORKER_DESCENDANT_PID_FILE"] = str(
                 cli_first_pid_path
             )
-            cli_first_env["CBM_TEST_WORKER_PROJECT_LOCK_PID_FILE"] = str(
+            cli_first_env["LSM_TEST_WORKER_PROJECT_LOCK_PID_FILE"] = str(
                 cli_first_lock_owner_path
             )
             cli_first_process = subprocess.Popen(
@@ -1584,7 +1584,7 @@ def main():
                 "conflicting MCP started while a different CLI build was active",
             )
             check(
-                "CBM could not start because a conflicting CBM process is active"
+                "LSM could not start because a conflicting LSM process is active"
                 in cli_first_conflict.stderr,
                 "CLI-first conflict did not emit a visible diagnostic: "
                 + repr(cli_first_conflict.stderr),
@@ -1760,7 +1760,7 @@ def main():
                 except OSError:
                     text = ""
                 return (
-                    "Waiting for another CBM mutation of smoke-cli-first" in text
+                    "Waiting for another LSM mutation of smoke-cli-first" in text
                     or cli_first_competitor.poll() is not None
                 )
 
@@ -1775,7 +1775,7 @@ def main():
             )
             check(
                 cli_first_competitor.poll() is None
-                and "Waiting for another CBM mutation of smoke-cli-first"
+                and "Waiting for another LSM mutation of smoke-cli-first"
                 in competitor_stderr,
                 "worker did not retain same-project exclusion while frozen: "
                 + competitor_stderr,
@@ -1919,14 +1919,14 @@ def main():
             )
             install_dir = tmpdir / "activation-install-bin"
             install_dir.mkdir(mode=0o700)
-            install_target = install_dir / "codebase-memory-mcp"
+            install_target = install_dir / "logan-spine-mcp"
             install_pid_path = tmpdir / "activation-install-worker-descendant.pid"
             install_lock_owner_path = tmpdir / "activation-install-worker-lock.pid"
             activation_local_env = env.copy()
-            activation_local_env["CBM_TEST_WORKER_DESCENDANT_PID_FILE"] = str(
+            activation_local_env["LSM_TEST_WORKER_DESCENDANT_PID_FILE"] = str(
                 install_pid_path
             )
-            activation_local_env["CBM_TEST_WORKER_PROJECT_LOCK_PID_FILE"] = str(
+            activation_local_env["LSM_TEST_WORKER_PROJECT_LOCK_PID_FILE"] = str(
                 install_lock_owner_path
             )
 
@@ -2073,7 +2073,7 @@ def main():
             check(
                 installed_version.returncode == 0
                 and installed_version.stdout.strip()
-                == "codebase-memory-mcp " + semantic_version,
+                == "logan-spine-mcp " + semantic_version,
                 "different-build install target is not executable: "
                 + installed_version.stderr,
             )
@@ -2102,13 +2102,13 @@ def main():
             )
 
             # Build the complete update payload and checksum before starting
-            # the next daemon. CBM_DOWNLOAD_URL points at this file:// fixture,
+            # the next daemon. LSM_DOWNLOAD_URL points at this file:// fixture,
             # so the smoke cannot contact the network. Update must then drain
             # its live MCP generation before replacing only the temp HOME
             # installation and performing its documented index reset.
             update_release = tmpdir / "activation-update-release"
             update_env = env.copy()
-            update_env["CBM_DOWNLOAD_URL"] = create_local_update_release(
+            update_env["LSM_DOWNLOAD_URL"] = create_local_update_release(
                 update_release, conflict_binary
             )
             update_starts = len(json_events(daemon_log, "daemon.start"))
@@ -2166,7 +2166,7 @@ def main():
             check(
                 updated_version.returncode == 0
                 and updated_version.stdout.strip()
-                == "codebase-memory-mcp " + semantic_version,
+                == "logan-spine-mcp " + semantic_version,
                 "updated target is not executable: " + updated_version.stderr,
             )
             updated_status = os.lstat(target_binary)

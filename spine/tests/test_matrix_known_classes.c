@@ -26,7 +26,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -50,7 +50,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } MKC_Proj;
 
 typedef struct {
@@ -65,33 +65,33 @@ static void mkc_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *mkc_open_indexed(MKC_Proj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *mkc_open_indexed(MKC_Proj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project)
         return NULL;
     const char *home = getenv("HOME");
     if (!home)
         home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv)
         return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp)
         free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *mkc_index(MKC_Proj *lp, const MKC_File *files, int nfiles) {
+static lsm_store_t *mkc_index(MKC_Proj *lp, const MKC_File *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_mkc_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir))
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_mkc_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir))
         return NULL;
     mkc_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
@@ -100,7 +100,7 @@ static cbm_store_t *mkc_index(MKC_Proj *lp, const MKC_File *files, int nfiles) {
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -112,11 +112,11 @@ static cbm_store_t *mkc_index(MKC_Proj *lp, const MKC_File *files, int nfiles) {
     return mkc_open_indexed(lp);
 }
 
-static void mkc_cleanup(MKC_Proj *lp, cbm_store_t *store) {
+static void mkc_cleanup(MKC_Proj *lp, lsm_store_t *store) {
     if (store)
-        cbm_store_close(store);
+        lsm_store_close(store);
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -135,14 +135,14 @@ static const char *MKC_ALL_EDGE_TYPES[] = {"CALLS",    "DEFINES",    "DEFINES_ME
                                            "HANDLES",  "HTTP_CALLS", "ASYNC_CALLS",    "OVERRIDE",
                                            "TESTS",    "TESTS_FILE", "DATA_FLOWS",     NULL};
 
-static void mkc_diag(cbm_store_t *store, const char *project, const char *label) {
+static void mkc_diag(lsm_store_t *store, const char *project, const char *label) {
     if (!store) {
         fprintf(stderr, "    [MKC] %s: no graph DB\n", label);
         return;
     }
     char line[512] = {0};
     for (int i = 0; MKC_ALL_EDGE_TYPES[i]; i++) {
-        int c = cbm_store_count_edges_by_type(store, project, MKC_ALL_EDGE_TYPES[i]);
+        int c = lsm_store_count_edges_by_type(store, project, MKC_ALL_EDGE_TYPES[i]);
         if (c > 0 && strlen(line) < sizeof(line) - 40) {
             char one[48];
             snprintf(one, sizeof(one), "%s=%d ", MKC_ALL_EDGE_TYPES[i], c);
@@ -158,8 +158,8 @@ static void mkc_diag(cbm_store_t *store, const char *project, const char *label)
 static int mkc_edge(const MKC_File *files, int nfiles, const char *edge_type, int floor,
                     const char *label, int is_green) {
     MKC_Proj lp;
-    cbm_store_t *store = mkc_index(&lp, files, nfiles);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, edge_type) : -1;
+    lsm_store_t *store = mkc_index(&lp, files, nfiles);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, edge_type) : -1;
     if (got < floor) {
         fprintf(stderr, "  [MKC] %s FAIL %s=%d expected>=%d %s\n", label, edge_type, got, floor,
                 is_green ? "(GREEN regression)" : "(RED reproduction — bug)");
@@ -231,13 +231,13 @@ TEST(mkc_c1_scala_case_class_apply) {
 
 /* C1-C: Swift — Type() initializer call.
  * red=bug: Swift `Widget(name: n)` — Swift lsp_cross is not wired (swift has
- * no cbm_run_swift_lsp_cross), and the generic resolver does not model
+ * no lsm_run_swift_lsp_cross), and the generic resolver does not model
  * initializer calls from `call_expression(type_identifier(Widget), ...)`.
  * Root cause: swift_call_types = {call_expression} and extract_callee picks
  * the first child (which is the type name), but no CALLS edge to Widget.init
  * is emitted because the pipeline has no constructor linkage for Swift.
  * Fix: add Swift to constructor-extraction path in extract_defs.c or add
- * cbm_run_swift_lsp_cross. */
+ * lsm_run_swift_lsp_cross. */
 TEST(mkc_c1_swift_initializer) {
     static const MKC_File f[] = {{"Widget.swift", "class Widget {\n"
                                                   "    let name: String\n"
@@ -304,7 +304,7 @@ TEST(mkc_c1_cpp_constructor_samefile) {
 
 /* C1-F: Rust — struct literal T { field } in same file (avoids :: resolver bug).
  * The lrp_rust_s3_constructor fixture uses `point::Point::new(...)` which fails
- * due to the `::` split bug in cbm_registry_resolve.  Here we test a plain
+ * due to the `::` split bug in lsm_registry_resolve.  Here we test a plain
  * same-file struct + impl, where `Point::new(x, y)` has no module prefix,
  * so the resolver should find it.
  * green=guard: Rust same-file `StructName::new()` — the name "new" is a unique
@@ -323,7 +323,7 @@ TEST(mkc_c1_rust_new_samefile) {
          "}\n"}};
     /* Uncertain/red=bug: Point::new inside the same file — the generic resolver
      * splits on '.' not '::' so "Point::new" never matches registered QN "new".
-     * Root cause: registry.c cbm_registry_resolve doesn't handle Rust `::` paths.
+     * Root cause: registry.c lsm_registry_resolve doesn't handle Rust `::` paths.
      * Fix location: src/pipeline/registry.c — split on '::' for Rust as well as '.'. */
     ASSERT_TRUE(mkc_edge(f, 1, "CALLS", 1, "c1/rust/new_samefile", 0));
     PASS();

@@ -3,9 +3,9 @@
  *
  * BUG: "Project name strips non-ASCII (CJK) characters from path,
  *       resulting in truncated/unrecognizable names"
- *   https://github.com/DeusData/codebase-memory-mcp/issues/571
+ *   https://github.com/DeusData/logan-spine-mcp/issues/571
  *
- * ROOT CAUSE (src/pipeline/fqn.c, cbm_project_name_from_path, lines ~341-348):
+ * ROOT CAUSE (src/pipeline/fqn.c, lsm_project_name_from_path, lines ~341-348):
  *
  *   The function maps every byte that is not in [A-Za-z0-9._-] to '-':
  *
@@ -45,7 +45,7 @@
  *   "Users-yunxin-Desktop", which IS the ascii_only_slug.
  *
  * DECLARATION:
- *   char *cbm_project_name_from_path(const char *abs_path);
+ *   char *lsm_project_name_from_path(const char *abs_path);
  *   declared in  <pipeline/pipeline.h>
  */
 
@@ -93,7 +93,7 @@ TEST(repro_issue571_cjk_project_name) {
      */
     static const char *ascii_only_slug = "Users-yunxin-Desktop";
 
-    char *name = cbm_project_name_from_path(cjk_path);
+    char *name = lsm_project_name_from_path(cjk_path);
 
     /* ── Assertion 1: result must exist and be non-empty ─────────── */
     /* Even on buggy code this passes (the function returns the ASCII

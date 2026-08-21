@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 CACHE_DIR="${MSAN_BUILDX_CACHE:-/tmp/.buildx-msan}"
-IMAGE="${MSAN_IMAGE:-cbm-msan:ci}"
+IMAGE="${MSAN_IMAGE:-lsm-msan:ci}"
 BUILDER="${MSAN_BUILDER:-msan-builder}"
 MODE="${1:-all}"
 

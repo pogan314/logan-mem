@@ -5,12 +5,12 @@
  * Interactive terminals enable it automatically; --progress forces it when
  * stderr is redirected.
  * Usage:
- *   cbm_progress_sink_init(stderr);
+ *   lsm_progress_sink_init(stderr);
  *   // ... run pipeline ...
- *   cbm_progress_sink_fini();
+ *   lsm_progress_sink_fini();
  */
-#ifndef CBM_PROGRESS_SINK_H
-#define CBM_PROGRESS_SINK_H
+#ifndef LSM_PROGRESS_SINK_H
+#define LSM_PROGRESS_SINK_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -18,12 +18,12 @@
 
 /* Interactive terminals get lifecycle feedback automatically. --progress
  * forces the same behavior for redirected stderr without touching stdout. */
-bool cbm_cli_progress_enabled(bool explicitly_requested, bool stderr_is_tty);
-void cbm_cli_progress_start(FILE *out, const char *tool_name);
-void cbm_cli_progress_finish(FILE *out, const char *tool_name, bool success, uint64_t elapsed_ms);
+bool lsm_cli_progress_enabled(bool explicitly_requested, bool stderr_is_tty);
+void lsm_cli_progress_start(FILE *out, const char *tool_name);
+void lsm_cli_progress_finish(FILE *out, const char *tool_name, bool success, uint64_t elapsed_ms);
 
-void cbm_progress_sink_init(FILE *out);
-void cbm_progress_sink_fini(void);
-void cbm_progress_sink_fn(const char *line);
+void lsm_progress_sink_init(FILE *out);
+void lsm_progress_sink_fini(void);
+void lsm_progress_sink_fn(const char *line);
 
 #endif

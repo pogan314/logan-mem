@@ -5,21 +5,21 @@
  *               traversable CALLS edges (v0.8.1, macOS arm64)"
  *
  * Root cause (identified by maintainer DeusData + reporter halindrome):
- *   handle_trace_call_path() calls cbm_store_find_nodes_by_name() to locate
+ *   handle_trace_call_path() calls lsm_store_find_nodes_by_name() to locate
  *   the start node for BFS.  On the affected build, the name-to-node lookup
  *   returns node_count == 0 for EVERY function name — even names that the
  *   graph clearly contains (confirmed by query_graph Cypher returning the same
  *   function with 5–8 inbound CALLS edges).  The fallback to
- *   cbm_store_find_node_by_qn() also returns nothing, so the handler exits
+ *   lsm_store_find_node_by_qn() also returns nothing, so the handler exits
  *   with a "function not found" error OR (when the node IS found by name)
  *   the BFS start-node id does not match any edge endpoint stored in the
- *   graph, so cbm_store_bfs() returns visited_count == 0 and the "callers"
+ *   graph, so lsm_store_bfs() returns visited_count == 0 and the "callers"
  *   / "callees" JSON arrays are serialised empty.
  *
  *   The split: query_graph Cypher (direct SQL) traverses the same edges
  *   correctly, while trace_path (BFS via start-node id) yields nothing.
  *   This isolates the bug to trace_path's own start-node lookup or to how
- *   the resolved node id is passed to cbm_store_bfs(), NOT to edge creation.
+ *   the resolved node id is passed to lsm_store_bfs(), NOT to edge creation.
  *
  * Expected (correct) behaviour:
  *   After indexing a two-function Python file where caller() calls callee(),
@@ -35,7 +35,7 @@
  *   The precondition assertion (CALLS edges > 0) passes because edge creation
  *   is correct.  The subsequent assertion that resp contains the string
  *   "\"caller\"" (the caller function's name embedded in the callers array)
- *   FAILS because cbm_store_bfs() finds no hops from the resolved start node.
+ *   FAILS because lsm_store_bfs() finds no hops from the resolved start node.
  *
  * How this isolates the traversal bug from an extraction bug:
  *   If CALLS edges were the problem, rh_count_edges(store, …, "CALLS") would
@@ -45,7 +45,7 @@
  *   exclusively in trace_path's traversal layer.
  *
  * Fix location (not implemented here):
- *   cbm_store_find_nodes_by_name() or cbm_store_bfs() in
+ *   lsm_store_find_nodes_by_name() or lsm_store_bfs() in
  *   src/store/store.c — the node id returned by name lookup must match
  *   the source/target ids stored in the edges table.
  */
@@ -98,7 +98,7 @@ static const RFile k_files[] = {
  * ───────────────────────────────────────────────────────────────────────── */
 TEST(repro_issue480_trace_path_nonempty_with_calls) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, k_files,
+    lsm_store_t *store = rh_index_files(&lp, k_files,
                                         (int)(sizeof(k_files) / sizeof(k_files[0])));
     ASSERT_NOT_NULL(store);
 
@@ -114,7 +114,7 @@ TEST(repro_issue480_trace_path_nonempty_with_calls) {
      * Args match the trace_path schema (required: function_name, project):
      *   function_name  — bare name "callee"; also tested by the reporter with
      *                    the fully-qualified name, both yield empty on buggy code
-     *   project        — lp.project (derived from tmpdir by cbm_project_name_from_path)
+     *   project        — lp.project (derived from tmpdir by lsm_project_name_from_path)
      *   direction      — "inbound": ask for callers of callee()
      *   depth          — 2: enough to reach one hop (caller → callee)
      *
@@ -133,7 +133,7 @@ TEST(repro_issue480_trace_path_nonempty_with_calls) {
              "\"depth\":2}",
              lp.project);
 
-    char *resp = cbm_mcp_handle_tool(lp.srv, "trace_path", args);
+    char *resp = lsm_mcp_handle_tool(lp.srv, "trace_path", args);
     ASSERT_NOT_NULL(resp);
 
     /* The response must NOT be a "function not found" error.
@@ -154,7 +154,7 @@ TEST(repro_issue480_trace_path_nonempty_with_calls) {
     ASSERT_NOT_NULL(strstr(resp, "\\\"callers\\\""));
 
     /* The "callers" array must be NON-EMPTY. WHY RED on the #480 bug:
-     * cbm_store_bfs() returning 0 hops serialises \"callers\":[] (no caller
+     * lsm_store_bfs() returning 0 hops serialises \"callers\":[] (no caller
      * QN in the response), so BOTH the empty-array guard and the caller-QN
      * assertion fire RED. We assert the caller's qualified-name tail
      * "main.caller" (unambiguous vs the callee "main.callee", and immune to

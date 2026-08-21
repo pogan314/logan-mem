@@ -30,38 +30,38 @@
  * estimated IP directly (rotation preserves norms up to the fixed scale,
  * which cancels in the scale factors).
  */
-#ifndef CBM_SEMANTIC_ROTSQ_H
-#define CBM_SEMANTIC_ROTSQ_H
+#ifndef LSM_SEMANTIC_ROTSQ_H
+#define LSM_SEMANTIC_ROTSQ_H
 
 #include <stdint.h>
 
 enum {
-    CBM_RSQ_IN_DIM = 768,                 /* input dimension (CBM_SEM_DIM) */
-    CBM_RSQ_DIM = 1024,                   /* padded pow2 rotation dimension */
-    CBM_RSQ_BITS = 4,                     /* bits per coordinate */
-    CBM_RSQ_LEVELS = 15,                  /* (1 << CBM_RSQ_BITS) - 1 */
-    CBM_RSQ_CODE_BYTES = CBM_RSQ_DIM / 2, /* two 4-bit codes per byte */
+    LSM_RSQ_IN_DIM = 768,                 /* input dimension (LSM_SEM_DIM) */
+    LSM_RSQ_DIM = 1024,                   /* padded pow2 rotation dimension */
+    LSM_RSQ_BITS = 4,                     /* bits per coordinate */
+    LSM_RSQ_LEVELS = 15,                  /* (1 << LSM_RSQ_BITS) - 1 */
+    LSM_RSQ_CODE_BYTES = LSM_RSQ_DIM / 2, /* two 4-bit codes per byte */
 };
 
 typedef struct {
-    uint8_t codes[CBM_RSQ_CODE_BYTES]; /* packed 4-bit codes, little nibble first */
+    uint8_t codes[LSM_RSQ_CODE_BYTES]; /* packed 4-bit codes, little nibble first */
     float scale;                       /* per-vector dequant scale  */
     float offset;                      /* per-vector dequant offset */
     int32_t code_sum;                  /* Σ codes (for the IP expansion) */
-} cbm_rsq_code_t;
+} lsm_rsq_code_t;
 
-/* Encode a CBM_RSQ_IN_DIM float vector (zero-padded to CBM_RSQ_DIM, rotated,
+/* Encode a LSM_RSQ_IN_DIM float vector (zero-padded to LSM_RSQ_DIM, rotated,
  * quantized). Deterministic: the rotation is fixed at build time. */
-void cbm_rsq_encode(const float *v, cbm_rsq_code_t *out);
+void lsm_rsq_encode(const float *v, lsm_rsq_code_t *out);
 
 /* Estimated inner product of the two ORIGINAL vectors from their codes.
  * Deterministic pure function of the codes. */
-float cbm_rsq_ip(const cbm_rsq_code_t *a, const cbm_rsq_code_t *b);
+float lsm_rsq_ip(const lsm_rsq_code_t *a, const lsm_rsq_code_t *b);
 
-/* Dequantize a code into the ROTATED space (CBM_RSQ_DIM floats). Note: this
+/* Dequantize a code into the ROTATED space (LSM_RSQ_DIM floats). Note: this
  * is the rotated basis, not the original one — fine for basis-agnostic
  * consumers (LSH hyperplane signs), wrong for anything expecting original
  * coordinates. */
-void cbm_rsq_decode(const cbm_rsq_code_t *c, float *out);
+void lsm_rsq_decode(const lsm_rsq_code_t *c, float *out);
 
-#endif /* CBM_SEMANTIC_ROTSQ_H */
+#endif /* LSM_SEMANTIC_ROTSQ_H */

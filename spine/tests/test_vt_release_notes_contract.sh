@@ -78,7 +78,7 @@ for target in targets:
     source_sha = digest(f"{target}:linker-output")
     for variant in variants:
         sha = digest(f"{target}:{variant}")
-        name = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+        name = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
         row = {
             "target": target, "variant": variant, "relative_path": f"{variant}/{name}",
             "source_sha256": source_sha, "pre_sign_sha256": sha, "sha256": sha,
@@ -122,7 +122,7 @@ for target in targets:
         decision = f"{chosen}-clean-after-{others}"
     row = {
         "target": target, "selected_variant": chosen,
-        "selected_path": f"selected/{target}/" + ("codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"),
+        "selected_path": f"selected/{target}/" + ("logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"),
         "selected_sha256": selected["sha256"], "selected_size": selected["size"],
         "decision": decision,
     }
@@ -138,12 +138,12 @@ for target in targets:
         })
     selections.append(row)
 
-write(root / "release-candidates.tsv", "cbm-release-candidates-v1",
+write(root / "release-candidates.tsv", "lsm-release-candidates-v1",
       {"targets": 8, "candidates": 24}, candidate_fields, candidates)
-write(root / "virustotal-candidate-results.tsv", "cbm-virustotal-results-v2",
+write(root / "virustotal-candidate-results.tsv", "lsm-virustotal-results-v2",
       {"scan_objects": 24, "associations": 24, "min_engines_policy": 50,
        "min_completed_engines": 61, "max_completed_engines": 61}, result_fields, results)
-write(root / "release-selection.tsv", "cbm-release-selection-v1",
+write(root / "release-selection.tsv", "lsm-release-selection-v1",
       {"policy": "virustotal-v2", "targets": 8, "candidates": 24},
       selection_fields, selections)
 PY
@@ -151,9 +151,9 @@ PY
 cat > "$FIX/current.md" <<'EOF'
 Intro text.
 
-<!-- cbm-security-verification:start -->
+<!-- lsm-security-verification:start -->
 stale data
-<!-- cbm-security-verification:end -->
+<!-- lsm-security-verification:end -->
 
 Outro text.
 EOF
@@ -182,7 +182,7 @@ run_notes() {
   (cd "$FIX" &&
     PATH="$FIX/bin:$PATH" \
       GH_TOKEN=stub VERSION=v1.0.0 \
-      GITHUB_REPOSITORY=DeusData/codebase-memory-mcp \
+      GITHUB_REPOSITORY=DeusData/logan-spine-mcp \
       VT_CANDIDATES=evidence/release-candidates.tsv \
       VT_RESULTS_PATH=evidence/virustotal-candidate-results.tsv \
       RELEASE_SELECTION=evidence/release-selection.tsv \
@@ -191,8 +191,8 @@ run_notes() {
 }
 
 run_notes "$FIX/current.md" "$FIX/first.md"
-[ "$(grep -c 'cbm-security-verification:start' "$FIX/first.md")" = 1 ] || fail "start marker duplicated"
-[ "$(grep -c 'cbm-security-verification:end' "$FIX/first.md")" = 1 ] || fail "end marker duplicated"
+[ "$(grep -c 'lsm-security-verification:start' "$FIX/first.md")" = 1 ] || fail "start marker duplicated"
+[ "$(grep -c 'lsm-security-verification:end' "$FIX/first.md")" = 1 ] || fail "end marker duplicated"
 grep -q 'Intro text.' "$FIX/first.md" || fail "content before section was lost"
 grep -q 'Outro text.' "$FIX/first.md" || fail "content after section was lost"
 ! grep -q 'stale data' "$FIX/first.md" || fail "stale section was appended"
@@ -232,9 +232,9 @@ fi
 mv "$FIX/evidence/release-selection.clean.tsv" "$FIX/evidence/release-selection.tsv"
 
 cat > "$FIX/reversed.md" <<'EOF'
-<!-- cbm-security-verification:end -->
+<!-- lsm-security-verification:end -->
 stale reversed data
-<!-- cbm-security-verification:start -->
+<!-- lsm-security-verification:start -->
 EOF
 if run_notes "$FIX/reversed.md" "$FIX/reversed-capture.md"; then
   fail "reversed verification markers must fail closed"

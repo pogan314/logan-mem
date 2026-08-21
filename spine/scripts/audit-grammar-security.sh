@@ -9,10 +9,10 @@ set -euo pipefail
 # access to memory allocation and input text.
 #
 # Usage: scripts/audit-grammar-security.sh [directory]
-#   Default: internal/cbm/vendored/grammars/
+#   Default: internal/lsm/vendored/grammars/
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GRAMMAR_DIR="${1:-$ROOT/internal/cbm/vendored/grammars}"
+GRAMMAR_DIR="${1:-$ROOT/internal/lsm/vendored/grammars}"
 
 if [ ! -d "$GRAMMAR_DIR" ]; then
     echo "ERROR: directory not found: $GRAMMAR_DIR" >&2

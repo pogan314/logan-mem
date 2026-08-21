@@ -11,17 +11,17 @@ int tf_skip_count = 0;
 #include "test_framework.h"
 #include "test_helpers.h"
 #include "test_daemon_runtime_contract.h"
-#include "foundation/compat.h"     /* cbm_setenv — #845 supervisor kill switch */
-#include "foundation/compat_fs.h"  /* cbm_fopen — worker response file */
-#include "foundation/constants.h"  /* CBM_SZ_4K — forced stderr buffer */
+#include "foundation/compat.h"     /* lsm_setenv — #845 supervisor kill switch */
+#include "foundation/compat_fs.h"  /* lsm_fopen — worker response file */
+#include "foundation/constants.h"  /* LSM_SZ_4K — forced stderr buffer */
 #include "foundation/log.h"        /* crash-durable worker log probe */
-#include "foundation/mem.h"        /* cbm_mem_init — worker budget */
-#include "foundation/platform.h"   /* cbm_file_exists — blocking-git marker */
+#include "foundation/mem.h"        /* lsm_mem_init — worker budget */
+#include "foundation/platform.h"   /* lsm_file_exists — blocking-git marker */
 #include "daemon/runtime.h"        /* bounded worker response probe */
 #include "daemon/ipc.h"            /* Windows private-lock re-exec probe */
 #include "daemon/version_cohort.h" /* Windows crash-turnover re-exec probe */
-#include "mcp/index_supervisor.h"  /* cbm_index_set_worker_role */
-#include "mcp/mcp.h"               /* cbm_mcp_handle_tool — act as a real worker */
+#include "mcp/index_supervisor.h"  /* lsm_index_set_worker_role */
+#include "mcp/mcp.h"               /* lsm_mcp_handle_tool — act as a real worker */
 #include <sqlite3.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -47,7 +47,7 @@ int tf_skip_count = 0;
  * with create-exclusive semantics and ignores graceful termination; later git
  * invocations see the marker and exit cleanly, allowing the parent shell to
  * unwind after either production containment or the test's verified backstop. */
-#define TF_BLOCKING_GIT_MARKER_ENV "CBM_TEST_RUNTIME_BLOCKING_GIT_PID_FILE"
+#define TF_BLOCKING_GIT_MARKER_ENV "LSM_TEST_RUNTIME_BLOCKING_GIT_PID_FILE"
 
 #ifdef _WIN32
 static bool tf_invoked_as_windows_git_module(void) {
@@ -115,21 +115,21 @@ static int tf_maybe_run_blocking_git_probe(int argc, char **argv) {
 #ifdef _WIN32
     SetLastError(ERROR_SUCCESS);
 #endif
-    FILE *marker = cbm_fopen(marker_path, "wbx");
+    FILE *marker = lsm_fopen(marker_path, "wbx");
     if (!marker) {
         /* The first invocation already owns the blocking role. detect_changes
          * runs two more git commands after it terminates; those must not block. */
 #ifdef _WIN32
         int marker_errno = errno;
         DWORD marker_error = GetLastError();
-        bool marker_exists = cbm_file_exists(marker_path);
+        bool marker_exists = lsm_file_exists(marker_path);
         (void)printf("TF_BLOCKING_GIT_DIAGNOSTIC marker_open_failed errno=%d win_error=%lu "
                      "exists=%d\n",
                      marker_errno, (unsigned long)marker_error, marker_exists ? 1 : 0);
         (void)fflush(stdout);
         return marker_exists ? 0 : 30;
 #else
-        return cbm_file_exists(marker_path) ? 0 : 30;
+        return lsm_file_exists(marker_path) ? 0 : 30;
 #endif
     }
 #ifdef _WIN32
@@ -149,7 +149,7 @@ static int tf_maybe_run_blocking_git_probe(int argc, char **argv) {
     (void)signal(SIGINT, SIG_IGN);
 #endif
     for (;;) {
-        cbm_usleep(100000);
+        lsm_usleep(100000);
     }
 }
 
@@ -166,7 +166,7 @@ static void tf_cleanup_cache_sentinel(void) {
 }
 
 /* Client home overrides the CLI honours BEFORE $HOME, so redirecting HOME alone
- * does not isolate them: cbm_codex_config_dir() and its siblings return the
+ * does not isolate them: lsm_codex_config_dir() and its siblings return the
  * ambient path and the suite resolves against the developer's real config —
  * reading its state and writing to it. Same inventory the shell fixtures are
  * already required to neutralize (tests/test_smoke_fixture_contract.sh), kept
@@ -191,25 +191,25 @@ static const char *const tf_client_home_overrides[] = {
     "VIBE_HOME",
     "GLAB_CONFIG_DIR",
     "KIMI_CODE_HOME",
-    "CBM_CONTINUE_CONFIG_PATH",
-    "CBM_TRAE_CONFIG_PATH",
-    "CBM_ROO_CONFIG_PATH",
-    "CBM_CODY_CONFIG_PATH",
+    "LSM_CONTINUE_CONFIG_PATH",
+    "LSM_TRAE_CONFIG_PATH",
+    "LSM_ROO_CONFIG_PATH",
+    "LSM_CODY_CONFIG_PATH",
 };
 
 static bool tf_setup_cache_sentinel(void) {
-    snprintf(tf_home_sentinel, sizeof(tf_home_sentinel), "/tmp/cbm-test-home-XXXXXX");
-    if (!cbm_mkdtemp(tf_home_sentinel)) {
+    snprintf(tf_home_sentinel, sizeof(tf_home_sentinel), "/tmp/lsm-test-home-XXXXXX");
+    if (!lsm_mkdtemp(tf_home_sentinel)) {
         return false;
     }
     /* Legacy integration fixtures derive DB paths from HOME, while production
-     * cache_dir() prefers CBM_CACHE_DIR. A private HOME plus no inherited cache
+     * cache_dir() prefers LSM_CACHE_DIR. A private HOME plus no inherited cache
      * override keeps both conventions pointed at the same isolated tree. */
-    cbm_setenv("HOME", tf_home_sentinel, 1);
-    cbm_unsetenv("CBM_CACHE_DIR");
+    lsm_setenv("HOME", tf_home_sentinel, 1);
+    lsm_unsetenv("LSM_CACHE_DIR");
     for (size_t i = 0U; i < sizeof(tf_client_home_overrides) / sizeof(tf_client_home_overrides[0]);
          i++) {
-        cbm_unsetenv(tf_client_home_overrides[i]);
+        lsm_unsetenv(tf_client_home_overrides[i]);
     }
     atexit(tf_cleanup_cache_sentinel);
     return true;
@@ -222,7 +222,7 @@ static void tf_index_worker_probe(const char *args_json, const char *response_ou
         return;
     }
     if (strstr(args_json, "\"clean\"")) {
-        FILE *response = response_out ? cbm_fopen(response_out, "wb") : NULL;
+        FILE *response = response_out ? lsm_fopen(response_out, "wb") : NULL;
         if (response) {
             (void)fputs("{\"probe\":\"clean\"}", response);
             (void)fclose(response);
@@ -249,7 +249,7 @@ static void tf_index_worker_probe(const char *args_json, const char *response_ou
          * caught, blocked or handled, so no cleanup of any kind runs. It is
          * also literally #1070's death (`signal=9`) and how #1130's hung worker
          * is terminated. */
-        cbm_log_info("index.worker.buffered_kill_probe", "phase", "before_kill");
+        lsm_log_info("index.worker.buffered_kill_probe", "phase", "before_kill");
 #ifdef _WIN32
         TerminateProcess(GetCurrentProcess(), 9);
 #else
@@ -258,11 +258,11 @@ static void tf_index_worker_probe(const char *args_json, const char *response_ou
         _Exit(2); /* unreachable: neither primitive returns */
     }
     if (strstr(args_json, "\"oversize\"")) {
-        FILE *response = response_out ? cbm_fopen(response_out, "wb") : NULL;
+        FILE *response = response_out ? lsm_fopen(response_out, "wb") : NULL;
         bool written = false;
         if (response) {
             written =
-                fseek(response, (long)CBM_DAEMON_RUNTIME_APPLICATION_PAYLOAD_MAX, SEEK_SET) == 0 &&
+                fseek(response, (long)LSM_DAEMON_RUNTIME_APPLICATION_PAYLOAD_MAX, SEEK_SET) == 0 &&
                 fputc('x', response) != EOF;
             written = fclose(response) == 0 && written;
         }
@@ -277,48 +277,48 @@ static void tf_index_worker_probe(const char *args_json, const char *response_ou
         pid_t child = fork();
         if (child == 0) {
             for (;;) {
-                cbm_usleep(100000);
+                lsm_usleep(100000);
             }
         }
         if (child > 0) {
             descendant = (long)child;
         }
 #endif
-        const char *marker = getenv("CBM_INDEX_MARKER_FILE");
-        FILE *ready = marker ? cbm_fopen(marker, "wb") : NULL;
+        const char *marker = getenv("LSM_INDEX_MARKER_FILE");
+        FILE *ready = marker ? lsm_fopen(marker, "wb") : NULL;
         if (ready) {
             (void)fprintf(
                 ready, "single=%s\nmarker=%s\nquarantine=%s\nbudget=%zu\ndescendant=%ld\n",
-                getenv("CBM_INDEX_SINGLE_THREAD") ? getenv("CBM_INDEX_SINGLE_THREAD") : "", marker,
-                getenv("CBM_INDEX_QUARANTINE_FILE") ? getenv("CBM_INDEX_QUARANTINE_FILE") : "",
-                cbm_mem_budget(), descendant);
+                getenv("LSM_INDEX_SINGLE_THREAD") ? getenv("LSM_INDEX_SINGLE_THREAD") : "", marker,
+                getenv("LSM_INDEX_QUARANTINE_FILE") ? getenv("LSM_INDEX_QUARANTINE_FILE") : "",
+                lsm_mem_budget(), descendant);
             (void)fclose(ready);
         }
         (void)fprintf(stderr, "async worker hang-tree probe\n");
         fflush(NULL);
         for (;;) {
-            cbm_usleep(100000);
+            lsm_usleep(100000);
         }
     }
 }
 
 /* #832 guard support: when the index supervisor spawns THIS binary with the
- * exact build-bound worker grammar produced by cbm_index_worker_start(), act
+ * exact build-bound worker grammar produced by lsm_index_worker_start(), act
  * as a faithful in-process index worker instead of re-running the test suites.
  * This lets the deterministic
  * gating guard (test_mcp.c) spawn a REAL worker child that indexes the fixture and
  * writes its response back, using only public APIs — no production test seam.
  * Returns an exit code (>=0) when it handled a worker invocation, else -1. */
 static int tf_maybe_run_index_worker(int argc, char **argv) {
-    cbm_index_worker_invocation_t invocation;
-    cbm_index_worker_argv_status_t status =
-        cbm_index_worker_parse_process_argv(argc, argv, &invocation);
-    if (status == CBM_INDEX_WORKER_ARGV_NOT_WORKER) {
+    lsm_index_worker_invocation_t invocation;
+    lsm_index_worker_argv_status_t status =
+        lsm_index_worker_parse_process_argv(argc, argv, &invocation);
+    if (status == LSM_INDEX_WORKER_ARGV_NOT_WORKER) {
         return -1;
     }
-    if (status != CBM_INDEX_WORKER_ARGV_VALID) {
-        (void)fprintf(stderr, "CBM test index worker could not start: %s\n",
-                      cbm_index_worker_argv_status_message(status));
+    if (status != LSM_INDEX_WORKER_ARGV_VALID) {
+        (void)fprintf(stderr, "LSM test index worker could not start: %s\n",
+                      lsm_index_worker_argv_status_message(status));
         return 1;
     }
 
@@ -330,29 +330,29 @@ static int tf_maybe_run_index_worker(int argc, char **argv) {
      * instead of a Windows-only claim nobody can run locally. Scoped to the one
      * probe that asserts it, and set before the production entry below, which is
      * the code under test. */
-    static char tf_worker_forced_buffer[CBM_SZ_4K];
+    static char tf_worker_forced_buffer[LSM_SZ_4K];
     if (invocation.args_json && strstr(invocation.args_json, "\"buffered-kill\"")) {
         (void)setvbuf(stderr, tf_worker_forced_buffer, _IOFBF, sizeof(tf_worker_forced_buffer));
     }
     /* Mirror the production worker entry (run_cli's caller in main.c): the log
      * header is the first thing a worker records. */
-    char *worker_repo_path = cbm_mcp_get_string_arg(invocation.args_json, "repo_path");
-    cbm_index_worker_log_begin(invocation.args_json, worker_repo_path);
+    char *worker_repo_path = lsm_mcp_get_string_arg(invocation.args_json, "repo_path");
+    lsm_index_worker_log_begin(invocation.args_json, worker_repo_path);
     free(worker_repo_path);
-    cbm_index_set_worker_role_options(true, invocation.response_out, invocation.single_thread,
+    lsm_index_set_worker_role_options(true, invocation.response_out, invocation.single_thread,
                                       invocation.marker_file, invocation.quarantine_file,
                                       invocation.memory_budget_bytes);
-    cbm_mem_init_with_cap(0.5, invocation.memory_budget_bytes);
+    lsm_mem_init_with_cap(0.5, invocation.memory_budget_bytes);
     tf_index_worker_probe(invocation.args_json, invocation.response_out);
-    cbm_mcp_server_t *srv = cbm_mcp_server_new(NULL);
+    lsm_mcp_server_t *srv = lsm_mcp_server_new(NULL);
     if (!srv) {
         return 1;
     }
-    char *result = cbm_mcp_handle_tool(srv, "index_repository", invocation.args_json);
+    char *result = lsm_mcp_handle_tool(srv, "index_repository", invocation.args_json);
     if (result) {
-        const char *ro = cbm_index_worker_response_out();
+        const char *ro = lsm_index_worker_response_out();
         if (ro) {
-            FILE *rf = cbm_fopen(ro, "wb");
+            FILE *rf = lsm_fopen(ro, "wb");
             if (rf) {
                 (void)fputs(result, rf);
                 (void)fclose(rf);
@@ -374,8 +374,8 @@ static int tf_maybe_run_index_worker(int argc, char **argv) {
 
 /* #798 follow-up: socket-isolation probe. The parent test
  * (popen_isolates_listening_socket, test_security.c) spawns THIS binary through
- * cbm_popen — the same cmd.exe-grandchild path git takes — passing the numeric
- * value of an inheritable listening-socket handle. If cbm_popen correctly
+ * lsm_popen — the same cmd.exe-grandchild path git takes — passing the numeric
+ * value of an inheritable listening-socket handle. If lsm_popen correctly
  * isolates handles, that socket is NOT present in this child and getsockopt
  * fails; a regression to raw _popen leaks it (bInheritHandles=TRUE propagates it
  * transitively through cmd.exe) and getsockopt succeeds. We report via exit code
@@ -413,23 +413,23 @@ static int tf_maybe_run_daemon_ipc_lock_probe(int argc, char **argv) {
     if (argc != 5 || strcmp(argv[1], "__cbm_daemon_ipc_lock_probe") != 0) {
         return -1;
     }
-    cbm_daemon_ipc_endpoint_t *endpoint = cbm_daemon_ipc_endpoint_new(argv[3], argv[4]);
+    lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[3], argv[4]);
     if (!endpoint) {
         return 21;
     }
     int result = -1;
     if (strcmp(argv[2], "startup") == 0) {
-        cbm_daemon_ipc_startup_lock_t *lock = NULL;
-        result = cbm_daemon_ipc_startup_lock_try_acquire(endpoint, &lock);
-        if (!cbm_daemon_ipc_startup_lock_release(&lock)) {
+        lsm_daemon_ipc_startup_lock_t *lock = NULL;
+        result = lsm_daemon_ipc_startup_lock_try_acquire(endpoint, &lock);
+        if (!lsm_daemon_ipc_startup_lock_release(&lock)) {
             result = -1;
         }
     } else if (strcmp(argv[2], "lifetime") == 0) {
-        cbm_daemon_ipc_lifetime_reservation_t *reservation = NULL;
-        result = cbm_daemon_ipc_lifetime_reservation_try_acquire(endpoint, &reservation);
-        cbm_daemon_ipc_lifetime_reservation_release(reservation);
+        lsm_daemon_ipc_lifetime_reservation_t *reservation = NULL;
+        result = lsm_daemon_ipc_lifetime_reservation_try_acquire(endpoint, &reservation);
+        lsm_daemon_ipc_lifetime_reservation_release(reservation);
     }
-    cbm_daemon_ipc_endpoint_free(endpoint);
+    lsm_daemon_ipc_endpoint_free(endpoint);
     return result == 1 ? 0 : (result == 0 ? 20 : 21);
 #else
     (void)argc;
@@ -443,10 +443,10 @@ static int tf_maybe_run_version_cohort_crash_holder(int argc, char **argv) {
     if (argc != 5 || strcmp(argv[1], "__cbm_version_cohort_crash_holder") != 0) {
         return -1;
     }
-    cbm_daemon_ipc_endpoint_t *endpoint = cbm_daemon_ipc_endpoint_new(argv[2], argv[3]);
-    cbm_version_cohort_manager_t *manager =
-        endpoint ? cbm_version_cohort_manager_new(endpoint) : NULL;
-    cbm_daemon_build_identity_t identity = {
+    lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[2], argv[3]);
+    lsm_version_cohort_manager_t *manager =
+        endpoint ? lsm_version_cohort_manager_new(endpoint) : NULL;
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = "2.4.0",
         .build_fingerprint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         .cache_fingerprint = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -454,12 +454,12 @@ static int tf_maybe_run_version_cohort_crash_holder(int argc, char **argv) {
         .store_abi = 11,
         .feature_abi = 7,
     };
-    cbm_version_cohort_lease_t *lease = NULL;
-    cbm_daemon_conflict_t conflict;
-    cbm_version_cohort_status_t status =
-        manager ? cbm_version_cohort_acquire(manager, &identity, UINT64_MAX, &lease, &conflict)
-                : CBM_VERSION_COHORT_IO;
-    FILE *ready = status == CBM_VERSION_COHORT_OK ? cbm_fopen(argv[4], "wb") : NULL;
+    lsm_version_cohort_lease_t *lease = NULL;
+    lsm_daemon_conflict_t conflict;
+    lsm_version_cohort_status_t status =
+        manager ? lsm_version_cohort_acquire(manager, &identity, UINT64_MAX, &lease, &conflict)
+                : LSM_VERSION_COHORT_IO;
+    FILE *ready = status == LSM_VERSION_COHORT_OK ? lsm_fopen(argv[4], "wb") : NULL;
     bool announced = false;
     if (ready) {
         bool written = fputc('R', ready) != EOF;
@@ -469,13 +469,13 @@ static int tf_maybe_run_version_cohort_crash_holder(int argc, char **argv) {
         Sleep(INFINITE);
         return 23;
     }
-    while (lease && cbm_version_cohort_lease_release(&lease) != CBM_PRIVATE_FILE_LOCK_OK) {
-        cbm_usleep(1000);
+    while (lease && lsm_version_cohort_lease_release(&lease) != LSM_PRIVATE_FILE_LOCK_OK) {
+        lsm_usleep(1000);
     }
-    while (manager && cbm_version_cohort_manager_free(&manager) != CBM_PRIVATE_FILE_LOCK_OK) {
-        cbm_usleep(1000);
+    while (manager && lsm_version_cohort_manager_free(&manager) != LSM_PRIVATE_FILE_LOCK_OK) {
+        lsm_usleep(1000);
     }
-    cbm_daemon_ipc_endpoint_free(endpoint);
+    lsm_daemon_ipc_endpoint_free(endpoint);
     return 22;
 #else
     (void)argc;
@@ -513,22 +513,22 @@ static int tf_maybe_run_runtime_hello_client(int argc, char **argv) {
     if (argc != 6 || strcmp(argv[1], "__cbm_runtime_hello_client") != 0) {
         return -1;
     }
-    cbm_daemon_ipc_endpoint_t *endpoint = cbm_daemon_ipc_endpoint_new(argv[3], argv[2]);
-    cbm_daemon_build_identity_t identity = {
+    lsm_daemon_ipc_endpoint_t *endpoint = lsm_daemon_ipc_endpoint_new(argv[3], argv[2]);
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = argv[4],
         .build_fingerprint = argv[5],
     };
-    cbm_daemon_runtime_connect_result_t result;
+    lsm_daemon_runtime_connect_result_t result;
     memset(&result, 0, sizeof(result));
-    cbm_daemon_runtime_client_t *client =
-        endpoint ? cbm_daemon_runtime_client_connect(endpoint, &identity,
+    lsm_daemon_runtime_client_t *client =
+        endpoint ? lsm_daemon_runtime_client_connect(endpoint, &identity,
                                                      TF_RUNTIME_IMAGE_EXCHANGE_TIMEOUT_MS, &result)
                  : NULL;
-    bool accepted = client && result.status == CBM_DAEMON_RUNTIME_CONNECT_ACCEPTED &&
-                    result.hello_status == CBM_DAEMON_HELLO_COMPATIBLE;
+    bool accepted = client && result.status == LSM_DAEMON_RUNTIME_CONNECT_ACCEPTED &&
+                    result.hello_status == LSM_DAEMON_HELLO_COMPATIBLE;
     bool closed =
-        !client || cbm_daemon_runtime_client_close(client, TF_RUNTIME_IMAGE_EXCHANGE_TIMEOUT_MS);
-    cbm_daemon_ipc_endpoint_free(endpoint);
+        !client || lsm_daemon_runtime_client_close(client, TF_RUNTIME_IMAGE_EXCHANGE_TIMEOUT_MS);
+    lsm_daemon_ipc_endpoint_free(endpoint);
     if (!accepted) {
         return 26;
     }
@@ -545,21 +545,21 @@ static int tf_maybe_run_runtime_activation_client(int argc, char **argv) {
     char *action_end = NULL;
     unsigned long action_value = strtoul(argv[6], &action_end, 10);
     bool action_valid = action_end != argv[6] && *action_end == '\0' &&
-                        action_value >= (unsigned long)CBM_DAEMON_RUNTIME_ACTIVATION_INSTALL &&
-                        action_value <= (unsigned long)CBM_DAEMON_RUNTIME_ACTIVATION_UNINSTALL;
-    cbm_daemon_ipc_endpoint_t *endpoint =
-        action_valid ? cbm_daemon_ipc_endpoint_new(argv[3], argv[2]) : NULL;
-    cbm_daemon_build_identity_t identity = {
+                        action_value >= (unsigned long)LSM_DAEMON_RUNTIME_ACTIVATION_INSTALL &&
+                        action_value <= (unsigned long)LSM_DAEMON_RUNTIME_ACTIVATION_UNINSTALL;
+    lsm_daemon_ipc_endpoint_t *endpoint =
+        action_valid ? lsm_daemon_ipc_endpoint_new(argv[3], argv[2]) : NULL;
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = argv[4],
         .build_fingerprint = argv[5],
     };
-    cbm_daemon_runtime_activation_result_t result;
+    lsm_daemon_runtime_activation_result_t result;
     memset(&result, 0, sizeof(result));
     bool exchanged =
-        endpoint && cbm_daemon_runtime_request_activation_shutdown(
-                        endpoint, &identity, (cbm_daemon_runtime_activation_action_t)action_value,
+        endpoint && lsm_daemon_runtime_request_activation_shutdown(
+                        endpoint, &identity, (lsm_daemon_runtime_activation_action_t)action_value,
                         TF_RUNTIME_IMAGE_EXCHANGE_TIMEOUT_MS, &result);
-    cbm_daemon_ipc_endpoint_free(endpoint);
+    lsm_daemon_ipc_endpoint_free(endpoint);
     return exchanged && result.accepted ? 0 : 29;
 }
 
@@ -640,11 +640,11 @@ static bool suite_requested(const char *name) {
  * guard compares against it. */
 static bool g_list_only = false;
 
-/* CBM_SKIP_PERF=1 excludes throughput/scale/perf-metric suites from the run.
- * The fidelity pass (CBM_LOCAL_CI_CPUS=4) and CI PRs set it: those suites
+/* LSM_SKIP_PERF=1 excludes throughput/scale/perf-metric suites from the run.
+ * The fidelity pass (LSM_LOCAL_CI_CPUS=4) and CI PRs set it: those suites
  * measure performance, which is meaningless under artificial CPU starvation,
  * and they dominate wall-clock. Correctness coverage is unaffected — the perf
- * suites run at full power in the perf/release legs (CBM_SKIP_PERF unset). The
+ * suites run at full power in the perf/release legs (LSM_SKIP_PERF unset). The
  * skip applies to BOTH --list-suites and the run through the same macro, so
  * the shard union guard stays consistent. */
 static bool g_skip_perf = false;
@@ -814,7 +814,7 @@ extern void suite_dump_verify_io(void);
 /* Free the main thread's thread-local node-type bitset cache before exit so
  * LeakSanitizer (Linux x64) doesn't report it. Worker threads free their own
  * caches at thread teardown (pass_parallel.c). */
-extern void cbm_kind_in_set_free_cache(void);
+extern void lsm_kind_in_set_free_cache(void);
 
 int main(int argc, char **argv) {
     /* Skip the multi-hundred-MB executable-image hash that computes the exact
@@ -823,9 +823,9 @@ int main(int argc, char **argv) {
      * readiness-timeout flakes. Set once here; every forked child and re-exec'd
      * worker inherits it, so exact-build match/mismatch still works (a
      * mismatch test still passes a DIFFERENT fingerprint via argv). Honoured
-     * only under CBM_CLI_ENABLE_TEST_API — never in a production binary. */
-    if (!getenv("CBM_TEST_BUILD_FINGERPRINT")) {
-        (void)cbm_setenv("CBM_TEST_BUILD_FINGERPRINT",
+     * only under LSM_CLI_ENABLE_TEST_API — never in a production binary. */
+    if (!getenv("LSM_TEST_BUILD_FINGERPRINT")) {
+        (void)lsm_setenv("LSM_TEST_BUILD_FINGERPRINT",
                          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 1);
     }
     int blocking_git_rc = tf_maybe_run_blocking_git_probe(argc, argv);
@@ -835,7 +835,7 @@ int main(int argc, char **argv) {
     /* Installation tests use this executable as a structurally real candidate.
      * Mirror the production binary's minimal verification contract. */
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-        (void)puts("codebase-memory-mcp test-runner");
+        (void)puts("logan-spine-mcp test-runner");
         return 0;
     }
     int mcp_idxfailclosed_rc = tf_maybe_run_mcp_idxfailclosed_probe(argc, argv);
@@ -877,7 +877,7 @@ int main(int argc, char **argv) {
     /* Capture once so the parent tests and any re-exec'd worker bind to this
      * executable image. A worker with an unavailable/mismatched identity is
      * rejected by the exact parser below before any suite or MCP state exists. */
-    (void)cbm_index_supervisor_capture_build_fingerprint();
+    (void)lsm_index_supervisor_capture_build_fingerprint();
 
     /* #832: if spawned as a supervised index worker, do the real work and exit
      * before any suite runs (see tf_maybe_run_index_worker). */
@@ -886,18 +886,18 @@ int main(int argc, char **argv) {
         return worker_rc;
     }
 
-    /* #845 belt-and-suspenders: this binary EMBEDS cbm_mcp_handle_tool. The
+    /* #845 belt-and-suspenders: this binary EMBEDS lsm_mcp_handle_tool. The
      * supervisor gate already ignores unmarked hosts, but pin the kill switch
      * too so even a future supervisor-marked test host can never resolve THIS
      * binary as `<self> cli --index-worker …` and recursively re-run suites.
      * A test that exercises the supervisor must explicitly re-enable it. */
-    cbm_setenv("CBM_INDEX_SUPERVISOR", "0", 1);
+    lsm_setenv("LSM_INDEX_SUPERVISOR", "0", 1);
     if (!tf_setup_cache_sentinel()) {
         fprintf(stderr, "failed to create isolated test cache\n");
         return 2;
     }
 
-    const char *skip_perf_env = getenv("CBM_SKIP_PERF");
+    const char *skip_perf_env = getenv("LSM_SKIP_PERF");
     g_skip_perf = skip_perf_env != NULL && strcmp(skip_perf_env, "1") == 0;
     if (argc == 2 && strcmp(argv[1], "--list-suites") == 0) {
         g_list_only = true;
@@ -914,7 +914,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!g_list_only) {
-        printf("\n  codebase-memory-mcp  C test suite\n");
+        printf("\n  logan-spine-mcp  C test suite\n");
     }
 
     /* Foundation */
@@ -1122,7 +1122,7 @@ int main(int argc, char **argv) {
 
     if (g_list_only) {
         fflush(stdout);
-        cbm_kind_in_set_free_cache();
+        lsm_kind_in_set_free_cache();
         sqlite3_shutdown();
         return 0;
     }
@@ -1144,7 +1144,7 @@ int main(int argc, char **argv) {
     g_suite_arg_matched = NULL;
 
     /* Release process-lifetime caches so LeakSanitizer reports no leaks. */
-    cbm_kind_in_set_free_cache();
+    lsm_kind_in_set_free_cache();
     sqlite3_shutdown();
     TEST_SUMMARY();
 }

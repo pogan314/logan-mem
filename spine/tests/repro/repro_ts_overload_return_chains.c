@@ -17,7 +17,7 @@
 #include "test_framework.h"
 
 #include "arena.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/ts_lsp.h"
 
 #include <stdbool.h>
@@ -52,14 +52,14 @@ static bool ends_with(const char *text, const char *suffix) {
     return suffix_len <= text_len && strcmp(text + text_len - suffix_len, suffix) == 0;
 }
 
-static int count_resolved_suffix(const CBMResolvedCallArray *calls, const char *callee_suffix,
+static int count_resolved_suffix(const LSMResolvedCallArray *calls, const char *callee_suffix,
                                  const char *strategy) {
     if (!calls)
         return 0;
     int count = 0;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
-        if (call->kind == CBM_RESOLVED_INVOCATION && call->confidence >= 0.5f && call->caller_qn &&
+        const LSMResolvedCall *call = &calls->items[i];
+        if (call->kind == LSM_RESOLVED_INVOCATION && call->confidence >= 0.5f && call->caller_qn &&
             strstr(call->caller_qn, "run") && ends_with(call->callee_qn, callee_suffix) &&
             call->strategy && strcmp(call->strategy, strategy) == 0) {
             count++;
@@ -68,12 +68,12 @@ static int count_resolved_suffix(const CBMResolvedCallArray *calls, const char *
     return count;
 }
 
-static int count_any_callee_suffix(const CBMResolvedCallArray *calls, const char *callee_suffix) {
+static int count_any_callee_suffix(const LSMResolvedCallArray *calls, const char *callee_suffix) {
     if (!calls)
         return 0;
     int count = 0;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
+        const LSMResolvedCall *call = &calls->items[i];
         if (call->caller_qn && strstr(call->caller_qn, "run") &&
             ends_with(call->callee_qn, callee_suffix)) {
             count++;
@@ -82,18 +82,18 @@ static int count_any_callee_suffix(const CBMResolvedCallArray *calls, const char
     return count;
 }
 
-static void print_resolved_calls(const CBMResolvedCallArray *calls) {
+static void print_resolved_calls(const LSMResolvedCallArray *calls) {
     if (!calls)
         return;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
+        const LSMResolvedCall *call = &calls->items[i];
         printf("    %s -> %s [%s %.2f kind=%d]\n", call->caller_qn ? call->caller_qn : "(null)",
                call->callee_qn ? call->callee_qn : "(null)",
                call->strategy ? call->strategy : "(null)", call->confidence, (int)call->kind);
     }
 }
 
-static void init_overload_defs(CBMLSPDef defs[OVERLOAD_DEF_COUNT], CBMLanguage language,
+static void init_overload_defs(LSMLSPDef defs[OVERLOAD_DEF_COUNT], LSMLanguage language,
                                const TSOverloadFixtureNames *names) {
     memset(defs, 0, (size_t)OVERLOAD_DEF_COUNT * sizeof(*defs));
 
@@ -154,7 +154,7 @@ static void init_overload_defs(CBMLSPDef defs[OVERLOAD_DEF_COUNT], CBMLanguage l
     defs[6].lang = language;
 }
 
-static int assert_both_return_chains(const CBMResolvedCallArray *calls, const char *language_name,
+static int assert_both_return_chains(const LSMResolvedCallArray *calls, const char *language_name,
                                      const char *fixture_name, const char *inner_strategy) {
     int inner_calls = count_resolved_suffix(calls, "choose", inner_strategy);
     bool pair = count_resolved_suffix(calls, "Pair.pairOnly", "lsp_ts_method") > 0;
@@ -172,7 +172,7 @@ static const char kFreeFunctionSource[] = "function run(): void {\n"
                                           "  choose('x', 1).reversedOnly();\n"
                                           "}\n";
 
-static int assert_free_function_overload_returns(CBMLanguage language, bool jsx_mode,
+static int assert_free_function_overload_returns(LSMLanguage language, bool jsx_mode,
                                                  const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.free",
@@ -184,15 +184,15 @@ static int assert_free_function_overload_returns(CBMLanguage language, bool jsx_
         "repro.free.choose",
         "repro.free.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(&arena, kFreeFunctionSource,
+        lsm_run_ts_lsp_cross_with_registry(&arena, kFreeFunctionSource,
                                            (int)strlen(kFreeFunctionSource), names.caller_module_qn,
                                            false, jsx_mode, false, registry, defs,
                                            OVERLOAD_DEF_COUNT, NULL, NULL, 0, NULL, &calls);
@@ -203,7 +203,7 @@ static int assert_free_function_overload_returns(CBMLanguage language, bool jsx_
                  : 1;
     if (!registry)
         printf("  ts-overload-return: %s free-function registry build failed\n", language_name);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return rc;
 }
 
@@ -213,7 +213,7 @@ static const char kNamespaceSource[] = "import * as Lib from './provider';\n"
                                        "  Lib.choose('x', 1).reversedOnly();\n"
                                        "}\n";
 
-static int assert_namespace_overload_returns(CBMLanguage language, bool jsx_mode,
+static int assert_namespace_overload_returns(LSMLanguage language, bool jsx_mode,
                                              const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.provider",
@@ -225,17 +225,17 @@ static int assert_namespace_overload_returns(CBMLanguage language, bool jsx_mode
         "repro.provider.choose",
         "repro.consumer.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
     const char *import_names[] = {"Lib"};
     const char *import_qns[] = {names.symbol_module_qn};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(&arena, kNamespaceSource, (int)strlen(kNamespaceSource),
+        lsm_run_ts_lsp_cross_with_registry(&arena, kNamespaceSource, (int)strlen(kNamespaceSource),
                                            names.caller_module_qn, false, jsx_mode, false, registry,
                                            defs, OVERLOAD_DEF_COUNT, import_names, import_qns, 1,
                                            NULL, &calls);
@@ -246,7 +246,7 @@ static int assert_namespace_overload_returns(CBMLanguage language, bool jsx_mode
                       : 1;
     if (!registry)
         printf("  ts-overload-return: %s namespace registry build failed\n", language_name);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return rc;
 }
 
@@ -256,7 +256,7 @@ static const char kExactSymbolImportSource[] = "import { choose } from './provid
                                                "  choose('x', 1).reversedOnly();\n"
                                                "}\n";
 
-static int assert_exact_symbol_import_overload_returns(CBMLanguage language, bool jsx_mode,
+static int assert_exact_symbol_import_overload_returns(LSMLanguage language, bool jsx_mode,
                                                        const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.exact.provider",
@@ -268,19 +268,19 @@ static int assert_exact_symbol_import_overload_returns(CBMLanguage language, boo
         "repro.exact.provider.choose",
         "repro.exact.consumer.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
     const char *import_names[] = {"choose"};
     /* Some production import maps already carry the exact exported-symbol QN.
      * The call lookup must not append the local name a second time. */
     const char *import_qns[] = {names.choose_qn};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(
+        lsm_run_ts_lsp_cross_with_registry(
             &arena, kExactSymbolImportSource, (int)strlen(kExactSymbolImportSource),
             names.caller_module_qn, false, jsx_mode, false, registry, defs, OVERLOAD_DEF_COUNT,
             import_names, import_qns, 1, NULL, &calls);
@@ -295,7 +295,7 @@ static int assert_exact_symbol_import_overload_returns(CBMLanguage language, boo
                language_name, registry != NULL, doubled);
         print_resolved_calls(&calls);
     }
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return registry && chain_rc == 0 && doubled == 0 ? 0 : 1;
 }
 
@@ -305,7 +305,7 @@ static const char kContextualCallbackOverloadSource[] =
     "  choose('x', 1, value => value.reversedOnly());\n"
     "}\n";
 
-static int assert_contextual_callback_uses_selected_overload(CBMLanguage language, bool jsx_mode,
+static int assert_contextual_callback_uses_selected_overload(LSMLanguage language, bool jsx_mode,
                                                              const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.callback",
@@ -317,7 +317,7 @@ static int assert_contextual_callback_uses_selected_overload(CBMLanguage languag
         "repro.callback.choose",
         "repro.callback.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
     defs[4].return_types = "void";
     defs[4].signature_param_types = kNumberStringPairCallbackParams;
@@ -326,12 +326,12 @@ static int assert_contextual_callback_uses_selected_overload(CBMLanguage languag
     defs[5].signature_param_types = kStringNumberReversedCallbackParams;
     defs[5].signature_param_count = 3;
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(&arena, kContextualCallbackOverloadSource,
+        lsm_run_ts_lsp_cross_with_registry(&arena, kContextualCallbackOverloadSource,
                                            (int)strlen(kContextualCallbackOverloadSource),
                                            names.caller_module_qn, false, jsx_mode, false, registry,
                                            defs, OVERLOAD_DEF_COUNT, NULL, NULL, 0, NULL, &calls);
@@ -346,11 +346,11 @@ static int assert_contextual_callback_uses_selected_overload(CBMLanguage languag
                language_name, registry != NULL, outer, pair, reversed);
         print_resolved_calls(&calls);
     }
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return registry && outer >= 2 && pair >= 1 && reversed >= 1 ? 0 : 1;
 }
 
-static int assert_no_shadowed_return_chains(const CBMResolvedCallArray *calls,
+static int assert_no_shadowed_return_chains(const LSMResolvedCallArray *calls,
                                             const char *language_name, const char *fixture_name,
                                             const char *forbidden_strategy) {
     int promoted = count_resolved_suffix(calls, "choose", forbidden_strategy);
@@ -369,7 +369,7 @@ static const char kShadowedFreeFunctionSource[] = "function run(choose): void {\
                                                   "  choose('x', 1).reversedOnly();\n"
                                                   "}\n";
 
-static int assert_parameter_shadows_free_function(CBMLanguage language, bool jsx_mode,
+static int assert_parameter_shadows_free_function(LSMLanguage language, bool jsx_mode,
                                                   const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.shadow.free",
@@ -381,15 +381,15 @@ static int assert_parameter_shadows_free_function(CBMLanguage language, bool jsx
         "repro.shadow.free.choose",
         "repro.shadow.free.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(&arena, kShadowedFreeFunctionSource,
+        lsm_run_ts_lsp_cross_with_registry(&arena, kShadowedFreeFunctionSource,
                                            (int)strlen(kShadowedFreeFunctionSource),
                                            names.caller_module_qn, false, jsx_mode, false, registry,
                                            defs, OVERLOAD_DEF_COUNT, NULL, NULL, 0, NULL, &calls);
@@ -401,7 +401,7 @@ static int assert_parameter_shadows_free_function(CBMLanguage language, bool jsx
                       : 1;
     if (!registry)
         printf("  ts-overload-return: %s free shadow registry build failed\n", language_name);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return rc;
 }
 
@@ -411,7 +411,7 @@ static const char kShadowedNamespaceSource[] = "import * as Lib from './provider
                                                "  Lib.choose('x', 1).reversedOnly();\n"
                                                "}\n";
 
-static int assert_parameter_shadows_namespace(CBMLanguage language, bool jsx_mode,
+static int assert_parameter_shadows_namespace(LSMLanguage language, bool jsx_mode,
                                               const char *language_name) {
     static const TSOverloadFixtureNames names = {
         "repro.shadow.provider",
@@ -423,17 +423,17 @@ static int assert_parameter_shadows_namespace(CBMLanguage language, bool jsx_mod
         "repro.shadow.provider.choose",
         "repro.shadow.consumer.run",
     };
-    CBMLSPDef defs[OVERLOAD_DEF_COUNT];
+    LSMLSPDef defs[OVERLOAD_DEF_COUNT];
     init_overload_defs(defs, language, &names);
     const char *import_names[] = {"Lib"};
     const char *import_qns[] = {names.symbol_module_qn};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, OVERLOAD_DEF_COUNT);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(
+        lsm_run_ts_lsp_cross_with_registry(
             &arena, kShadowedNamespaceSource, (int)strlen(kShadowedNamespaceSource),
             names.caller_module_qn, false, jsx_mode, false, registry, defs, OVERLOAD_DEF_COUNT,
             import_names, import_qns, 1, NULL, &calls);
@@ -445,57 +445,57 @@ static int assert_parameter_shadows_namespace(CBMLanguage language, bool jsx_mod
                       : 1;
     if (!registry)
         printf("  ts-overload-return: %s namespace shadow registry build failed\n", language_name);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return rc;
 }
 
 TEST(repro_ts_free_function_overload_returns_typescript) {
-    return assert_free_function_overload_returns(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_free_function_overload_returns(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_ts_free_function_overload_returns_tsx) {
-    return assert_free_function_overload_returns(CBM_LANG_TSX, true, "TSX");
+    return assert_free_function_overload_returns(LSM_LANG_TSX, true, "TSX");
 }
 
 TEST(repro_ts_namespace_overload_returns_typescript) {
-    return assert_namespace_overload_returns(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_namespace_overload_returns(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_ts_namespace_overload_returns_tsx) {
-    return assert_namespace_overload_returns(CBM_LANG_TSX, true, "TSX");
+    return assert_namespace_overload_returns(LSM_LANG_TSX, true, "TSX");
 }
 
 TEST(repro_ts_exact_symbol_import_overload_returns_typescript) {
-    return assert_exact_symbol_import_overload_returns(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_exact_symbol_import_overload_returns(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_ts_exact_symbol_import_overload_returns_tsx) {
-    return assert_exact_symbol_import_overload_returns(CBM_LANG_TSX, true, "TSX");
+    return assert_exact_symbol_import_overload_returns(LSM_LANG_TSX, true, "TSX");
 }
 
 TEST(repro_ts_contextual_callback_uses_selected_overload_typescript) {
-    return assert_contextual_callback_uses_selected_overload(CBM_LANG_TYPESCRIPT, false,
+    return assert_contextual_callback_uses_selected_overload(LSM_LANG_TYPESCRIPT, false,
                                                              "TypeScript");
 }
 
 TEST(repro_ts_contextual_callback_uses_selected_overload_tsx) {
-    return assert_contextual_callback_uses_selected_overload(CBM_LANG_TSX, true, "TSX");
+    return assert_contextual_callback_uses_selected_overload(LSM_LANG_TSX, true, "TSX");
 }
 
 TEST(repro_ts_parameter_shadows_free_function_typescript) {
-    return assert_parameter_shadows_free_function(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_parameter_shadows_free_function(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_ts_parameter_shadows_free_function_tsx) {
-    return assert_parameter_shadows_free_function(CBM_LANG_TSX, true, "TSX");
+    return assert_parameter_shadows_free_function(LSM_LANG_TSX, true, "TSX");
 }
 
 TEST(repro_ts_parameter_shadows_namespace_typescript) {
-    return assert_parameter_shadows_namespace(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_parameter_shadows_namespace(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_ts_parameter_shadows_namespace_tsx) {
-    return assert_parameter_shadows_namespace(CBM_LANG_TSX, true, "TSX");
+    return assert_parameter_shadows_namespace(LSM_LANG_TSX, true, "TSX");
 }
 
 SUITE(repro_ts_overload_return_chains) {

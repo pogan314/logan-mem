@@ -3,7 +3,7 @@
 # DIFFERENT build must say so on stdout (systemMessage) - stdout is the only
 # hook channel Claude Code surfaces, so stderr-only reporting reads as eternal
 # silence in-session. Requires a TEST_SEAMS=1 binary (scripts/test.sh step 5
-# builds one): CBM_TEST_HOOK_CLIENT_BUILD forces the client fingerprint.
+# builds one): LSM_TEST_HOOK_CLIENT_BUILD forces the client fingerprint.
 #
 # STATUS: LOCAL-ONLY, NOT WIRED INTO scripts/test.sh (see the Step 5d comment
 # there). WHY: on every CI leg this test's forced client/daemon build mismatch
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="${CBM_TEST_BINARY:-${ROOT}/build/c/codebase-memory-mcp}"
+BINARY="${LSM_TEST_BINARY:-${ROOT}/build/c/logan-spine-mcp}"
 if [[ ! -x "${BINARY}" && -x "${BINARY}.exe" ]]; then
   BINARY="${BINARY}.exe"
 fi
@@ -37,24 +37,24 @@ fi
 # test drives the hook-client build seam, which is compiled out of ordinary
 # builds. Against a seam-less binary no conflict can ever occur and the failure
 # would read as "the notice is missing" instead of "the capability is absent".
-if ! LC_ALL=C grep -a -q -F 'CBM_TEST_HOOK_CLIENT_BUILD' "${BINARY}"; then
+if ! LC_ALL=C grep -a -q -F 'LSM_TEST_HOOK_CLIENT_BUILD' "${BINARY}"; then
   echo "binary lacks the hook-client build seam: ${BINARY}" >&2
-  echo "  rebuild it with:  make -f Makefile.cbm cbm TEST_SEAMS=1" >&2
+  echo "  rebuild it with:  make -f Makefile.lsm lsm TEST_SEAMS=1" >&2
   echo "  or run this test through scripts/test.sh, which does that for you." >&2
   exit 2
 fi
 
 # shellcheck source=../scripts/test-runtime.sh
 source "${ROOT}/scripts/test-runtime.sh"
-cbm_test_runtime_init
-tmpdir="${CBM_TEST_RUNTIME_ROOT}"
+lsm_test_runtime_init
+tmpdir="${LSM_TEST_RUNTIME_ROOT}"
 cleanup() {
-  CBM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon stop >/dev/null 2>&1 || true
-  cbm_test_runtime_cleanup "${BINARY}"
+  LSM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon stop >/dev/null 2>&1 || true
+  lsm_test_runtime_cleanup "${BINARY}"
 }
 trap cleanup EXIT
 
-if ! CBM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon start >"${tmpdir}/daemon-start.log" 2>&1; then
+if ! LSM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon start >"${tmpdir}/daemon-start.log" 2>&1; then
   echo "daemon start failed on this host - cannot exercise the conflict path" >&2
   cat "${tmpdir}/daemon-start.log" >&2
   exit 2
@@ -76,8 +76,8 @@ out=""
 for _attempt in $(seq 1 40); do
   rm -f "${tmpdir}/cache/.hook-daemon-absent-notice"
   set +e
-  out="$(printf '%s' "${payload}" | CBM_CACHE_DIR="${tmpdir}/cache" \
-    CBM_TEST_HOOK_CLIENT_BUILD="${forced_build}" \
+  out="$(printf '%s' "${payload}" | LSM_CACHE_DIR="${tmpdir}/cache" \
+    LSM_TEST_HOOK_CLIENT_BUILD="${forced_build}" \
     "${BINARY}" hook-augment 2>"${tmpdir}/probe.err")"
   rc=$?
   set -e
@@ -86,13 +86,13 @@ for _attempt in $(seq 1 40); do
     cat "${tmpdir}/probe.err" >&2
     exit 1
   fi
-  if grep -q "conflicting CBM process" "${tmpdir}/probe.err"; then
+  if grep -q "conflicting LSM process" "${tmpdir}/probe.err"; then
     break
   fi
   sleep 0.5
 done
 
-if ! grep -q "conflicting CBM process" "${tmpdir}/probe.err"; then
+if ! grep -q "conflicting LSM process" "${tmpdir}/probe.err"; then
   echo "no probe observed the build conflict within the backstop - daemon cohort" >&2
   echo "never became active, or this is not a TEST_SEAMS=1 binary" >&2
   echo "--- daemon-start.log ---" >&2
@@ -104,7 +104,7 @@ if ! grep -q "conflicting CBM process" "${tmpdir}/probe.err"; then
   echo "--- diagnosis ---" >&2
   echo "forced_build=${forced_build} (len ${#forced_build})" >&2
   echo "seam present in binary: yes (asserted above)" >&2
-  CBM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon status >&2 2>&1 || true
+  LSM_CACHE_DIR="${tmpdir}/cache" "${BINARY}" daemon status >&2 2>&1 || true
   exit 2
 fi
 if ! printf '%s' "${out}" | grep -q "systemMessage"; then

@@ -7,7 +7,7 @@
 # tests/test_parent_watchdog.sh) did not cover CLI worker mode.
 #
 # Strategy: launch the worker under a wrapper "parent" on a fixture where the
-# test-only injector (CBM_TEST_HANG_ON) busy-spins on one file, so the worker
+# test-only injector (LSM_TEST_HANG_ON) busy-spins on one file, so the worker
 # is guaranteed to still be mid-index when the wrapper is killed — the guard
 # cannot pass vacuously via the worker simply finishing. The hidden
 # --index-worker-single-thread + --index-worker-marker recovery knobs give a
@@ -22,7 +22,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BINARY="${CBM_TEST_BINARY:-${ROOT}/build/c/codebase-memory-mcp}"
+BINARY="${LSM_TEST_BINARY:-${ROOT}/build/c/logan-spine-mcp}"
 
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
@@ -38,14 +38,14 @@ fi
 
 # PRECONDITION, not a skip: this test drives the crash-orphan probe, which is
 # compiled out of ordinary builds (it forks a SIGTERM-ignoring child, which must
-# never ship — see src/main.c and TEST_SEAMS in Makefile.cbm). Against a
+# never ship — see src/main.c and TEST_SEAMS in Makefile.lsm). Against a
 # seam-less binary the probe silently no-ops and the test dies with an opaque
 # "Killed: 9" many lines later. Assert the capability up front and say exactly
 # how to get it. Failing (not skipping) is deliberate: a skip here would hide
 # the loss of watchdog coverage entirely.
-if ! LC_ALL=C grep -a -q -F 'CBM_TEST_WORKER_DESCENDANT_PID_FILE' "${BINARY}"; then
+if ! LC_ALL=C grep -a -q -F 'LSM_TEST_WORKER_DESCENDANT_PID_FILE' "${BINARY}"; then
   echo "binary lacks the crash-orphan test seam: ${BINARY}" >&2
-  echo "  rebuild it with:  make -f Makefile.cbm cbm TEST_SEAMS=1" >&2
+  echo "  rebuild it with:  make -f Makefile.lsm lsm TEST_SEAMS=1" >&2
   echo "  or run this test through scripts/test.sh, which does that for you." >&2
   exit 2
 fi
@@ -67,8 +67,8 @@ fi
 
 # shellcheck source=../scripts/test-runtime.sh
 source "${ROOT}/scripts/test-runtime.sh"
-cbm_test_runtime_init
-tmpdir="${CBM_TEST_RUNTIME_ROOT}"
+lsm_test_runtime_init
+tmpdir="${LSM_TEST_RUNTIME_ROOT}"
 wrapper_pid=""
 cleanup() {
   if [[ -s "${tmpdir}/child.pid" ]]; then
@@ -82,7 +82,7 @@ cleanup() {
     [[ -n "${descendant_pid}" ]] && kill -9 "${descendant_pid}" 2>/dev/null || true
   fi
   [[ -n "${wrapper_pid}" ]] && kill -9 "${wrapper_pid}" 2>/dev/null || true
-  cbm_test_runtime_cleanup "${BINARY}"
+  lsm_test_runtime_cleanup "${BINARY}"
 }
 trap cleanup EXIT
 
@@ -96,7 +96,7 @@ printf 'def slow():\n    return 2\n' > "${tmpdir}/repo/hang_me.py"
 cat >"${tmpdir}/wrapper.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-"${CBM_BINARY}" cli --index-worker \
+"${LSM_BINARY}" cli --index-worker \
   --index-worker-build "${BUILD_FINGERPRINT}" \
   index_repository "${ARGS_JSON}" \
   --response-out "${TMPDIR_PATH}/resp" \
@@ -108,10 +108,10 @@ wait
 SH
 chmod +x "${tmpdir}/wrapper.sh"
 
-CBM_BINARY="${BINARY}" BUILD_FINGERPRINT="${BUILD_FINGERPRINT}" TMPDIR_PATH="${tmpdir}" \
+LSM_BINARY="${BINARY}" BUILD_FINGERPRINT="${BUILD_FINGERPRINT}" TMPDIR_PATH="${tmpdir}" \
   ARGS_JSON="{\"repo_path\":\"${tmpdir}/repo\"}" \
-  CBM_TEST_HANG_ON=hang_me \
-  CBM_TEST_WORKER_DESCENDANT_PID_FILE="${tmpdir}/descendant.pid" \
+  LSM_TEST_HANG_ON=hang_me \
+  LSM_TEST_WORKER_DESCENDANT_PID_FILE="${tmpdir}/descendant.pid" \
   "${tmpdir}/wrapper.sh" &
 wrapper_pid=$!
 

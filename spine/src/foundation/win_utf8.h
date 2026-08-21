@@ -1,5 +1,5 @@
-#ifndef CBM_WIN_UTF8_H
-#define CBM_WIN_UTF8_H
+#ifndef LSM_WIN_UTF8_H
+#define LSM_WIN_UTF8_H
 
 #ifdef _WIN32
 
@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 
-static inline wchar_t *cbm_utf8_to_wide(const char *utf8) {
+static inline wchar_t *lsm_utf8_to_wide(const char *utf8) {
     if (!utf8) {
         return NULL;
     }
@@ -26,16 +26,16 @@ static inline wchar_t *cbm_utf8_to_wide(const char *utf8) {
     return w;
 }
 
-static inline int cbm_win_path_separator(wchar_t value) {
+static inline int lsm_win_path_separator(wchar_t value) {
     return value == L'\\' || value == L'/';
 }
 
-static inline int cbm_win_path_has_namespace_prefix(const wchar_t *path, size_t length) {
-    return length >= 4U && cbm_win_path_separator(path[0]) && cbm_win_path_separator(path[1]) &&
-           (path[2] == L'?' || path[2] == L'.') && cbm_win_path_separator(path[3]);
+static inline int lsm_win_path_has_namespace_prefix(const wchar_t *path, size_t length) {
+    return length >= 4U && lsm_win_path_separator(path[0]) && lsm_win_path_separator(path[1]) &&
+           (path[2] == L'?' || path[2] == L'.') && lsm_win_path_separator(path[3]);
 }
 
-static inline void cbm_win_path_normalize_wide_separators(wchar_t *path) {
+static inline void lsm_win_path_normalize_wide_separators(wchar_t *path) {
     if (!path) {
         return;
     }
@@ -54,7 +54,7 @@ static inline void cbm_win_path_normalize_wide_separators(wchar_t *path) {
  * This makes behavior independent of the process manifest and LongPathsEnabled
  * policy. Never use this for non-file strings (command lines, pipe names,
  * registry paths). */
-static inline wchar_t *cbm_wide_path_to_extended(const wchar_t *wide_path) {
+static inline wchar_t *lsm_wide_path_to_extended(const wchar_t *wide_path) {
     if (!wide_path) {
         return NULL;
     }
@@ -68,8 +68,8 @@ static inline wchar_t *cbm_wide_path_to_extended(const wchar_t *wide_path) {
     }
     wmemcpy(wide, wide_path, input_length + 1U);
     size_t length = wcslen(wide);
-    if (cbm_win_path_has_namespace_prefix(wide, length)) {
-        cbm_win_path_normalize_wide_separators(wide);
+    if (lsm_win_path_has_namespace_prefix(wide, length)) {
+        lsm_win_path_normalize_wide_separators(wide);
         return wide;
     }
     if (length < 240U) {
@@ -84,7 +84,7 @@ static inline wchar_t *cbm_wide_path_to_extended(const wchar_t *wide_path) {
         free(full);
         return NULL;
     }
-    cbm_win_path_normalize_wide_separators(full);
+    lsm_win_path_normalize_wide_separators(full);
 
     int drive_absolute =
         copied >= 3U &&
@@ -117,9 +117,9 @@ static inline wchar_t *cbm_wide_path_to_extended(const wchar_t *wide_path) {
     return prefixed;
 }
 
-static inline wchar_t *cbm_path_to_wide(const char *utf8_path) {
-    wchar_t *wide = cbm_utf8_to_wide(utf8_path);
-    wchar_t *extended = cbm_wide_path_to_extended(wide);
+static inline wchar_t *lsm_path_to_wide(const char *utf8_path) {
+    wchar_t *wide = lsm_utf8_to_wide(utf8_path);
+    wchar_t *extended = lsm_wide_path_to_extended(wide);
     free(wide);
     return extended;
 }
@@ -128,7 +128,7 @@ static inline wchar_t *cbm_path_to_wide(const char *utf8_path) {
  * Internal UTF-8 paths use conventional DOS/UNC spelling and add the prefix
  * only at the Win32 file-API boundary, so remove it before widening callers
  * compose adjacent runtime-asset paths. */
-static inline void cbm_module_path_unprefix(wchar_t *wide) {
+static inline void lsm_module_path_unprefix(wchar_t *wide) {
     if (!wide) {
         return;
     }
@@ -143,7 +143,7 @@ static inline void cbm_module_path_unprefix(wchar_t *wide) {
     }
 }
 
-static inline char *cbm_wide_to_utf8(const wchar_t *wide) {
+static inline char *lsm_wide_to_utf8(const wchar_t *wide) {
     if (!wide) {
         return NULL;
     }
@@ -163,7 +163,7 @@ static inline char *cbm_wide_to_utf8(const wchar_t *wide) {
 /* Resolve the running image without passing through the active ANSI code page.
  * The returned UTF-8 string is heap allocated. Grow dynamically so an
  * extended-length install path is never mistaken for a complete path. */
-static inline char *cbm_module_path_utf8(void) {
+static inline char *lsm_module_path_utf8(void) {
     DWORD capacity = 512U;
     while (capacity <= 32768U) {
         wchar_t *wide = (wchar_t *)calloc((size_t)capacity, sizeof(*wide));
@@ -173,8 +173,8 @@ static inline char *cbm_module_path_utf8(void) {
         SetLastError(ERROR_SUCCESS);
         DWORD length = GetModuleFileNameW(NULL, wide, capacity);
         if (length > 0U && length < capacity) {
-            cbm_module_path_unprefix(wide);
-            char *utf8 = cbm_wide_to_utf8(wide);
+            lsm_module_path_unprefix(wide);
+            char *utf8 = lsm_wide_to_utf8(wide);
             free(wide);
             return utf8;
         }
@@ -193,4 +193,4 @@ static inline char *cbm_module_path_utf8(void) {
 }
 
 #endif /* _WIN32 */
-#endif /* CBM_WIN_UTF8_H */
+#endif /* LSM_WIN_UTF8_H */

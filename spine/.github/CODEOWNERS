@@ -1,4 +1,4 @@
-# Binding ownership policy for codebase-memory-mcp.
+# Binding ownership policy for logan-spine-mcp.
 #
 # This repository is user-owned, so ownership is expressed with individual
 # GitHub handles rather than organization teams.
@@ -14,7 +14,7 @@
 # Security-sensitive and authority-sensitive surfaces.
 /.github/ @DeusData
 /scripts/ @DeusData
-/Makefile.cbm @DeusData
+/Makefile.lsm @DeusData
 /SECURITY.md @DeusData
 /docs/SECURITY-DISCLOSURE.md @DeusData
 /CONTRIBUTING.md @DeusData
@@ -33,7 +33,7 @@
 /flake.lock @DeusData
 /THIRD_PARTY.md @DeusData
 /vendored/ @DeusData
-/internal/cbm/vendored/ @DeusData
+/internal/lsm/vendored/ @DeusData
 
 # Core product surfaces.
 /src/foundation/ @DeusData
@@ -52,7 +52,7 @@
 /src/ui/ @DeusData
 
 # Extraction, language support, and graph UI.
-/internal/cbm/ @DeusData
+/internal/lsm/ @DeusData
 /tools/ @DeusData
 /graph-ui/ @DeusData
 

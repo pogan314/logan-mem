@@ -1,9 +1,9 @@
 # cppcheck suppressions file
 # Only universally-supported suppression IDs here.
-# Version-specific IDs go in Makefile.cbm as --suppress flags.
+# Version-specific IDs go in Makefile.lsm as --suppress flags.
 
 # Vendored code
-*:internal/cbm/vendored/*
+*:internal/lsm/vendored/*
 *:vendored/*
 
 # Test framework patterns

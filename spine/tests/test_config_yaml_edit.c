@@ -5,7 +5,7 @@
 #include "test_framework.h"
 #include "test_helpers.h"
 
-#define CBM_YAML_ENABLE_TEST_API 1
+#define LSM_YAML_ENABLE_TEST_API 1
 #include <cli/config_yaml_edit.h>
 
 #include <stdbool.h>
@@ -22,10 +22,10 @@
 /* Expected test seams for races after final verification and failures after
  * lock-object creation. Production code must not expose them outside the
  * test API build. */
-void cbm_yaml_set_prepublish_hook_for_testing(cbm_yaml_precommit_test_hook_t hook, void *context);
+void lsm_yaml_set_prepublish_hook_for_testing(lsm_yaml_precommit_test_hook_t hook, void *context);
 #ifndef _WIN32
-typedef void (*cbm_yaml_lock_postcreate_test_hook_t)(const char *lock_path, void *context);
-void cbm_yaml_set_lock_postcreate_hook_for_testing(cbm_yaml_lock_postcreate_test_hook_t hook,
+typedef void (*lsm_yaml_lock_postcreate_test_hook_t)(const char *lock_path, void *context);
+void lsm_yaml_set_lock_postcreate_hook_for_testing(lsm_yaml_lock_postcreate_test_hook_t hook,
                                                    void *context);
 #endif
 
@@ -35,7 +35,7 @@ typedef struct {
 } yaml_fixture_t;
 
 static int yaml_fixture_init(yaml_fixture_t *fixture, const char *initial) {
-    char *temp = th_mktempdir("cbm_yaml_edit");
+    char *temp = th_mktempdir("lsm_yaml_edit");
     if (!temp) {
         return -1;
     }
@@ -90,18 +90,18 @@ static size_t yaml_count_occurrences(const char *text, const char *needle) {
 }
 
 static size_t yaml_temp_file_count(const yaml_fixture_t *fixture) {
-    cbm_dir_t *directory = cbm_opendir(fixture->dir);
+    lsm_dir_t *directory = lsm_opendir(fixture->dir);
     if (!directory) {
         return SIZE_MAX;
     }
     size_t count = 0U;
-    cbm_dirent_t *entry = NULL;
-    while ((entry = cbm_readdir(directory)) != NULL) {
-        if (strncmp(entry->name, "config.yaml.cbm-yaml-", strlen("config.yaml.cbm-yaml-")) == 0) {
+    lsm_dirent_t *entry = NULL;
+    while ((entry = lsm_readdir(directory)) != NULL) {
+        if (strncmp(entry->name, "config.yaml.lsm-yaml-", strlen("config.yaml.lsm-yaml-")) == 0) {
             count++;
         }
     }
-    cbm_closedir(directory);
+    lsm_closedir(directory);
     return count;
 }
 
@@ -117,9 +117,9 @@ static bool yaml_lock_released_state_is_safe(const char *path) {
 }
 
 static bool yaml_upsert_failed_unchanged(const char *path, const char *original) {
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
     if (th_write_file(path, original) != 0 ||
-        cbm_yaml_upsert_mapping_entry(path, "mcp_servers", "codebase-memory", block) == 0) {
+        lsm_yaml_upsert_mapping_entry(path, "mcp_servers", "logan-spine", block) == 0) {
         return false;
     }
     char *after = yaml_read_alloc(path);
@@ -143,7 +143,7 @@ typedef struct {
 static void yaml_change_before_commit(const char *path, void *context) {
     yaml_precommit_change_t *change = (yaml_precommit_change_t *)context;
     if (change->replace_identity &&
-        (!change->backup_path || cbm_rename_replace(path, change->backup_path) != 0)) {
+        (!change->backup_path || lsm_rename_replace(path, change->backup_path) != 0)) {
         change->result = -1;
         return;
     }
@@ -160,7 +160,7 @@ static void yaml_make_lock_mode_unsafe(const char *lock_path, void *context) {
 static void yaml_attempt_competing_edit(const char *path, void *context) {
     yaml_lock_contention_t *contention = (yaml_lock_contention_t *)context;
     char lock_path[1024];
-    int written = snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", path);
+    int written = snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", path);
     struct stat state;
     bool expected_type = false;
     if (written > 0 && (size_t)written < sizeof(lock_path) && stat(lock_path, &state) == 0) {
@@ -171,7 +171,7 @@ static void yaml_attempt_competing_edit(const char *path, void *context) {
 #endif
     }
     contention->lock_observed = expected_type;
-    contention->competing_result = cbm_yaml_upsert_string_list_item(path, "read", "COMPETING.md");
+    contention->competing_result = lsm_yaml_upsert_string_list_item(path, "read", "COMPETING.md");
     contention->lock_observed = contention->lock_observed || contention->competing_result == -1;
 }
 
@@ -184,9 +184,9 @@ TEST(config_yaml_edit_serializes_two_editor_instances) {
         .lock_observed = false,
     };
 
-    cbm_yaml_set_precommit_hook_for_testing(yaml_attempt_competing_edit, &contention);
-    int result = cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
-    cbm_yaml_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_yaml_set_precommit_hook_for_testing(yaml_attempt_competing_edit, &contention);
+    int result = lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
+    lsm_yaml_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(result, 0);
     ASSERT(contention.lock_observed);
@@ -197,7 +197,7 @@ TEST(config_yaml_edit_serializes_two_editor_instances) {
     ASSERT_NULL(strstr(after, "COMPETING.md"));
     free(after);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(yaml_lock_released_state_is_safe(lock_path));
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
     th_cleanup(fixture.dir);
@@ -215,9 +215,9 @@ TEST(config_yaml_edit_missing_target_appearance_fails_without_replace) {
         .result = -1,
     };
 
-    cbm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
-    int result = cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
-    cbm_yaml_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
+    int result = lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
+    lsm_yaml_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
@@ -226,7 +226,7 @@ TEST(config_yaml_edit_missing_target_appearance_fails_without_replace) {
     ASSERT_STR_EQ(after, concurrent);
     free(after);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(yaml_lock_released_state_is_safe(lock_path));
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
     th_cleanup(fixture.dir);
@@ -236,7 +236,7 @@ TEST(config_yaml_edit_missing_target_appearance_fails_without_replace) {
 TEST(config_yaml_edit_rejects_stale_content_and_cleans_temp) {
     const char *original = "model: fast\n";
     const char *concurrent = "model: concurrent\n";
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     yaml_precommit_change_t change = {
@@ -246,10 +246,10 @@ TEST(config_yaml_edit_rejects_stale_content_and_cleans_temp) {
         .result = -1,
     };
 
-    cbm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
+    lsm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
     int result =
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block);
-    cbm_yaml_set_precommit_hook_for_testing(NULL, NULL);
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block);
+    lsm_yaml_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
@@ -264,7 +264,7 @@ TEST(config_yaml_edit_rejects_stale_content_and_cleans_temp) {
 
 TEST(config_yaml_edit_rejects_stale_identity_with_same_content) {
     const char *original = "model: fast\n";
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     char backup[sizeof(fixture.path) + 32U];
@@ -276,10 +276,10 @@ TEST(config_yaml_edit_rejects_stale_identity_with_same_content) {
         .result = -1,
     };
 
-    cbm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
+    lsm_yaml_set_precommit_hook_for_testing(yaml_change_before_commit, &change);
     int result =
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block);
-    cbm_yaml_set_precommit_hook_for_testing(NULL, NULL);
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block);
+    lsm_yaml_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
@@ -288,7 +288,7 @@ TEST(config_yaml_edit_rejects_stale_identity_with_same_content) {
     ASSERT_STR_EQ(after, original);
     free(after);
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -296,7 +296,7 @@ TEST(config_yaml_edit_rejects_stale_identity_with_same_content) {
 TEST(config_yaml_edit_existing_target_swap_after_check_preserves_winner) {
     const char *original = "model: fast\n";
     const char *winner = "model: winner\n";
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     char backup[sizeof(fixture.path) + 32U];
@@ -308,10 +308,10 @@ TEST(config_yaml_edit_existing_target_swap_after_check_preserves_winner) {
         .result = -1,
     };
 
-    cbm_yaml_set_prepublish_hook_for_testing(yaml_change_before_commit, &race);
+    lsm_yaml_set_prepublish_hook_for_testing(yaml_change_before_commit, &race);
     int result =
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block);
-    cbm_yaml_set_prepublish_hook_for_testing(NULL, NULL);
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block);
+    lsm_yaml_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
@@ -320,9 +320,9 @@ TEST(config_yaml_edit_existing_target_swap_after_check_preserves_winner) {
     ASSERT_STR_EQ(after, winner);
     free(after);
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(yaml_lock_released_state_is_safe(lock_path));
     th_cleanup(fixture.dir);
     PASS();
@@ -334,14 +334,14 @@ TEST(config_yaml_edit_lock_postcreate_verification_failure_preserves_unsafe_side
     ASSERT_EQ(yaml_fixture_init(&fixture, "model: fast\n"), 0);
     int mutation_result = -1;
 
-    cbm_yaml_set_lock_postcreate_hook_for_testing(yaml_make_lock_mode_unsafe, &mutation_result);
-    int result = cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
-    cbm_yaml_set_lock_postcreate_hook_for_testing(NULL, NULL);
+    lsm_yaml_set_lock_postcreate_hook_for_testing(yaml_make_lock_mode_unsafe, &mutation_result);
+    int result = lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md");
+    lsm_yaml_set_lock_postcreate_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(mutation_result, 0);
     ASSERT_EQ(result, -1);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     struct stat state;
     ASSERT_EQ(lstat(lock_path, &state), 0);
     ASSERT(S_ISREG(state.st_mode));
@@ -356,14 +356,14 @@ TEST(config_yaml_edit_reuses_persistent_safe_lock_sidecar) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, "model: fast\n"), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(yaml_lock_released_state_is_safe(lock_path));
     struct stat first;
     ASSERT_EQ(lstat(lock_path, &first), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "CONVENTIONS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "CONVENTIONS.md"), 0);
     ASSERT(yaml_lock_released_state_is_safe(lock_path));
     struct stat second;
     ASSERT_EQ(lstat(lock_path, &second), 0);
@@ -384,12 +384,12 @@ TEST(config_yaml_edit_rejects_symlink_lock_sidecar) {
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     char lock_path[1024];
     char target_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(snprintf(target_path, sizeof(target_path), "%s/foreign-lock", fixture.dir) > 0);
     ASSERT_EQ(th_write_file(target_path, "foreign\n"), 0);
     ASSERT_EQ(symlink(target_path, lock_path), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     struct stat link_state;
     ASSERT_EQ(lstat(lock_path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
@@ -411,13 +411,13 @@ TEST(config_yaml_edit_rejects_hard_linked_lock_sidecar) {
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     char lock_path[1024];
     char source_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT(snprintf(source_path, sizeof(source_path), "%s/foreign-lock", fixture.dir) > 0);
     ASSERT_EQ(th_write_file(source_path, "foreign\n"), 0);
     ASSERT_EQ(chmod(source_path, 0600), 0);
     ASSERT_EQ(link(source_path, lock_path), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     struct stat source_state;
     struct stat lock_state;
     ASSERT_EQ(lstat(source_path, &source_state), 0);
@@ -437,11 +437,11 @@ TEST(config_yaml_edit_rejects_unsafe_mode_lock_sidecar) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
     char lock_path[1024];
-    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.cbm-yaml.lock", fixture.path) > 0);
+    ASSERT(snprintf(lock_path, sizeof(lock_path), "%s.lsm-yaml.lock", fixture.path) > 0);
     ASSERT_EQ(th_write_file(lock_path, "foreign\n"), 0);
     ASSERT_EQ(chmod(lock_path, 0644), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     struct stat state;
     ASSERT_EQ(lstat(lock_path, &state), 0);
     ASSERT(S_ISREG(state.st_mode));
@@ -458,8 +458,8 @@ TEST(config_yaml_edit_rejects_unsafe_mode_lock_sidecar) {
 TEST(config_yaml_edit_rejects_non_regular_path) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, NULL), 0);
-    ASSERT(cbm_mkdir_p(fixture.path, 0755));
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT(lsm_mkdir_p(fixture.path, 0755));
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
     th_cleanup(fixture.dir);
     PASS();
@@ -475,7 +475,7 @@ TEST(config_yaml_edit_rejects_symlinks_without_touching_target) {
     ASSERT_EQ(th_write_file(target, original), 0);
     ASSERT_EQ(symlink(target, fixture.path), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     struct stat link_state;
     ASSERT_EQ(lstat(fixture.path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
@@ -485,8 +485,8 @@ TEST(config_yaml_edit_rejects_symlinks_without_touching_target) {
     free(after);
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
 
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
-    ASSERT_EQ(cbm_unlink(target), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(target), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -498,13 +498,13 @@ TEST(config_yaml_edit_rejects_dangling_symlink) {
     ASSERT(snprintf(missing, sizeof(missing), "%s/missing.yaml", fixture.dir) > 0);
     ASSERT_EQ(symlink(missing, fixture.path), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     struct stat link_state;
     ASSERT_EQ(lstat(fixture.path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
 
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -516,7 +516,7 @@ TEST(config_yaml_edit_preserves_owner_group_and_mode) {
     struct stat before;
     ASSERT_EQ(stat(fixture.path, &before), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     struct stat after;
     ASSERT_EQ(stat(fixture.path, &after), 0);
     ASSERT_EQ(after.st_uid, before.st_uid);
@@ -535,14 +535,14 @@ TEST(config_yaml_edit_rejects_hard_links_without_splitting_identity) {
     ASSERT(snprintf(alias, sizeof(alias), "%s/alias.yaml", fixture.dir) > 0);
     ASSERT_EQ(link(fixture.path, alias), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
     char *after = yaml_read_alloc(alias);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, original);
     free(after);
     ASSERT_EQ(yaml_temp_file_count(&fixture), 0U);
 
-    ASSERT_EQ(cbm_unlink(alias), 0);
+    ASSERT_EQ(lsm_unlink(alias), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -550,7 +550,7 @@ TEST(config_yaml_edit_rejects_hard_links_without_splitting_identity) {
 
 TEST(config_yaml_edit_encodes_dynamic_scalars_safely) {
     char *encoded = NULL;
-    ASSERT_EQ(cbm_yaml_encode_double_quoted_scalar(
+    ASSERT_EQ(lsm_yaml_encode_double_quoted_scalar(
                   "C:\\Users\\Zo\xC3\xAB\\\xE4\xBB\xA3\xE7\xA0\x81 #1: \"tool\"", &encoded),
               0);
     ASSERT_NOT_NULL(encoded);
@@ -559,9 +559,9 @@ TEST(config_yaml_edit_encodes_dynamic_scalars_safely) {
     free(encoded);
 
     encoded = (char *)0x1;
-    ASSERT_EQ(cbm_yaml_encode_double_quoted_scalar("line one\nline two", &encoded), -1);
+    ASSERT_EQ(lsm_yaml_encode_double_quoted_scalar("line one\nline two", &encoded), -1);
     ASSERT_NULL(encoded);
-    ASSERT_EQ(cbm_yaml_encode_double_quoted_scalar("bad\x01"
+    ASSERT_EQ(lsm_yaml_encode_double_quoted_scalar("bad\x01"
                                                    "control",
                                                    &encoded),
               -1);
@@ -572,8 +572,8 @@ TEST(config_yaml_edit_encodes_dynamic_scalars_safely) {
 TEST(config_yaml_edit_rejects_newline_list_items) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, "model: fast\n"), 0);
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "one\ntwo"), -1);
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "one\rtwo"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "one\ntwo"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "one\rtwo"), -1);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, "model: fast\n");
@@ -604,13 +604,13 @@ TEST(config_yaml_edit_absent_target_requires_safe_root_mapping) {
 
     yaml_fixture_t safe;
     ASSERT_EQ(yaml_fixture_init(&safe, "model:\n  fallbacks:\n    - local\n"), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(safe.path, "mcp_servers", "codebase-memory",
-                                            "    command: codebase-memory-mcp\n"),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(safe.path, "mcp_servers", "logan-spine",
+                                            "    command: logan-spine-mcp\n"),
               0);
     char *after = yaml_read_alloc(safe.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "model:\n  fallbacks:\n    - local\n"));
-    ASSERT_NOT_NULL(strstr(after, "mcp_servers:\n  codebase-memory:\n"));
+    ASSERT_NOT_NULL(strstr(after, "mcp_servers:\n  logan-spine:\n"));
     free(after);
     th_cleanup(safe.dir);
     PASS();
@@ -622,11 +622,11 @@ TEST(config_yaml_edit_rejects_semantic_target_key_aliases) {
         "mcp_servers:\n  \"codebase\\x2dmemory\":\n    command: other\n",
         "\"r\\x65ad\":\n  - docs.md\n",
     };
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
 
     yaml_fixture_t section;
     ASSERT_EQ(yaml_fixture_init(&section, cases[0]), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(section.path, "mcp_servers", "codebase-memory", block),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(section.path, "mcp_servers", "logan-spine", block),
               -1);
     char *after = yaml_read_alloc(section.path);
     ASSERT_NOT_NULL(after);
@@ -636,7 +636,7 @@ TEST(config_yaml_edit_rejects_semantic_target_key_aliases) {
 
     yaml_fixture_t entry;
     ASSERT_EQ(yaml_fixture_init(&entry, cases[1]), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(entry.path, "mcp_servers", "codebase-memory", block),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(entry.path, "mcp_servers", "logan-spine", block),
               -1);
     after = yaml_read_alloc(entry.path);
     ASSERT_NOT_NULL(after);
@@ -646,7 +646,7 @@ TEST(config_yaml_edit_rejects_semantic_target_key_aliases) {
 
     yaml_fixture_t list;
     ASSERT_EQ(yaml_fixture_init(&list, cases[2]), 0);
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(list.path, "read", "AGENTS.md"), -1);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(list.path, "read", "AGENTS.md"), -1);
     after = yaml_read_alloc(list.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, cases[2]);
@@ -656,30 +656,30 @@ TEST(config_yaml_edit_rejects_semantic_target_key_aliases) {
 }
 
 TEST(config_yaml_edit_preserves_crlf_and_handles_no_final_newline) {
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
     yaml_fixture_t crlf;
     ASSERT_EQ(yaml_fixture_init(&crlf, "model: fast\r\n"), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(crlf.path, "mcp_servers", "codebase-memory", block), 0);
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(crlf.path, "mcp_servers", "logan-spine", block), 0);
     char *after = yaml_read_alloc(crlf.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, "model: fast\r\n"
                          "mcp_servers:\r\n"
-                         "  codebase-memory:\r\n"
-                         "    command: codebase-memory-mcp\r\n");
+                         "  logan-spine:\r\n"
+                         "    command: logan-spine-mcp\r\n");
     free(after);
     th_cleanup(crlf.dir);
 
     yaml_fixture_t no_final_newline;
     ASSERT_EQ(yaml_fixture_init(&no_final_newline, "model: fast"), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(no_final_newline.path, "mcp_servers", "codebase-memory",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(no_final_newline.path, "mcp_servers", "logan-spine",
                                             block),
               0);
     after = yaml_read_alloc(no_final_newline.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, "model: fast\n"
                          "mcp_servers:\n"
-                         "  codebase-memory:\n"
-                         "    command: codebase-memory-mcp\n");
+                         "  logan-spine:\n"
+                         "    command: logan-spine-mcp\n");
     free(after);
     th_cleanup(no_final_newline.dir);
     PASS();
@@ -693,44 +693,44 @@ TEST(config_yaml_edit_hermes_mapping_lifecycle) {
                           "  other:\n"
                           "    command: other-mcp\n"
                           "theme: dark\n";
-    const char *first_block = "    command: codebase-memory-mcp\n"
+    const char *first_block = "    command: logan-spine-mcp\n"
                               "    args: [\"--stdio\"]\n";
-    const char *replacement_block = "    command: /opt/codebase-memory-mcp\n"
+    const char *replacement_block = "    command: /opt/logan-spine-mcp\n"
                                     "    args: [\"--stdio\"]\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
     ASSERT_EQ(
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", first_block),
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", first_block),
         0);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_NOT_NULL(strstr(installed, "# Hermes settings\n"));
     ASSERT_NOT_NULL(strstr(installed, "  # preserve sibling\n"));
     ASSERT_NOT_NULL(strstr(installed, "  other:\n    command: other-mcp\n"));
-    ASSERT_NOT_NULL(strstr(installed, "  codebase-memory:\n"
-                                      "    command: codebase-memory-mcp\n"
+    ASSERT_NOT_NULL(strstr(installed, "  logan-spine:\n"
+                                      "    command: logan-spine-mcp\n"
                                       "    args: [\"--stdio\"]\n"));
     ASSERT_NOT_NULL(strstr(installed, "theme: dark\n"));
-    ASSERT_EQ(yaml_count_occurrences(installed, "  codebase-memory:\n"), 1);
+    ASSERT_EQ(yaml_count_occurrences(installed, "  logan-spine:\n"), 1);
 
     ASSERT_EQ(
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", first_block),
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", first_block),
         0);
     char *idempotent = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(idempotent);
     ASSERT_STR_EQ(idempotent, installed);
 
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine",
                                             replacement_block),
               0);
     char *replaced = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(replaced);
-    ASSERT_NOT_NULL(strstr(replaced, "    command: /opt/codebase-memory-mcp\n"));
-    ASSERT_NULL(strstr(replaced, "    command: codebase-memory-mcp\n"));
+    ASSERT_NOT_NULL(strstr(replaced, "    command: /opt/logan-spine-mcp\n"));
+    ASSERT_NULL(strstr(replaced, "    command: logan-spine-mcp\n"));
     ASSERT_NOT_NULL(strstr(replaced, "  other:\n    command: other-mcp\n"));
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "mcp_servers", "codebase-memory"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "mcp_servers", "logan-spine"), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, initial);
@@ -744,26 +744,26 @@ TEST(config_yaml_edit_hermes_mapping_lifecycle) {
 }
 
 TEST(config_yaml_edit_hermes_creates_missing_section) {
-    const char *block = "    command: codebase-memory-mcp\n"
+    const char *block = "    command: logan-spine-mcp\n"
                         "    args: [\"--stdio\"]\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, NULL), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block),
               0);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_STR_EQ(installed, "mcp_servers:\n"
-                             "  codebase-memory:\n"
-                             "    command: codebase-memory-mcp\n"
+                             "  logan-spine:\n"
+                             "    command: logan-spine-mcp\n"
                              "    args: [\"--stdio\"]\n");
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "mcp_servers", "codebase-memory"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "mcp_servers", "logan-spine"), 0);
     char *empty = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(empty);
     ASSERT_STR_EQ(empty, "mcp_servers: {}\n");
 
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block),
               0);
     char *reinstalled = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(reinstalled);
@@ -784,24 +784,24 @@ TEST(config_yaml_edit_goose_extensions_preserve_siblings) {
                           "    enabled: false\n"
                           "ui: compact\n";
     const char *block = "    type: stdio\n"
-                        "    cmd: codebase-memory-mcp\n"
+                        "    cmd: logan-spine-mcp\n"
                         "    args: []\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(fixture.path, "extensions", "codebase-memory", block),
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(fixture.path, "extensions", "logan-spine", block),
               0);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_NOT_NULL(strstr(installed, "  shell:\n    type: builtin\n"));
     ASSERT_NOT_NULL(strstr(installed, "  telemetry:\n    enabled: false\n"));
-    ASSERT_NOT_NULL(strstr(installed, "  codebase-memory:\n"
+    ASSERT_NOT_NULL(strstr(installed, "  logan-spine:\n"
                                       "    type: stdio\n"
-                                      "    cmd: codebase-memory-mcp\n"
+                                      "    cmd: logan-spine-mcp\n"
                                       "    args: []\n"));
     ASSERT_NOT_NULL(strstr(installed, "ui: compact\n"));
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "extensions", "codebase-memory"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "extensions", "logan-spine"), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, initial);
@@ -825,7 +825,7 @@ TEST(config_yaml_edit_goose_accepts_empty_flow_mapping_in_sibling_issue1673) {
                           "    timeout: 300\n"
                           "GOOSE_THINKING_EFFORT: max\n";
     const char *block = "    type: stdio\n"
-                        "    cmd: \"/opt/codebase-memory-mcp\"\n"
+                        "    cmd: \"/opt/logan-spine-mcp\"\n"
                         "    args: []\n"
                         "    enabled: true\n";
     const char *expected = "extensions:\n"
@@ -838,18 +838,18 @@ TEST(config_yaml_edit_goose_accepts_empty_flow_mapping_in_sibling_issue1673) {
                            "    envs: {}\n"
                            "    env_keys: []\n"
                            "    timeout: 300\n"
-                           "  codebase-memory-mcp:\n"
+                           "  logan-spine-mcp:\n"
                            "    type: stdio\n"
-                           "    cmd: \"/opt/codebase-memory-mcp\"\n"
+                           "    cmd: \"/opt/logan-spine-mcp\"\n"
                            "    args: []\n"
                            "    enabled: true\n"
                            "GOOSE_THINKING_EFFORT: max\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "codebase-memory-mcp",
+    ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "logan-spine-mcp",
                                                   block),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_STR_EQ(installed, expected);
@@ -870,15 +870,15 @@ TEST(config_yaml_edit_goose_still_rejects_nonempty_flow_mapping_issue1673) {
                           "    env_keys: []\n"
                           "    timeout: 300\n";
     const char *block = "    type: stdio\n"
-                        "    cmd: \"/opt/codebase-memory-mcp\"\n"
+                        "    cmd: \"/opt/logan-spine-mcp\"\n"
                         "    args: []\n"
                         "    enabled: true\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "codebase-memory-mcp",
+    ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "logan-spine-mcp",
                                                   block),
-              CBM_YAML_IDENTITY_EDIT_ERROR);
+              LSM_YAML_IDENTITY_EDIT_ERROR);
     char *unchanged = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(unchanged);
     ASSERT_STR_EQ(unchanged, initial);
@@ -895,15 +895,15 @@ TEST(config_yaml_edit_goose_still_rejects_merge_key_with_empty_mapping_issue1673
                           "    cmd: /bin/true\n"
                           "    <<: {}\n";
     const char *block = "    type: stdio\n"
-                        "    cmd: \"/opt/codebase-memory-mcp\"\n"
+                        "    cmd: \"/opt/logan-spine-mcp\"\n"
                         "    args: []\n"
                         "    enabled: true\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "codebase-memory-mcp",
+    ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "logan-spine-mcp",
                                                   block),
-              CBM_YAML_IDENTITY_EDIT_ERROR);
+              LSM_YAML_IDENTITY_EDIT_ERROR);
     char *unchanged = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(unchanged);
     ASSERT_STR_EQ(unchanged, initial);
@@ -921,10 +921,10 @@ TEST(config_yaml_edit_goose_still_rejects_merge_key_with_empty_mapping_issue1673
  * edit still only appends/replaces our entry and preserves every original
  * byte of the user's content. */
 
-static const char *const yaml_hermes_block = "    command: \"/opt/codebase-memory-mcp\"\n";
+static const char *const yaml_hermes_block = "    command: \"/opt/logan-spine-mcp\"\n";
 
 static int yaml_hermes_upsert(const yaml_fixture_t *fixture) {
-    return cbm_yaml_upsert_owned_mapping_entry(fixture->path, "mcp_servers", "codebase-memory-mcp",
+    return lsm_yaml_upsert_owned_mapping_entry(fixture->path, "mcp_servers", "logan-spine-mcp",
                                                yaml_hermes_block);
 }
 
@@ -933,9 +933,9 @@ static int yaml_hermes_upsert(const yaml_fixture_t *fixture) {
  * constructs break only in the second. */
 static int yaml_hermes_hook_upsert(const yaml_fixture_t *fixture) {
     static const char *const path[] = {"hooks", "pre_llm_call"};
-    return cbm_yaml_upsert_mapping_sequence_item(
-        fixture->path, path, 2U, "id", "\"cbm-context\"",
-        "- id: \"cbm-context\"\n  type: \"command\"\n  command: \"/opt/codebase-memory-mcp\"\n");
+    return lsm_yaml_upsert_mapping_sequence_item(
+        fixture->path, path, 2U, "id", "\"lsm-context\"",
+        "- id: \"lsm-context\"\n  type: \"command\"\n  command: \"/opt/logan-spine-mcp\"\n");
 }
 
 TEST(config_yaml_edit_hermes_accepts_empty_flow_sequence_value_issue1631) {
@@ -943,12 +943,12 @@ TEST(config_yaml_edit_hermes_accepts_empty_flow_sequence_value_issue1631) {
                           "plugins: []\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
-    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "plugins: []\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -959,12 +959,12 @@ TEST(config_yaml_edit_hermes_accepts_empty_flow_mapping_value_issue1631) {
                           "tool_choice: {}\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
-    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "tool_choice: {}\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -978,11 +978,11 @@ TEST(config_yaml_edit_hermes_accepts_column_zero_block_sequence_issue1631) {
                           "model: gpt\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "agents:\n- alpha\n- beta\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -995,12 +995,12 @@ TEST(config_yaml_edit_hermes_accepts_escaped_newline_in_double_quote_issue1631) 
                           "  line two\"\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
-    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "persona: \"line one \\\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -1015,14 +1015,14 @@ TEST(config_yaml_edit_hermes_hook_accepts_column_zero_sequence_issue1631) {
                           "model: gpt\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, path, 2U, "id", "\"cbm-context\"",
-                                                    "- id: \"cbm-context\"\n  type: \"command\"\n"
-                                                    "  command: \"/opt/codebase-memory-mcp\"\n"),
-              CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, path, 2U, "id", "\"lsm-context\"",
+                                                    "- id: \"lsm-context\"\n  type: \"command\"\n"
+                                                    "  command: \"/opt/logan-spine-mcp\"\n"),
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "agents:\n- alpha\n"));
-    ASSERT_NOT_NULL(strstr(after, "cbm-context"));
+    ASSERT_NOT_NULL(strstr(after, "lsm-context"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -1039,12 +1039,12 @@ TEST(config_yaml_edit_hermes_accepts_interior_apostrophe_and_plain_wrap_issue163
                           "  verbose: false\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
-    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "LET'S GOOOO"));
-    ASSERT_NOT_NULL(strstr(after, "cbm-context"));
+    ASSERT_NOT_NULL(strstr(after, "lsm-context"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -1059,14 +1059,14 @@ TEST(config_yaml_edit_accepts_utf8_bom_issue1656) {
     const char *initial = "\xEF\xBB\xBFmodel:\n  default: test\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
-    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_hook_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_EQ(memcmp(after, "\xEF\xBB\xBFmodel:", 9), 0);
     ASSERT_NOT_NULL(strstr(after, "  default: test\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
-    ASSERT_NOT_NULL(strstr(after, "cbm-context"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "lsm-context"));
     free(after);
     th_cleanup(fixture.dir);
     PASS();
@@ -1077,11 +1077,11 @@ TEST(config_yaml_edit_bom_before_our_own_section_stays_single_issue1656) {
      * still see `mcp_servers` — otherwise the upsert misses the existing
      * section and appends a duplicate. */
     const char *initial = "\xEF\xBB\xBFmcp_servers:\n"
-                          "  codebase-memory-mcp:\n"
-                          "    command: \"/opt/codebase-memory-mcp\"\n";
+                          "  logan-spine-mcp:\n"
+                          "    command: \"/opt/logan-spine-mcp\"\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     size_t sections = 0U;
@@ -1108,16 +1108,16 @@ TEST(config_yaml_edit_repairs_prior_unquoted_command_entry_issue1631) {
     const char *initial = "mcp_servers:\n"
                           "  obsidian:\n"
                           "    url: \"<VALUE>\"\n"
-                          "  codebase-memory-mcp:\n"
+                          "  logan-spine-mcp:\n"
                           "    command: C:/Users/Administrator/AppData/Local/Programs/"
-                          "codebase-memory-mcp/codebase-memory-mcp.exe\n";
+                          "logan-spine-mcp/logan-spine-mcp.exe\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_OK);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "  obsidian:\n    url: \"<VALUE>\"\n"));
-    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "command: \"/opt/logan-spine-mcp\"\n"));
     ASSERT_NULL(strstr(after, "Administrator"));
     free(after);
     th_cleanup(fixture.dir);
@@ -1126,25 +1126,25 @@ TEST(config_yaml_edit_repairs_prior_unquoted_command_entry_issue1631) {
 
 TEST(config_yaml_edit_repairs_prior_goose_block_without_name) {
     const char *initial = "extensions:\n"
-                          "  codebase-memory-mcp:\n"
+                          "  logan-spine-mcp:\n"
                           "    type: stdio\n"
-                          "    cmd: \"/old/place/codebase-memory-mcp\"\n"
+                          "    cmd: \"/old/place/logan-spine-mcp\"\n"
                           "    args: []\n"
                           "    enabled: true\n";
-    const char *block = "    name: codebase-memory-mcp\n"
+    const char *block = "    name: logan-spine-mcp\n"
                         "    type: stdio\n"
-                        "    cmd: \"/opt/codebase-memory-mcp\"\n"
+                        "    cmd: \"/opt/logan-spine-mcp\"\n"
                         "    args: []\n"
                         "    enabled: true\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "codebase-memory-mcp",
+    ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, "extensions", "logan-spine-mcp",
                                                   block),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
-    ASSERT_NOT_NULL(strstr(after, "name: codebase-memory-mcp\n"));
-    ASSERT_NOT_NULL(strstr(after, "cmd: \"/opt/codebase-memory-mcp\"\n"));
+    ASSERT_NOT_NULL(strstr(after, "name: logan-spine-mcp\n"));
+    ASSERT_NOT_NULL(strstr(after, "cmd: \"/opt/logan-spine-mcp\"\n"));
     ASSERT_NULL(strstr(after, "/old/place/"));
     free(after);
     th_cleanup(fixture.dir);
@@ -1155,11 +1155,11 @@ TEST(config_yaml_edit_still_refuses_truly_foreign_entry_under_our_key) {
     /* Same key, but the body is not any shape we ever wrote — refuse and
      * leave the file byte-identical. */
     const char *initial = "mcp_servers:\n"
-                          "  codebase-memory-mcp:\n"
+                          "  logan-spine-mcp:\n"
                           "    command: /usr/bin/somebody-elses-tool\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(yaml_hermes_upsert(&fixture), CBM_YAML_IDENTITY_EDIT_FOREIGN);
+    ASSERT_EQ(yaml_hermes_upsert(&fixture), LSM_YAML_IDENTITY_EDIT_FOREIGN);
     char *unchanged = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(unchanged);
     ASSERT_STR_EQ(unchanged, initial);
@@ -1177,22 +1177,22 @@ TEST(config_yaml_edit_owned_agent_mapping_installs_idempotently_and_removes_exac
     } cases[] = {
         {
             "mcp_servers",
-            "    command: \"/opt/codebase-memory-mcp\"\n",
+            "    command: \"/opt/logan-spine-mcp\"\n",
             "mcp_servers:\n"
-            "  codebase-memory-mcp:\n"
-            "    command: \"/opt/codebase-memory-mcp\"\n",
+            "  logan-spine-mcp:\n"
+            "    command: \"/opt/logan-spine-mcp\"\n",
             "mcp_servers: {}\n",
         },
         {
             "extensions",
             "    type: stdio\n"
-            "    cmd: \"/opt/codebase-memory-mcp\"\n"
+            "    cmd: \"/opt/logan-spine-mcp\"\n"
             "    args: []\n"
             "    enabled: true\n",
             "extensions:\n"
-            "  codebase-memory-mcp:\n"
+            "  logan-spine-mcp:\n"
             "    type: stdio\n"
-            "    cmd: \"/opt/codebase-memory-mcp\"\n"
+            "    cmd: \"/opt/logan-spine-mcp\"\n"
             "    args: []\n"
             "    enabled: true\n",
             "extensions: {}\n",
@@ -1202,23 +1202,23 @@ TEST(config_yaml_edit_owned_agent_mapping_installs_idempotently_and_removes_exac
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, NULL), 0);
-        ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
-                                                      "codebase-memory-mcp", cases[i].canonical),
-                  CBM_YAML_IDENTITY_EDIT_OK);
+        ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
+                                                      "logan-spine-mcp", cases[i].canonical),
+                  LSM_YAML_IDENTITY_EDIT_OK);
         char *installed = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(installed);
         ASSERT_STR_EQ(installed, cases[i].installed);
 
-        ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
-                                                      "codebase-memory-mcp", cases[i].canonical),
-                  CBM_YAML_IDENTITY_EDIT_OK);
+        ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
+                                                      "logan-spine-mcp", cases[i].canonical),
+                  LSM_YAML_IDENTITY_EDIT_OK);
         char *idempotent = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(idempotent);
         ASSERT_STR_EQ(idempotent, installed);
 
-        ASSERT_EQ(cbm_yaml_remove_owned_mapping_entry(fixture.path, cases[i].section,
-                                                      "codebase-memory-mcp", cases[i].canonical),
-                  CBM_YAML_IDENTITY_EDIT_OK);
+        ASSERT_EQ(lsm_yaml_remove_owned_mapping_entry(fixture.path, cases[i].section,
+                                                      "logan-spine-mcp", cases[i].canonical),
+                  LSM_YAML_IDENTITY_EDIT_OK);
         char *removed = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(removed);
         ASSERT_STR_EQ(removed, cases[i].empty_section);
@@ -1239,27 +1239,27 @@ TEST(config_yaml_edit_owned_agent_mapping_preserves_foreign_same_name_state) {
     } cases[] = {
         {
             "mcp_servers",
-            "    command: \"/opt/codebase-memory-mcp\"\n",
+            "    command: \"/opt/logan-spine-mcp\"\n",
             "mcp_servers:\n"
-            "  codebase-memory-mcp:\n"
+            "  logan-spine-mcp:\n"
             "    command: \"/opt/user-owned-mcp\"\n",
         },
         {
             "mcp_servers",
-            "    command: \"/opt/codebase-memory-mcp\"\n",
+            "    command: \"/opt/logan-spine-mcp\"\n",
             "mcp_servers:\n"
-            "  codebase-memory-mcp:\n"
-            "    command: \"/opt/codebase-memory-mcp\"\n"
+            "  logan-spine-mcp:\n"
+            "    command: \"/opt/logan-spine-mcp\"\n"
             "    startup_timeout_sec: 45\n",
         },
         {
             "extensions",
             "    type: stdio\n"
-            "    cmd: \"/opt/codebase-memory-mcp\"\n"
+            "    cmd: \"/opt/logan-spine-mcp\"\n"
             "    args: []\n"
             "    enabled: true\n",
             "extensions:\n"
-            "  codebase-memory-mcp:\n"
+            "  logan-spine-mcp:\n"
             "    type: stdio\n"
             "    cmd: \"/opt/user-owned-mcp\"\n"
             "    args: [\"--custom\"]\n"
@@ -1268,13 +1268,13 @@ TEST(config_yaml_edit_owned_agent_mapping_preserves_foreign_same_name_state) {
         {
             "extensions",
             "    type: stdio\n"
-            "    cmd: \"/opt/codebase-memory-mcp\"\n"
+            "    cmd: \"/opt/logan-spine-mcp\"\n"
             "    args: []\n"
             "    enabled: true\n",
             "extensions:\n"
-            "  codebase-memory-mcp:\n"
+            "  logan-spine-mcp:\n"
             "    type: stdio\n"
-            "    cmd: \"/opt/codebase-memory-mcp\"\n"
+            "    cmd: \"/opt/logan-spine-mcp\"\n"
             "    args: []\n"
             "    enabled: true\n"
             "    startup_timeout_sec: 45\n",
@@ -1284,17 +1284,17 @@ TEST(config_yaml_edit_owned_agent_mapping_preserves_foreign_same_name_state) {
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, cases[i].foreign), 0);
-        ASSERT_EQ(cbm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
-                                                      "codebase-memory-mcp", cases[i].canonical),
-                  CBM_YAML_IDENTITY_EDIT_FOREIGN);
+        ASSERT_EQ(lsm_yaml_upsert_owned_mapping_entry(fixture.path, cases[i].section,
+                                                      "logan-spine-mcp", cases[i].canonical),
+                  LSM_YAML_IDENTITY_EDIT_FOREIGN);
         char *after_upsert = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after_upsert);
         ASSERT_STR_EQ(after_upsert, cases[i].foreign);
         free(after_upsert);
 
-        ASSERT_EQ(cbm_yaml_remove_owned_mapping_entry(fixture.path, cases[i].section,
-                                                      "codebase-memory-mcp", cases[i].canonical),
-                  CBM_YAML_IDENTITY_EDIT_FOREIGN);
+        ASSERT_EQ(lsm_yaml_remove_owned_mapping_entry(fixture.path, cases[i].section,
+                                                      "logan-spine-mcp", cases[i].canonical),
+                  LSM_YAML_IDENTITY_EDIT_FOREIGN);
         char *after_remove = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after_remove);
         ASSERT_STR_EQ(after_remove, cases[i].foreign);
@@ -1316,7 +1316,7 @@ TEST(config_yaml_edit_mapping_remove_first_middle_last) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "extensions", "first"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "extensions", "first"), 0);
     char *after_first = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after_first);
     ASSERT_STR_EQ(after_first, "extensions:\n"
@@ -1326,7 +1326,7 @@ TEST(config_yaml_edit_mapping_remove_first_middle_last) {
                                "    type: three\n"
                                "mode: keep\n");
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "extensions", "middle"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "extensions", "middle"), 0);
     char *after_middle = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after_middle);
     ASSERT_STR_EQ(after_middle, "extensions:\n"
@@ -1334,7 +1334,7 @@ TEST(config_yaml_edit_mapping_remove_first_middle_last) {
                                 "    type: three\n"
                                 "mode: keep\n");
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "extensions", "last"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "extensions", "last"), 0);
     char *after_last = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after_last);
     ASSERT_STR_EQ(after_last, "extensions: {}\nmode: keep\n");
@@ -1349,13 +1349,13 @@ TEST(config_yaml_edit_mapping_remove_first_middle_last) {
 TEST(config_yaml_edit_mapping_remove_last_preserves_section_comments) {
     const char *initial = "extensions: # preserve section comment\n"
                           "  # preserve user note\n"
-                          "  codebase-memory:\n"
+                          "  logan-spine:\n"
                           "    type: stdio\n"
                           "mode: keep\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_remove_mapping_entry(fixture.path, "extensions", "codebase-memory"), 0);
+    ASSERT_EQ(lsm_yaml_remove_mapping_entry(fixture.path, "extensions", "logan-spine"), 0);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, "extensions: {} # preserve section comment\n"
@@ -1369,7 +1369,7 @@ TEST(config_yaml_edit_mapping_remove_last_preserves_section_comments) {
 
 TEST(config_yaml_edit_mapping_entry_is_explicit_managed_boundary) {
     const char *initial = "mcp_servers:\n"
-                          "  codebase-memory:\n"
+                          "  logan-spine:\n"
                           "    command: old-binary\n"
                           "    user_added_field: replaced-with-managed-entry\n"
                           "  user-server:\n"
@@ -1380,10 +1380,10 @@ TEST(config_yaml_edit_mapping_entry_is_explicit_managed_boundary) {
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
     ASSERT_EQ(
-        cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", managed), 0);
+        lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", managed), 0);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
-    ASSERT_NOT_NULL(strstr(after, "  codebase-memory:\n"
+    ASSERT_NOT_NULL(strstr(after, "  logan-spine:\n"
                                   "    command: new-binary\n"
                                   "    args: []\n"));
     ASSERT_NULL(strstr(after, "user_added_field"));
@@ -1398,17 +1398,17 @@ TEST(config_yaml_edit_aider_absent_read_key) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, NULL), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_STR_EQ(installed, "read:\n  - \"AGENTS.md\"\n");
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *idempotent = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(idempotent);
     ASSERT_STR_EQ(idempotent, installed);
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, "");
@@ -1427,21 +1427,21 @@ TEST(config_yaml_edit_aider_scalar_read_add_remove) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *added = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(added);
     ASSERT_STR_EQ(added, "model: sonnet\n"
                          "read: [docs.md, \"AGENTS.md\"] # keep read comment\n"
                          "color: auto\n");
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "docs.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "docs.md"), 0);
     char *one_left = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(one_left);
     ASSERT_STR_EQ(one_left, "model: sonnet\n"
                             "read: [\"AGENTS.md\"] # keep read comment\n"
                             "color: auto\n");
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, "model: sonnet\ncolor: auto\n");
@@ -1459,13 +1459,13 @@ TEST(config_yaml_edit_aider_flow_read_add_remove) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "docs:guide #1.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "docs:guide #1.md"), 0);
     char *added = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(added);
     ASSERT_STR_EQ(added, "read: [README.md, 'notes file.md', \"docs:guide #1.md\"] # user list\n"
                          "model: local\n");
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "notes file.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "notes file.md"), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, "read: [README.md, \"docs:guide #1.md\"] # user list\n"
@@ -1486,7 +1486,7 @@ TEST(config_yaml_edit_aider_block_read_add_remove) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *added = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(added);
     ASSERT_STR_EQ(added, "read:\n"
@@ -1496,7 +1496,7 @@ TEST(config_yaml_edit_aider_block_read_add_remove) {
                          "  - \"AGENTS.md\"\n"
                          "model: local\n");
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "docs/file.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "docs/file.md"), 0);
     char *removed_middle = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed_middle);
     ASSERT_STR_EQ(removed_middle, "read:\n"
@@ -1505,7 +1505,7 @@ TEST(config_yaml_edit_aider_block_read_add_remove) {
                                   "  - \"AGENTS.md\"\n"
                                   "model: local\n");
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", "AGENTS.md"), 0);
     char *removed_last = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed_last);
     ASSERT_STR_EQ(removed_last, "read:\n"
@@ -1525,18 +1525,18 @@ TEST(config_yaml_edit_quotes_windows_path_safely) {
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, NULL), 0);
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", item), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", item), 0);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_STR_EQ(installed, "read:\n"
                              "  - \"C:\\\\Users\\\\Ada\\\\My \\\"Notes\\\": #1.md\"\n");
 
-    ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", item), 0);
+    ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", item), 0);
     char *idempotent = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(idempotent);
     ASSERT_STR_EQ(idempotent, installed);
 
-    ASSERT_EQ(cbm_yaml_remove_string_list_item(fixture.path, "read", item), 0);
+    ASSERT_EQ(lsm_yaml_remove_string_list_item(fixture.path, "read", item), 0);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT_STR_EQ(removed, "");
@@ -1551,22 +1551,22 @@ TEST(config_yaml_edit_quotes_windows_path_safely) {
 TEST(config_yaml_edit_mapping_ambiguity_fails_unchanged) {
     const char *cases[] = {
         "mcp_servers:\n  one:\n    command: one\nmcp_servers:\n",
-        ("mcp_servers:\n  codebase-memory:\n    command: one\n"
-         "  codebase-memory:\n    command: two\n"),
-        "mcp_servers:\n   codebase-memory:\n    command: bad-indent\n",
-        "mcp_servers:\n\tcodebase-memory:\n\t\tcommand: tabbed\n",
+        ("mcp_servers:\n  logan-spine:\n    command: one\n"
+         "  logan-spine:\n    command: two\n"),
+        "mcp_servers:\n   logan-spine:\n    command: bad-indent\n",
+        "mcp_servers:\n\tlogan-spine:\n\t\tcommand: tabbed\n",
         "mcp_servers: &shared\n  other:\n    command: other\n",
         "mcp_servers:\n  <<: *defaults\n  other:\n    command: other\n",
-        "mcp_servers: {codebase-memory: {command: codebase-memory-mcp}}\n",
+        "mcp_servers: {logan-spine: {command: logan-spine-mcp}}\n",
         "mcp_servers:\n  other:\n    description: >\n      folded text\n",
     };
-    const char *block = "    command: codebase-memory-mcp\n";
+    const char *block = "    command: logan-spine-mcp\n";
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, cases[i]), 0);
         ASSERT_EQ(
-            cbm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "codebase-memory", block),
+            lsm_yaml_upsert_mapping_entry(fixture.path, "mcp_servers", "logan-spine", block),
             -1);
         char *after = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after);
@@ -1578,7 +1578,7 @@ TEST(config_yaml_edit_mapping_ambiguity_fails_unchanged) {
     yaml_fixture_t invalid_block;
     const char *safe = "mcp_servers:\n  other:\n    command: other\n";
     ASSERT_EQ(yaml_fixture_init(&invalid_block, safe), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(invalid_block.path, "mcp_servers", "codebase-memory",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(invalid_block.path, "mcp_servers", "logan-spine",
                                             "    command: &shared\n"),
               -1);
     char *after_block = yaml_read_alloc(invalid_block.path);
@@ -1589,8 +1589,8 @@ TEST(config_yaml_edit_mapping_ambiguity_fails_unchanged) {
 
     yaml_fixture_t comment_truncation;
     ASSERT_EQ(yaml_fixture_init(&comment_truncation, safe), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(comment_truncation.path, "mcp_servers",
-                                            "codebase-memory",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(comment_truncation.path, "mcp_servers",
+                                            "logan-spine",
                                             "    command: /tmp/tool # truncated\n"),
               -1);
     char *after_comment = yaml_read_alloc(comment_truncation.path);
@@ -1601,7 +1601,7 @@ TEST(config_yaml_edit_mapping_ambiguity_fails_unchanged) {
 
     yaml_fixture_t quoted_hash;
     ASSERT_EQ(yaml_fixture_init(&quoted_hash, safe), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(quoted_hash.path, "mcp_servers", "codebase-memory",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(quoted_hash.path, "mcp_servers", "logan-spine",
                                             "    command: \"/tmp/tool # literal\"\n"),
               0);
     char *after_quoted = yaml_read_alloc(quoted_hash.path);
@@ -1628,7 +1628,7 @@ TEST(config_yaml_edit_list_ambiguity_fails_unchanged) {
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, cases[i]), 0);
-        ASSERT_EQ(cbm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
+        ASSERT_EQ(lsm_yaml_upsert_string_list_item(fixture.path, "read", "AGENTS.md"), -1);
         char *after = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after);
         ASSERT_STR_EQ(after, cases[i]);
@@ -1639,10 +1639,10 @@ TEST(config_yaml_edit_list_ambiguity_fails_unchanged) {
 }
 
 static const char *const yaml_hook_sequence_path[] = {"hooks", "pre_llm_call"};
-static const char yaml_hook_identity[] = "\"codebase-memory-mcp\"";
-static const char yaml_hook_canonical_item[] = "- id: \"codebase-memory-mcp\"\n"
+static const char yaml_hook_identity[] = "\"logan-spine-mcp\"";
+static const char yaml_hook_canonical_item[] = "- id: \"logan-spine-mcp\"\n"
                                                "  type: \"command\"\n"
-                                               "  command: \"/opt/Codebase Memory/bin/cbm\"\n";
+                                               "  command: \"/opt/Logan Spine/bin/lsm\"\n";
 
 TEST(config_yaml_edit_nested_sequence_preserves_siblings_comments_and_is_idempotent) {
     const char *initial = "# user header\n"
@@ -1660,9 +1660,9 @@ TEST(config_yaml_edit_nested_sequence_preserves_siblings_comments_and_is_idempot
                           "model: local\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *installed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(installed);
     ASSERT_NOT_NULL(strstr(installed, "# user header\n"));
@@ -1671,14 +1671,14 @@ TEST(config_yaml_edit_nested_sequence_preserves_siblings_comments_and_is_idempot
     ASSERT_NOT_NULL(strstr(installed, "  session_start:\n"));
     ASSERT_NOT_NULL(strstr(installed, "  post_llm_call:\n"));
     ASSERT_NOT_NULL(strstr(installed, "model: local\n"));
-    ASSERT_NOT_NULL(strstr(installed, "    - id: \"codebase-memory-mcp\"\n"
+    ASSERT_NOT_NULL(strstr(installed, "    - id: \"logan-spine-mcp\"\n"
                                       "      type: \"command\"\n"
-                                      "      command: \"/opt/Codebase Memory/bin/cbm\"\n"));
-    ASSERT_EQ(yaml_count_occurrences(installed, "id: \"codebase-memory-mcp\""), 1U);
+                                      "      command: \"/opt/Logan Spine/bin/lsm\"\n"));
+    ASSERT_EQ(yaml_count_occurrences(installed, "id: \"logan-spine-mcp\""), 1U);
 
-    ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *second = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, installed);
@@ -1697,16 +1697,16 @@ TEST(config_yaml_edit_nested_sequence_creates_missing_file_section_and_list) {
     for (size_t i = 0U; i < sizeof(initial_documents) / sizeof(initial_documents[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, initial_documents[i]), 0);
-        ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
+        ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
                                                         "id", yaml_hook_identity,
                                                         yaml_hook_canonical_item),
-                  CBM_YAML_IDENTITY_EDIT_OK);
+                  LSM_YAML_IDENTITY_EDIT_OK);
         char *installed = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(installed);
         ASSERT_NOT_NULL(strstr(installed, "hooks:\n"));
         ASSERT_NOT_NULL(strstr(installed, "  pre_llm_call:\n"));
-        ASSERT_NOT_NULL(strstr(installed, "    - id: \"codebase-memory-mcp\"\n"));
-        ASSERT_EQ(yaml_count_occurrences(installed, "id: \"codebase-memory-mcp\""), 1U);
+        ASSERT_NOT_NULL(strstr(installed, "    - id: \"logan-spine-mcp\"\n"));
+        ASSERT_EQ(yaml_count_occurrences(installed, "id: \"logan-spine-mcp\""), 1U);
         if (initial_documents[i]) {
             if (strstr(initial_documents[i], "model:")) {
                 ASSERT_NOT_NULL(strstr(installed, "model: local\n"));
@@ -1734,15 +1734,15 @@ TEST(config_yaml_edit_nested_sequence_preserves_crlf) {
     struct stat before;
     ASSERT_EQ(stat(fixture.path, &before), 0);
 #endif
-    ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     for (const char *newline = strchr(after, '\n'); newline; newline = strchr(newline + 1U, '\n')) {
         ASSERT(newline > after && newline[-1] == '\r');
     }
-    ASSERT_NOT_NULL(strstr(after, "    - id: \"codebase-memory-mcp\"\r\n"));
+    ASSERT_NOT_NULL(strstr(after, "    - id: \"logan-spine-mcp\"\r\n"));
 #ifndef _WIN32
     struct stat after_state;
     ASSERT_EQ(stat(fixture.path, &after_state), 0);
@@ -1759,31 +1759,31 @@ TEST(config_yaml_edit_nested_sequence_foreign_identity_is_preserved) {
     const char *cases[] = {
         "hooks:\n"
         "  pre_llm_call:\n"
-        "    - id: \"codebase-memory-mcp\"\n"
+        "    - id: \"logan-spine-mcp\"\n"
         "      type: \"command\"\n"
         "      command: \"foreign\"\n",
         "hooks:\n"
         "  pre_llm_call:\n"
-        "    - id: \"codebase-memory-mcp\"\n"
+        "    - id: \"logan-spine-mcp\"\n"
         "      type: \"command\"\n"
-        "      command: \"/opt/Codebase Memory/bin/cbm\"\n"
+        "      command: \"/opt/Logan Spine/bin/lsm\"\n"
         "      timeout: 30\n",
     };
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, cases[i]), 0);
-        ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
+        ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
                                                         "id", yaml_hook_identity,
                                                         yaml_hook_canonical_item),
-                  CBM_YAML_IDENTITY_EDIT_FOREIGN);
+                  LSM_YAML_IDENTITY_EDIT_FOREIGN);
         char *after_upsert = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after_upsert);
         ASSERT_STR_EQ(after_upsert, cases[i]);
         free(after_upsert);
-        ASSERT_EQ(cbm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
+        ASSERT_EQ(lsm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
                                                         "id", yaml_hook_identity,
                                                         yaml_hook_canonical_item),
-                  CBM_YAML_IDENTITY_EDIT_FOREIGN);
+                  LSM_YAML_IDENTITY_EDIT_FOREIGN);
         char *after_remove = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after_remove);
         ASSERT_STR_EQ(after_remove, cases[i]);
@@ -1798,25 +1798,25 @@ TEST(config_yaml_edit_nested_sequence_removes_only_exact_canonical_item) {
                           "  pre_llm_call:\n"
                           "    - id: \"other-hook\"\n"
                           "      command: \"other\"\n"
-                          "    - id: \"codebase-memory-mcp\"\n"
+                          "    - id: \"logan-spine-mcp\"\n"
                           "      type: \"command\"\n"
-                          "      command: \"/opt/Codebase Memory/bin/cbm\"\n"
+                          "      command: \"/opt/Logan Spine/bin/lsm\"\n"
                           "  post_llm_call:\n"
                           "    - id: \"post\"\n"
                           "      command: \"post\"\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, initial), 0);
-    ASSERT_EQ(cbm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *removed = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(removed);
-    ASSERT_NULL(strstr(removed, "id: \"codebase-memory-mcp\""));
+    ASSERT_NULL(strstr(removed, "id: \"logan-spine-mcp\""));
     ASSERT_NOT_NULL(strstr(removed, "    - id: \"other-hook\"\n"));
     ASSERT_NOT_NULL(strstr(removed, "  post_llm_call:\n"));
-    ASSERT_EQ(cbm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_remove_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_OK);
+              LSM_YAML_IDENTITY_EDIT_OK);
     char *second = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, removed);
@@ -1835,18 +1835,18 @@ TEST(config_yaml_edit_nested_sequence_ambiguity_fails_byte_identically) {
         "hooks: {pre_llm_call: []}\n",
         "hooks:\n  pre_llm_call: [{id: \"other\", command: \"other\"}]\n",
         "hooks:\n  pre_llm_call:\n    - id: \"unterminated\n",
-        "hooks:\n  pre_llm_call:\n    - id: \"codebase-memory-mcp\"\n"
+        "hooks:\n  pre_llm_call:\n    - id: \"logan-spine-mcp\"\n"
         "      command: \"one\"\n"
-        "    - id: \"codebase-memory-mcp\"\n"
+        "    - id: \"logan-spine-mcp\"\n"
         "      command: \"two\"\n",
     };
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
         yaml_fixture_t fixture;
         ASSERT_EQ(yaml_fixture_init(&fixture, cases[i]), 0);
-        ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
+        ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U,
                                                         "id", yaml_hook_identity,
                                                         yaml_hook_canonical_item),
-                  CBM_YAML_IDENTITY_EDIT_ERROR);
+                  LSM_YAML_IDENTITY_EDIT_ERROR);
         char *after = yaml_read_alloc(fixture.path);
         ASSERT_NOT_NULL(after);
         ASSERT_STR_EQ(after, cases[i]);
@@ -1870,14 +1870,14 @@ TEST(config_yaml_edit_accepts_interior_asterisk_in_plain_scalar_issue1631) {
     const char *original = "existing:\n  keep: 1\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_entry(fixture.path, "hooks", "cbm",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_entry(fixture.path, "hooks", "lsm",
                                             "    value: use *emphasis* and 2 * 3\n"),
               0);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_NOT_NULL(strstr(after, "value: use *emphasis* and 2 * 3"));
     free(after);
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -1885,12 +1885,12 @@ TEST(config_yaml_edit_still_refuses_leading_alias_issue1631) {
     const char *original = "existing:\n  keep: 1\n";
     yaml_fixture_t fixture;
     ASSERT_EQ(yaml_fixture_init(&fixture, original), 0);
-    ASSERT(cbm_yaml_upsert_mapping_entry(fixture.path, "hooks", "cbm", "    value: *alias\n") != 0);
+    ASSERT(lsm_yaml_upsert_mapping_entry(fixture.path, "hooks", "lsm", "    value: *alias\n") != 0);
     char *after = yaml_read_alloc(fixture.path);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, original);
     free(after);
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
     th_cleanup(fixture.dir);
     PASS();
 }
@@ -1903,9 +1903,9 @@ TEST(config_yaml_edit_nested_sequence_rejects_symlink_byte_identically) {
     ASSERT(snprintf(target, sizeof(target), "%s/target-hooks.yaml", fixture.dir) > 0);
     ASSERT_EQ(th_write_file(target, original), 0);
     ASSERT_EQ(symlink(target, fixture.path), 0);
-    ASSERT_EQ(cbm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
+    ASSERT_EQ(lsm_yaml_upsert_mapping_sequence_item(fixture.path, yaml_hook_sequence_path, 2U, "id",
                                                     yaml_hook_identity, yaml_hook_canonical_item),
-              CBM_YAML_IDENTITY_EDIT_ERROR);
+              LSM_YAML_IDENTITY_EDIT_ERROR);
     char *after = yaml_read_alloc(target);
     ASSERT_NOT_NULL(after);
     ASSERT_STR_EQ(after, original);
@@ -1913,8 +1913,8 @@ TEST(config_yaml_edit_nested_sequence_rejects_symlink_byte_identically) {
     struct stat link_state;
     ASSERT_EQ(lstat(fixture.path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
-    ASSERT_EQ(cbm_unlink(target), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(target), 0);
     th_cleanup(fixture.dir);
     PASS();
 }

@@ -5,7 +5,7 @@
  * gate, not hook_augment (regresses #214)"
  *
  * Root cause (as filed):
- *   cbm_install_hook_gate_script wrote the legacy blocking shell gate
+ *   lsm_install_hook_gate_script wrote the legacy blocking shell gate
  *   (keyed on $PPID, emitting `exit 2` to block tool calls) instead of the
  *   non-blocking augmenter shim that delegates to `<binary> hook-augment`.
  *   On an upgrade from a pre-v0.7.0 install the old gate script remained on
@@ -13,15 +13,15 @@
  *   was blocked rather than being non-blocking augmented — the exact symptom
  *   of #214 which was supposed to be fixed.
  *
- * Expected (correct) behaviour after cbm_upsert_claude_hooks +
- * cbm_install_hook_gate_script:
+ * Expected (correct) behaviour after lsm_upsert_claude_hooks +
+ * lsm_install_hook_gate_script:
  *   1. The gate script written to
- *      <home>/.claude/hooks/cbm-code-discovery-gate
+ *      <home>/.claude/hooks/lsm-code-discovery-gate
  *      MUST contain "hook-augment" (delegating to the compiled augmenter).
  *   2. The gate script MUST NOT contain "PPID" (the $PPID-keyed blocking
  *      logic) or "exit 2" (the blocking exit code).
  *   3. The settings.json PreToolUse command must reference
- *      "cbm-code-discovery-gate" (the shim), not an inline blocking script.
+ *      "lsm-code-discovery-gate" (the shim), not an inline blocking script.
  *
  * Actual (buggy) behaviour (if bug is present):
  *   The gate script still contains $PPID and exit 2; the assertions below
@@ -34,23 +34,23 @@
  *        a pre-v0.7.0 install.
  *     b) Pre-seeding settings.json with a stale CMM hook entry using the
  *        old "Grep|Glob|Read" matcher and an old command string.
- *   Then running both cbm_upsert_claude_hooks + cbm_install_hook_gate_script
+ *   Then running both lsm_upsert_claude_hooks + lsm_install_hook_gate_script
  *   (the actual install/update code path) and asserting the CORRECT result.
  *
- *   This is the critical gap: existing tests call cbm_install_hook_gate_script
+ *   This is the critical gap: existing tests call lsm_install_hook_gate_script
  *   into an EMPTY directory (no pre-existing script).  The upgrade path
  *   (old script on disk) was not verified to be overwritten correctly.
  *
  * Relationship to existing tests:
  *   cli_hook_gate_script_no_predictable_tmp_issue384 (test_cli.c:2196):
- *     Tests cbm_install_hook_gate_script in isolation on a fresh dir.
+ *     Tests lsm_install_hook_gate_script in isolation on a fresh dir.
  *     Does NOT test the upgrade/overwrite scenario.
  *   cli_upsert_claude_hook_fresh (test_cli.c:2167):
- *     Tests cbm_upsert_claude_hooks in isolation on fresh settings.json.
+ *     Tests lsm_upsert_claude_hooks in isolation on fresh settings.json.
  *     Does NOT test the integrated (both calls) upgrade path.
  *
  * NOTE (2026-06-26): Code review of the current codebase shows that
- * cbm_install_hook_gate_script already uses fopen(path, "w") (truncate)
+ * lsm_install_hook_gate_script already uses fopen(path, "w") (truncate)
  * and writes the non-blocking shim. If this test is GREEN it means the bug
  * is fixed on main and the issue can be closed (the test then acts as a
  * permanent regression guard for this upgrade scenario).
@@ -96,11 +96,11 @@ static int rp409_mkdirp(const char *path) {
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
-            cbm_mkdir(tmp);
+            lsm_mkdir(tmp);
             *p = '/';
         }
     }
-    return cbm_mkdir(tmp) == 0 || errno == EEXIST ? 0 : -1;
+    return lsm_mkdir(tmp) == 0 || errno == EEXIST ? 0 : -1;
 }
 
 /* ── Test ──────────────────────────────────────────────────────────── */
@@ -114,11 +114,11 @@ static int rp409_mkdirp(const char *path) {
  *   - settings.json already contains a stale CMM hook with the old matcher
  *     "Grep|Glob|Read" and an old inline command.
  *
- * After calling cbm_upsert_claude_hooks + cbm_install_hook_gate_script
+ * After calling lsm_upsert_claude_hooks + lsm_install_hook_gate_script
  * (the actual install/update flow), asserts that:
  *   1. The gate script is OVERWRITTEN with the non-blocking shim
  *      (contains "hook-augment", does NOT contain "PPID" or "exit 2").
- *   2. settings.json PreToolUse command references "cbm-code-discovery-gate"
+ *   2. settings.json PreToolUse command references "lsm-code-discovery-gate"
  *      (the shim path), not inline blocking code.
  *   3. settings.json uses the current non-blocking matcher "Grep|Glob"
  *      (not the old "Grep|Glob|Read" that was silently upgrading Read-gating
@@ -128,18 +128,18 @@ static int rp409_mkdirp(const char *path) {
  *   - The gate script still contains "PPID"  (old blocking logic not cleared)
  *   - The gate script still contains "exit 2" (old blocking exit not cleared)
  *   - The gate script does NOT contain "hook-augment" (shim not written)
- *   - settings.json does NOT contain "cbm-code-discovery-gate" (wrong command)
+ *   - settings.json does NOT contain "lsm-code-discovery-gate" (wrong command)
  *
- * Oracle used: cbm_upsert_claude_hooks(settings_path) +
- *              cbm_install_hook_gate_script(home, binary_path)
+ * Oracle used: lsm_upsert_claude_hooks(settings_path) +
+ *              lsm_install_hook_gate_script(home, binary_path)
  * (the same two calls made by install_claude_code_config in cli.c).
  */
 TEST(repro_issue409_install_wires_hook_augment_not_blocking_gate) {
     /* Create a temp HOME directory tree that simulates a pre-v0.7.0 install. */
     char tmpdir[256];
     snprintf(tmpdir, sizeof(tmpdir), "/tmp/rp409-XXXXXX");
-    if (!cbm_mkdtemp(tmpdir))
-        FAIL("cbm_mkdtemp failed");
+    if (!lsm_mkdtemp(tmpdir))
+        FAIL("lsm_mkdtemp failed");
 
     /* Create <home>/.claude/hooks/ (mirrors real Claude Code layout). */
     char hooks_dir[512];
@@ -149,19 +149,19 @@ TEST(repro_issue409_install_wires_hook_augment_not_blocking_gate) {
 
     /* Pre-seed the gate script with the OLD blocking content that the issue
      * reporter observed on v0.7.0.  This is the content that must be
-     * overwritten (truncated) by cbm_install_hook_gate_script. */
+     * overwritten (truncated) by lsm_install_hook_gate_script. */
     char script_path[512];
     snprintf(script_path, sizeof(script_path),
-             "%s/cbm-code-discovery-gate", hooks_dir);
+             "%s/lsm-code-discovery-gate", hooks_dir);
     rp409_write_file(script_path,
         "#!/bin/bash\n"
-        "# Gate hook: nudges Claude toward codebase-memory-mcp for code discovery.\n"
+        "# Gate hook: nudges Claude toward logan-spine-mcp for code discovery.\n"
         "# First Grep/Glob/Read per session -> block. Subsequent -> allow.\n"
         "# PPID = Claude Code process PID, unique per session.\n"
-        "GATE=/tmp/cbm-code-discovery-gate-$PPID\n"
+        "GATE=/tmp/lsm-code-discovery-gate-$PPID\n"
         "if [ -f \"$GATE\" ]; then exit 0; fi\n"
         "touch \"$GATE\"\n"
-        "echo 'BLOCKED: use codebase-memory-mcp' >&2\n"
+        "echo 'BLOCKED: use logan-spine-mcp' >&2\n"
         "exit 2\n");
 
     /* Pre-seed settings.json with a stale CMM hook entry (old matcher). */
@@ -172,20 +172,20 @@ TEST(repro_issue409_install_wires_hook_augment_not_blocking_gate) {
         "{\"hooks\":{\"PreToolUse\":["
         "{\"matcher\":\"Grep|Glob|Read\","
         "\"hooks\":[{\"type\":\"command\","
-        "\"command\":\"~/.claude/hooks/cbm-code-discovery-gate\"}]}]}}");
+        "\"command\":\"~/.claude/hooks/lsm-code-discovery-gate\"}]}]}}");
 
     /* Run the actual install/update hook wiring (same two calls as
      * install_claude_code_config in src/cli/cli.c lines 3045-3046). */
-    int rc = cbm_upsert_claude_hooks(settings_path);
+    int rc = lsm_upsert_claude_hooks(settings_path);
     ASSERT_EQ(rc, 0);
-    cbm_install_hook_gate_script(tmpdir, "/usr/local/bin/codebase-memory-mcp");
+    lsm_install_hook_gate_script(tmpdir, "/usr/local/bin/logan-spine-mcp");
 
     /* ── Assert the gate script was OVERWRITTEN with the non-blocking shim ── */
     const char *script_data = rp409_read_file(script_path);
     ASSERT_NOT_NULL(script_data);
 
     /* MUST NOT contain $PPID: the old blocking gate used
-     * /tmp/cbm-code-discovery-gate-$PPID as a per-invocation state file.
+     * /tmp/lsm-code-discovery-gate-$PPID as a per-invocation state file.
      * If present, the blocking gate was not overwritten -> RED for #409. */
     ASSERT(strstr(script_data, "PPID") == NULL);
 
@@ -204,7 +204,7 @@ TEST(repro_issue409_install_wires_hook_augment_not_blocking_gate) {
 
     /* The PreToolUse command must reference the shim (by its well-known name),
      * not an inline blocking script. */
-    ASSERT(strstr(settings_data, "cbm-code-discovery-gate") != NULL);
+    ASSERT(strstr(settings_data, "lsm-code-discovery-gate") != NULL);
 
     /* The old "Grep|Glob|Read" matcher (which gated Read calls, breaking
      * the read-before-edit invariant per issue #362) must have been replaced

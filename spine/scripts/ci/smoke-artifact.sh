@@ -8,7 +8,7 @@
 #   build → derive stripped/unstripped pair → default-select stripped →
 #   byte-preserving package → extract →
 #   the SAME canonical wrapper the remote venue runs, in artifact mode
-#   (CBM_SMOKE_ARTIFACT_DIR), whose completeness checks make a broken or
+#   (LSM_SMOKE_ARTIFACT_DIR), whose completeness checks make a broken or
 #   incomplete archive a loud failure.
 
 set -euo pipefail
@@ -23,8 +23,8 @@ Usage: scripts/ci/smoke-artifact.sh <goos> <goarch> [VAR=VAL ...]
 Build → derive both release candidates → select stripped (local, unscanned) →
 package immutable bytes → extract → smoke the EXTRACTED artifact through the
 canonical wrapper, exactly like the release venue:
-  unix:    scripts/smoke-local.sh with CBM_SMOKE_ARTIFACT_DIR
-  windows: test-infrastructure/vm/vm-smoke.sh with CBM_SMOKE_ARTIFACT_DIR
+  unix:    scripts/smoke-local.sh with LSM_SMOKE_ARTIFACT_DIR
+  windows: test-infrastructure/vm/vm-smoke.sh with LSM_SMOKE_ARTIFACT_DIR
            (run inside the VM/CI msys2 shell)
 
 Make passthrough (VAR=VAL): CC= CXX= STATIC=1 ... forwarded to build steps.
@@ -69,7 +69,7 @@ export BUILD_DIR
 scripts/build.sh ${UI_FLAG[@]+"${UI_FLAG[@]}"} \
     BUILD_DIR="$BUILD_DIR" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cbm-smoke-artifact.XXXXXX")"
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lsm-smoke-artifact.XXXXXX")"
 cleanup() {
     local status=$?
     trap - EXIT
@@ -82,7 +82,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-SOURCE_BINARY="$BUILD_DIR/codebase-memory-mcp"
+SOURCE_BINARY="$BUILD_DIR/logan-spine-mcp"
 if [ "$GOOS" = "windows" ] && [ -f "${SOURCE_BINARY}.exe" ]; then
     SOURCE_BINARY="${SOURCE_BINARY}.exe"
 fi
@@ -95,8 +95,8 @@ CANDIDATE_ROOT="$WORK_DIR/candidates"
 scripts/ci/prepare-release-candidates.sh "$GOOS" "$GOARCH" \
     --binary "$SOURCE_BINARY" --out-dir "$CANDIDATE_ROOT"
 
-SELECTED_NAME="codebase-memory-mcp"
-[ "$GOOS" = "windows" ] && SELECTED_NAME="codebase-memory-mcp.exe"
+SELECTED_NAME="logan-spine-mcp"
+[ "$GOOS" = "windows" ] && SELECTED_NAME="logan-spine-mcp.exe"
 SELECTED_BINARY="$CANDIDATE_ROOT/${GOOS}-${GOARCH}/stripped/$SELECTED_NAME"
 [ -f "$SELECTED_BINARY" ] || {
     echo "smoke-artifact: candidate derivation did not produce $SELECTED_BINARY" >&2
@@ -129,24 +129,24 @@ scripts/package-release.sh "$GOOS" "$GOARCH" \
     --third-party-notices "$NOTICES" \
     --out-dir "$WORK_DIR"
 
-NAME="codebase-memory-mcp-${GOOS}-${GOARCH}"
+NAME="logan-spine-mcp-${GOOS}-${GOARCH}"
 EXTRACT_DIR="$WORK_DIR/extract"
 mkdir -p "$EXTRACT_DIR"
 if [ "$GOOS" = "windows" ]; then
     unzip -q -o "$WORK_DIR/$NAME.zip" -d "$EXTRACT_DIR"
-    test -s "$EXTRACT_DIR/codebase-memory-mcp.exe"
+    test -s "$EXTRACT_DIR/logan-spine-mcp.exe"
     # ONE binary per platform: a payload sibling means the AV-flagged launcher
     # stub came back.
-    test ! -e "$EXTRACT_DIR/codebase-memory-mcp.payload.exe"
+    test ! -e "$EXTRACT_DIR/logan-spine-mcp.payload.exe"
     echo "=== smoke-artifact: smoking EXTRACTED $NAME.zip via vm-smoke.sh ==="
     SMOKE_ARCH="$GOARCH" \
-        CBM_SMOKE_ARTIFACT_DIR="$EXTRACT_DIR" \
+        LSM_SMOKE_ARTIFACT_DIR="$EXTRACT_DIR" \
         bash test-infrastructure/vm/vm-smoke.sh
 else
     tar -xzf "$WORK_DIR/$NAME.tar.gz" -C "$EXTRACT_DIR"
-    chmod +x "$EXTRACT_DIR/codebase-memory-mcp"
+    chmod +x "$EXTRACT_DIR/logan-spine-mcp"
     echo "=== smoke-artifact: smoking EXTRACTED $NAME.tar.gz via smoke-local.sh ==="
-    CBM_SMOKE_ARTIFACT_DIR="$EXTRACT_DIR" \
-        scripts/smoke-local.sh "$EXTRACT_DIR/codebase-memory-mcp"
+    LSM_SMOKE_ARTIFACT_DIR="$EXTRACT_DIR" \
+        scripts/smoke-local.sh "$EXTRACT_DIR/logan-spine-mcp"
 fi
 echo "=== smoke-artifact: $NAME passed ==="

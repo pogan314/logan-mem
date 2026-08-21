@@ -5,7 +5,7 @@
  * ── CONTEXT ─────────────────────────────────────────────────────────────────
  * This suite tests the GRAPH LEVEL (pipeline / edge-creation), NOT extraction.
  * A real-repo sanity check (2026-06) found IMPORTS edges ≈ 0 for several
- * languages even though CBMFileResult.imports IS populated at extraction time:
+ * languages even though LSMFileResult.imports IS populated at extraction time:
  *
  *   Language     import keyword   real-repo edges   status
  *   ----------   --------------   ---------------   --------
@@ -21,7 +21,7 @@
  * ── WHAT THIS FILE TESTS ────────────────────────────────────────────────────
  * Each test indexes a small multi-file fixture through the FULL production
  * pipeline (index_repository → graph DB), then asserts:
- *   cbm_store_count_edges_by_type(store, project, "IMPORTS") >= N
+ *   lsm_store_count_edges_by_type(store, project, "IMPORTS") >= N
  *
  * GREEN (guard) tests: Python, TypeScript, Go — these already produce IMPORTS
  * edges and MUST keep doing so. A RED here is a real regression.
@@ -46,7 +46,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -64,7 +64,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } EILangProj;
 
 typedef struct {
@@ -84,10 +84,10 @@ static void ei_to_fwd_slashes(char *p) {
 }
 
 /* Write files, run index_repository, open graph DB.  Returns NULL on failure. */
-static cbm_store_t *ei_index_files(EILangProj *lp, const EILangFile *files, int nfiles) {
+static lsm_store_t *ei_index_files(EILangProj *lp, const EILangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_ei_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir))
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_ei_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir))
         return NULL;
     ei_to_fwd_slashes(lp->tmpdir);
 
@@ -98,7 +98,7 @@ static cbm_store_t *ei_index_files(EILangProj *lp, const EILangFile *files, int 
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -112,7 +112,7 @@ static cbm_store_t *ei_index_files(EILangProj *lp, const EILangFile *files, int 
      * otherwise drop the previous heap name on the floor. Teardown frees the
      * last one. */
     free(lp->project);
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project)
         return NULL;
 
@@ -120,22 +120,22 @@ static cbm_store_t *ei_index_files(EILangProj *lp, const EILangFile *files, int 
     if (!home)
         home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
 
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv)
         return NULL;
 
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp)
         free(resp);
 
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
 static char *ei_slurp_file(const char *path) {
@@ -167,7 +167,7 @@ static char *ei_slurp_file(const char *path) {
     return buf;
 }
 
-static cbm_store_t *ei_index_fixture_files(EILangProj *lp, const char *fixture_root,
+static lsm_store_t *ei_index_fixture_files(EILangProj *lp, const char *fixture_root,
                                            const EILangFixtureFile *files, int nfiles) {
     EILangFile *loaded = (EILangFile *)calloc((size_t)nfiles, sizeof(EILangFile));
     char **contents = (char **)calloc((size_t)nfiles, sizeof(char *));
@@ -177,7 +177,7 @@ static cbm_store_t *ei_index_fixture_files(EILangProj *lp, const char *fixture_r
         return NULL;
     }
 
-    cbm_store_t *store = NULL;
+    lsm_store_t *store = NULL;
     for (int i = 0; i < nfiles; i++) {
         char path[512];
         snprintf(path, sizeof(path), "%s/%s", fixture_root, files[i].name);
@@ -200,11 +200,11 @@ done:
     return store;
 }
 
-static int64_t ei_node_id_for_file_label(cbm_store_t *store, const char *project,
+static int64_t ei_node_id_for_file_label(lsm_store_t *store, const char *project,
                                          const char *file_path, const char *label) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_file(store, project, file_path, &nodes, &count) != CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_file(store, project, file_path, &nodes, &count) != LSM_STORE_OK) {
         return 0;
     }
     int64_t id = 0;
@@ -217,15 +217,15 @@ static int64_t ei_node_id_for_file_label(cbm_store_t *store, const char *project
     if (id == 0 && count > 0) {
         id = nodes[0].id;
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return id;
 }
 
-static void ei_cleanup(EILangProj *lp, cbm_store_t *store) {
+static void ei_cleanup(EILangProj *lp, lsm_store_t *store) {
     if (store)
-        cbm_store_close(store);
+        lsm_store_close(store);
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -243,8 +243,8 @@ static void ei_cleanup(EILangProj *lp, cbm_store_t *store) {
  * failure so failures are self-diagnosable without re-running manually. */
 static int ei_edge_present(const EILangFile *files, int nfiles, const char *edge_type, int floor) {
     EILangProj lp;
-    cbm_store_t *store = ei_index_files(&lp, files, nfiles);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, edge_type) : -1;
+    lsm_store_t *store = ei_index_files(&lp, files, nfiles);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, edge_type) : -1;
     if (got < floor) {
         fprintf(stderr, "  [%s] FAIL count=%d expected>=%d\n", edge_type, got, floor);
     }
@@ -522,7 +522,7 @@ TEST(ei_cpp_header_include_targets_header_file) {
     };
 
     EILangProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         ei_index_fixture_files(&lp, "tests/fixtures/cpp_include", fixture_files,
                                (int)(sizeof(fixture_files) / sizeof(fixture_files[0])));
     ASSERT_NOT_NULL(store);
@@ -537,19 +537,19 @@ TEST(ei_cpp_header_include_targets_header_file) {
     ASSERT_GT(node_source_id, 0);
     ASSERT_GT(system_source_id, 0);
 
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    int rc = cbm_store_find_edges_by_source_type(store, main_id, "IMPORTS", &edges, &edge_count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_edges_by_source_type(store, main_id, "IMPORTS", &edges, &edge_count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_TRUE(edge_count >= 2);
 
     bool saw_node_header = false;
     bool saw_system_header = false;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t *target = (cbm_node_t *)calloc(1, sizeof(cbm_node_t));
+        lsm_node_t *target = (lsm_node_t *)calloc(1, sizeof(lsm_node_t));
 
         /* Pass target directly (no &) because it is already a pointer */
-        ASSERT_EQ(cbm_store_find_node_by_id(store, edges[i].target_id, target), CBM_STORE_OK);
+        ASSERT_EQ(lsm_store_find_node_by_id(store, edges[i].target_id, target), LSM_STORE_OK);
         ASSERT_EQ(edges[i].source_id, main_id);
         ASSERT_NEQ(edges[i].target_id, node_source_id);
         ASSERT_NEQ(edges[i].target_id, system_source_id);
@@ -563,9 +563,9 @@ TEST(ei_cpp_header_include_targets_header_file) {
         }
 
         /* Free the node inside the loop */
-        cbm_store_free_nodes(target, 1);
+        lsm_store_free_nodes(target, 1);
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
 
     ASSERT_TRUE(saw_node_header);
     ASSERT_TRUE(saw_system_header);

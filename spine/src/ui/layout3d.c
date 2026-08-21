@@ -37,7 +37,7 @@
 #define LOCAL_ITERATIONS 40
 #define Z_DEPTH_SPACING 50.0f /* gentle z-layering per call depth */
 
-/* cbm_store_batch_count_degrees builds a bound "?,?,..." IN clause into a fixed
+/* lsm_store_batch_count_degrees builds a bound "?,?,..." IN clause into a fixed
  * 4KB buffer (~2045 placeholders max) but binds every id passed — so calling it
  * with more ids than fit silently drops the tail (their degree stays 0, which
  * here would masquerade as dead code). Feed it in safe-sized chunks. */
@@ -173,11 +173,11 @@ static float rand_float(uint32_t *seed) {
     return (float)((*seed >> 16) & 0x7FFF) / 32768.0f - 0.5f;
 }
 
-/* Ceiling for a caller-requested node budget. CBM_UI_MAX_RENDER_NODES lowers
+/* Ceiling for a caller-requested node budget. LSM_UI_MAX_RENDER_NODES lowers
  * (or raises, up to HARD_MAX_NODES) the ceiling for constrained deployments;
  * without it the full hard ceiling is available to explicit requests. */
 static int render_node_limit(void) {
-    const char *raw = getenv("CBM_UI_MAX_RENDER_NODES");
+    const char *raw = getenv("LSM_UI_MAX_RENDER_NODES");
     if (!raw || !raw[0]) {
         return HARD_MAX_NODES;
     }
@@ -217,7 +217,7 @@ typedef struct octree_node {
 } octree_node_t;
 
 static octree_node_t *octree_new(float ox, float oy, float oz, float half) {
-    octree_node_t *n = calloc(CBM_ALLOC_ONE, sizeof(*n));
+    octree_node_t *n = calloc(LSM_ALLOC_ONE, sizeof(*n));
     if (!n)
         return NULL;
     n->ox = ox;
@@ -461,7 +461,7 @@ static void compute_call_depth(int n, const int *es, const int *ed, int ne, cons
 
 /* ── Helpers ──────────────────────────────────────────────────── */
 
-static void free_edge_array(cbm_edge_t *edges, int count) {
+static void free_edge_array(lsm_edge_t *edges, int count) {
     if (!edges)
         return;
     for (int i = 0; i < count; i++) {
@@ -499,13 +499,13 @@ static int find_node_index(const node_id_entry_t *map, int count, int64_t id) {
             hi = mid - SKIP_ONE;
         }
     }
-    return CBM_NOT_FOUND;
+    return LSM_NOT_FOUND;
 }
 
 /* ── Public API ───────────────────────────────────────────────── */
 
-cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
-                                        cbm_layout_level_t level, const char *center_node,
+lsm_layout_result_t *lsm_layout_compute(lsm_store_t *store, const char *project,
+                                        lsm_layout_level_t level, const char *center_node,
                                         int radius, int max_nodes) {
     if (!store || !project)
         return NULL;
@@ -515,22 +515,22 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
     (void)level;
 
     /* 1. Query nodes */
-    cbm_search_params_t params;
+    lsm_search_params_t params;
     memset(&params, 0, sizeof(params));
     params.project = project;
     params.limit = max_nodes;
     params.min_degree = -1;
     params.max_degree = -1;
 
-    cbm_search_output_t search_out;
+    lsm_search_output_t search_out;
     memset(&search_out, 0, sizeof(search_out));
-    if (cbm_store_search(store, &params, &search_out) != CBM_STORE_OK)
-        return calloc(CBM_ALLOC_ONE, sizeof(cbm_layout_result_t));
+    if (lsm_store_search(store, &params, &search_out) != LSM_STORE_OK)
+        return calloc(LSM_ALLOC_ONE, sizeof(lsm_layout_result_t));
 
     int n = search_out.count, total_count = search_out.total;
     if (n == 0) {
-        cbm_store_search_free(&search_out);
-        cbm_layout_result_t *r = calloc(CBM_ALLOC_ONE, sizeof(*r));
+        lsm_store_search_free(&search_out);
+        lsm_layout_result_t *r = calloc(LSM_ALLOC_ONE, sizeof(*r));
         if (r)
             r->total_nodes = total_count;
         return r;
@@ -539,8 +539,8 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
     /* 2. Build sorted node-ID → index map for O(log n) edge filtering */
     node_id_entry_t *id_map = malloc((size_t)n * sizeof(node_id_entry_t));
     if (!id_map) {
-        cbm_store_search_free(&search_out);
-        cbm_layout_result_t *r = calloc(CBM_ALLOC_ONE, sizeof(*r));
+        lsm_store_search_free(&search_out);
+        lsm_layout_result_t *r = calloc(LSM_ALLOC_ONE, sizeof(*r));
         if (r) {
             r->total_nodes = total_count;
         }
@@ -555,26 +555,26 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
     /* 3. Query edges — filter during fetch via binary search (O(e log n)) */
     int *deg = calloc((size_t)n, sizeof(int));
     int mapped = 0;
-    int edge_cap = CBM_SZ_256;
-    cbm_edge_t *all_edges = malloc((size_t)edge_cap * sizeof(cbm_edge_t));
+    int edge_cap = LSM_SZ_256;
+    lsm_edge_t *all_edges = malloc((size_t)edge_cap * sizeof(lsm_edge_t));
     int *es = malloc((size_t)edge_cap * sizeof(int));
     int *ed = malloc((size_t)edge_cap * sizeof(int));
-    cbm_schema_info_t schema;
+    lsm_schema_info_t schema;
     memset(&schema, 0, sizeof(schema));
     if (deg && all_edges && es && ed &&
-        cbm_store_get_schema(store, project, &schema) == CBM_STORE_OK) {
+        lsm_store_get_schema(store, project, &schema) == LSM_STORE_OK) {
         for (int t = 0; t < schema.edge_type_count; t++) {
-            cbm_edge_t *te = NULL;
+            lsm_edge_t *te = NULL;
             int tc = 0;
-            if (cbm_store_find_edges_by_type(store, project, schema.edge_types[t].type, &te, &tc) ==
-                CBM_STORE_OK) {
+            if (lsm_store_find_edges_by_type(store, project, schema.edge_types[t].type, &te, &tc) ==
+                LSM_STORE_OK) {
                 for (int e = 0; e < tc; e++) {
                     int si = find_node_index(id_map, n, te[e].source_id);
                     int di = find_node_index(id_map, n, te[e].target_id);
                     if (si >= 0 && di >= 0) {
                         if (mapped >= edge_cap) {
                             int nc = edge_cap * PAIR_LEN;
-                            cbm_edge_t *te2 = realloc(all_edges, (size_t)nc * sizeof(cbm_edge_t));
+                            lsm_edge_t *te2 = realloc(all_edges, (size_t)nc * sizeof(lsm_edge_t));
                             int *ts = realloc(es, (size_t)nc * sizeof(int));
                             int *td = realloc(ed, (size_t)nc * sizeof(int));
                             if (!te2 || !ts || !td) {
@@ -593,7 +593,7 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
                             edge_cap = nc;
                         }
                         all_edges[mapped] = te[e];
-                        memset(&te[e], 0, sizeof(cbm_edge_t));
+                        memset(&te[e], 0, sizeof(lsm_edge_t));
                         es[mapped] = si;
                         ed[mapped] = di;
                         deg[si]++;
@@ -609,7 +609,7 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
             }
         }
     edges_done:
-        cbm_store_schema_free(&schema);
+        lsm_store_schema_free(&schema);
     }
     free(id_map);
 
@@ -626,19 +626,19 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
 
     /* 5. Seed positions: ring by directory cluster key + z from call depth */
     body_t *bodies = calloc((size_t)n, sizeof(body_t));
-    cbm_layout_result_t *result = calloc(CBM_ALLOC_ONE, sizeof(*result));
+    lsm_layout_result_t *result = calloc(LSM_ALLOC_ONE, sizeof(*result));
     if (!result || !bodies) {
         free(bodies);
         free(deg);
         free(es);
         free(ed);
         free(cdepth);
-        cbm_layout_free(result);
+        lsm_layout_free(result);
         free_edge_array(all_edges, mapped);
-        cbm_store_search_free(&search_out);
+        lsm_store_search_free(&search_out);
         return NULL;
     }
-    result->nodes = calloc((size_t)n, sizeof(cbm_layout_node_t));
+    result->nodes = calloc((size_t)n, sizeof(lsm_layout_node_t));
     result->node_count = n;
     result->total_nodes = total_count;
 
@@ -658,13 +658,13 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
             node_ids[i] = search_out.results[i].node.id;
         for (int off = 0; off < n; off += DEAD_DEGREE_CHUNK) {
             int cnt = (n - off < DEAD_DEGREE_CHUNK) ? (n - off) : DEAD_DEGREE_CHUNK;
-            if (cbm_store_batch_count_degrees(store, node_ids + off, cnt, "CALLS", in_calls + off,
-                                              deg_dummy + off) != CBM_STORE_OK ||
-                cbm_store_batch_count_degrees(store, node_ids + off, cnt, "USAGE", in_usage + off,
-                                              deg_dummy + off) != CBM_STORE_OK ||
-                cbm_store_batch_count_degrees(store, node_ids + off, cnt, "CALL_REFERENCE",
+            if (lsm_store_batch_count_degrees(store, node_ids + off, cnt, "CALLS", in_calls + off,
+                                              deg_dummy + off) != LSM_STORE_OK ||
+                lsm_store_batch_count_degrees(store, node_ids + off, cnt, "USAGE", in_usage + off,
+                                              deg_dummy + off) != LSM_STORE_OK ||
+                lsm_store_batch_count_degrees(store, node_ids + off, cnt, "CALL_REFERENCE",
                                               in_call_reference + off,
-                                              deg_dummy + off) != CBM_STORE_OK) {
+                                              deg_dummy + off) != LSM_STORE_OK) {
                 dead_degrees_valid = false;
                 break;
             }
@@ -672,11 +672,11 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
     }
 
     for (int i = 0; i < n; i++) {
-        const cbm_node_t *sn = &search_out.results[i].node;
+        const lsm_node_t *sn = &search_out.results[i].node;
         const char *fp = sn->file_path ? sn->file_path : "";
 
         /* Cluster key = first 3 dir components */
-        char ck[CBM_SZ_256] = {0};
+        char ck[LSM_SZ_256] = {0};
         {
             const char *p = fp;
             int sl = 0, ki = 0;
@@ -727,7 +727,7 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
         node_flags_t nf = parse_node_flags(sn->properties_json);
         bool is_fn =
             sn->label && (strcmp(sn->label, "Function") == 0 || strcmp(sn->label, "Method") == 0);
-        bool testish = nf.is_test || (sn->file_path && cbm_is_test_file_path(sn->file_path));
+        bool testish = nf.is_test || (sn->file_path && lsm_is_test_file_path(sn->file_path));
         int ic = dead_degrees_valid ? in_calls[i] : 1;
         int iu = dead_degrees_valid ? in_usage[i] + in_call_reference[i] : 1;
         const char *status;
@@ -761,7 +761,7 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
 
     /* 8. Output edges */
     if (mapped > 0) {
-        result->edges = calloc((size_t)mapped, sizeof(cbm_layout_edge_t));
+        result->edges = calloc((size_t)mapped, sizeof(lsm_layout_edge_t));
         result->edge_count = mapped;
         for (int e = 0; e < mapped && result->edges; e++) {
             result->edges[e].source = search_out.results[es[e]].node.id;
@@ -781,11 +781,11 @@ cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
     free(in_call_reference);
     free(deg_dummy);
     free_edge_array(all_edges, mapped);
-    cbm_store_search_free(&search_out);
+    lsm_store_search_free(&search_out);
     return result;
 }
 
-void cbm_layout_free(cbm_layout_result_t *r) {
+void lsm_layout_free(lsm_layout_result_t *r) {
     if (!r)
         return;
     for (int i = 0; i < r->node_count; i++) {
@@ -801,7 +801,7 @@ void cbm_layout_free(cbm_layout_result_t *r) {
     free(r);
 }
 
-char *cbm_layout_to_json(const cbm_layout_result_t *r) {
+char *lsm_layout_to_json(const lsm_layout_result_t *r) {
     if (!r)
         return NULL;
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
@@ -832,7 +832,7 @@ char *cbm_layout_to_json(const cbm_layout_result_t *r) {
             yyjson_mut_obj_add_int(doc, nd, "end_line", r->nodes[i].end_line);
         double nsz = isfinite(r->nodes[i].size) ? (double)r->nodes[i].size : 1.0;
         yyjson_mut_obj_add_real(doc, nd, "size", nsz);
-        char hex[CBM_SZ_8];
+        char hex[LSM_SZ_8];
         snprintf(hex, sizeof(hex), "#%06x", r->nodes[i].color);
         yyjson_mut_obj_add_strcpy(doc, nd, "color", hex);
         yyjson_mut_obj_add_int(doc, nd, "in_calls", r->nodes[i].in_calls);
@@ -860,9 +860,9 @@ char *cbm_layout_to_json(const cbm_layout_result_t *r) {
         yyjson_mut_write_opts(doc, YYJSON_WRITE_ALLOW_INVALID_UNICODE, NULL, &len, &write_err);
     yyjson_mut_doc_free(doc);
     if (!json) {
-        char code[CBM_SZ_32];
+        char code[LSM_SZ_32];
         snprintf(code, sizeof(code), "%u", write_err.code);
-        cbm_log_error("layout.json.fail", "code", code, "msg",
+        lsm_log_error("layout.json.fail", "code", code, "msg",
                       write_err.msg ? write_err.msg : "unknown");
     }
     return json;

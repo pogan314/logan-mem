@@ -1,7 +1,7 @@
 /*
  * test_go_lsp.c — Tests for Go LSP type-aware call resolution.
  *
- * Ports from internal/cbm/lsp_test.go (49 tests).
+ * Ports from internal/lsm/lsp_test.go (49 tests).
  * Categories:
  *   - Single-file: param type inference, return type propagation, method chaining,
  *     multi-return, channels, range, type switch, closures, composites, builtins,
@@ -10,23 +10,23 @@
  *     field chains, map index, stdlib interfaces
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/go_lsp.h"
 #include "pipeline/lsp_resolve.h"
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
-/* Extract a Go file using cbm_extract_file (runs single-file LSP internally) */
-static CBMFileResult *extract_go(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_GO, "test", "main.go", 0, NULL,
+/* Extract a Go file using lsm_extract_file (runs single-file LSP internally) */
+static LSMFileResult *extract_go(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_GO, "test", "main.go", 0, NULL,
                             NULL);
 }
 
 /* Search resolved_calls for a match where caller contains callerSub
  * and callee contains calleeSub. Returns index or -1. */
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -35,13 +35,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
 }
 
 /* Assert that a resolved call exists. Returns the index. */
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("  MISSING resolved call: caller~%s -> callee~%s (have %d)\n", callerSub, calleeSub,
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)", rc->strategy ? rc->strategy : "(null)",
                    rc->confidence);
@@ -51,10 +51,10 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
 }
 
 /* Count resolved calls matching pattern */
-static int count_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int count_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int n = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             n++;
@@ -63,10 +63,10 @@ static int count_resolved(const CBMFileResult *r, const char *callerSub, const c
 }
 
 /* Search cross-file resolved calls array */
-static int find_resolved_arr(const CBMResolvedCallArray *arr, const char *callerSub,
+static int find_resolved_arr(const LSMResolvedCallArray *arr, const char *callerSub,
                              const char *calleeSub) {
     for (int i = 0; i < arr->count; i++) {
-        const CBMResolvedCall *rc = &arr->items[i];
+        const LSMResolvedCall *rc = &arr->items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -74,10 +74,10 @@ static int find_resolved_arr(const CBMResolvedCallArray *arr, const char *caller
     return -1;
 }
 
-static int find_resolved_arr_confident(const CBMResolvedCallArray *arr, const char *callerSub,
+static int find_resolved_arr_confident(const LSMResolvedCallArray *arr, const char *callerSub,
                                        const char *calleeSub) {
     for (int i = 0; i < arr->count; i++) {
-        const CBMResolvedCall *rc = &arr->items[i];
+        const LSMResolvedCall *rc = &arr->items[i];
         if (rc->confidence > 0 && rc->caller_qn && strstr(rc->caller_qn, callerSub) &&
             rc->callee_qn && strstr(rc->callee_qn, calleeSub))
             return i;
@@ -88,18 +88,18 @@ static int find_resolved_arr_confident(const CBMResolvedCallArray *arr, const ch
 /* ── Category 1: Parameter type inference ──────────────────────── */
 
 TEST(golsp_param_type_simple) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Database struct{}\n\n"
                                   "func (d *Database) Query(sql string) string { return \"\" }\n\n"
                                   "func doWork(db *Database) {\n\tdb.Query(\"SELECT 1\")\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doWork", "Query"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_param_type_multi) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Logger struct{}\ntype Config struct{}\n\n"
                                   "func (l *Logger) Info(msg string) {}\n"
                                   "func (c *Config) Get(key string) string { return \"\" }\n\n"
@@ -108,14 +108,14 @@ TEST(golsp_param_type_multi) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "setup", "Info"), 0);
     ASSERT_GTE(require_resolved(r, "setup", "Get"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 2: Return type propagation ───────────────────────── */
 
 TEST(golsp_return_type) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type File struct{}\n\n"
                    "func (f *File) Read(buf []byte) int { return 0 }\n"
@@ -123,12 +123,12 @@ TEST(golsp_return_type) {
                    "func doRead() {\n\tf := Open(\"/tmp/test\")\n\tf.Read(nil)\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doRead", "Read"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_return_type_chain) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Builder struct{}\ntype Result struct{}\n\n"
                    "func (b *Builder) Build() *Result { return nil }\n"
@@ -138,14 +138,14 @@ TEST(golsp_return_type_chain) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doChain", "Build"), 0);
     ASSERT_GTE(require_resolved(r, "doChain", "String"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 3: Method chaining ───────────────────────────────── */
 
 TEST(golsp_method_chaining) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Query struct{}\n\n"
                    "func (q *Query) Where(cond string) *Query { return q }\n"
@@ -157,14 +157,14 @@ TEST(golsp_method_chaining) {
     ASSERT_GTE(require_resolved(r, "doQuery", "Where"), 0);
     ASSERT_GTE(require_resolved(r, "doQuery", "Limit"), 0);
     ASSERT_GTE(require_resolved(r, "doQuery", "Execute"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 4: Multi-return ──────────────────────────────────── */
 
 TEST(golsp_multi_return) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Conn struct{}\n\n"
                    "func (c *Conn) Close() error { return nil }\n"
@@ -172,54 +172,54 @@ TEST(golsp_multi_return) {
                    "func doConnect() {\n\tc, _ := Dial(\"localhost\")\n\tc.Close()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doConnect", "Close"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 5: Channel receive ───────────────────────────────── */
 
 TEST(golsp_channel_receive) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Event struct{}\n\n"
                    "func (e *Event) Process() {}\n\n"
                    "func handleEvents(ch chan *Event) {\n\te := <-ch\n\te.Process()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "handleEvents", "Process"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 6: Range variables ───────────────────────────────── */
 
 TEST(golsp_range_slice) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type User struct{}\n\n"
                                   "func (u *User) Name() string { return \"\" }\n\n"
                                   "func listNames(users []*User) {\n"
                                   "\tfor _, u := range users {\n\t\tu.Name()\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "listNames", "Name"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_range_map) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Service struct{}\n\n"
                                   "func (s *Service) Start() {}\n\n"
                                   "func startAll(services map[string]*Service) {\n"
                                   "\tfor _, svc := range services {\n\t\tsvc.Start()\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "startAll", "Start"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 7: Type switch ───────────────────────────────────── */
 
 TEST(golsp_type_switch) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Dog struct{}\ntype Cat struct{}\n\n"
                                   "func (d *Dog) Speak() string { return \"woof\" }\n"
                                   "func (c *Cat) Speak() string { return \"meow\" }\n\n"
@@ -232,86 +232,86 @@ TEST(golsp_type_switch) {
     ASSERT_GT(n, 0);
     /* Verify strategy is type_dispatch */
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, "describe") && rc->callee_qn &&
             strstr(rc->callee_qn, "Speak") && rc->confidence > 0) {
             ASSERT_STR_EQ(rc->strategy, "lsp_type_dispatch");
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 8: Closures ──────────────────────────────────────── */
 
 TEST(golsp_closure) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Database struct{}\n\n"
                                   "func (db *Database) Query() {}\n\n"
                                   "func startWorker(db *Database) {\n"
                                   "\tgo func() {\n\t\tdb.Query()\n\t}()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "startWorker", "Query"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 9: Composite literals ────────────────────────────── */
 
 TEST(golsp_composite_literal) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Config struct{}\n\n"
                                   "func (c *Config) Validate() bool { return true }\n\n"
                                   "func makeConfig() {\n\tc := &Config{}\n\tc.Validate()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "makeConfig", "Validate"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_composite_literal_direct) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Handler struct{}\n\n"
                                   "func (h *Handler) ServeHTTP() {}\n\n"
                                   "func serve() {\n\t(&Handler{}).ServeHTTP()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "serve", "ServeHTTP"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 10: Builtins (make) ──────────────────────────────── */
 
 TEST(golsp_make_slice) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Item struct{}\n\n"
                    "func (it *Item) Process() {}\n\n"
                    "func work() {\n\titems := make([]*Item, 0)\n\titems[0].Process()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "work", "Process"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 11: Type assertions ──────────────────────────────── */
 
 TEST(golsp_type_assertion) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Writer struct{}\n\n"
                    "func (w *Writer) Write(data []byte) int { return 0 }\n\n"
                    "func writeData(x interface{}) {\n\tw := x.(*Writer)\n\tw.Write(nil)\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "writeData", "Write"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 12: Struct embedding ─────────────────────────────── */
 
 TEST(golsp_struct_embedding) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Base struct{}\n\n"
                                   "func (b *Base) Save() {}\n\n"
                                   "type Extended struct {\n\tBase\n}\n\n"
@@ -320,14 +320,14 @@ TEST(golsp_struct_embedding) {
     int idx = require_resolved(r, "persist", "Save");
     ASSERT_GTE(idx, 0);
     ASSERT_STR_EQ(r->resolved_calls.items[idx].strategy, "lsp_embed_dispatch");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 13: Interface dispatch ───────────────────────────── */
 
 TEST(golsp_interface_dispatch) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Writer interface {\n\tWrite(data []byte) int\n}\n\n"
                                   "func writeAll(w Writer) {\n\tw.Write(nil)\n}\n");
     ASSERT_NOT_NULL(r);
@@ -335,14 +335,14 @@ TEST(golsp_interface_dispatch) {
     ASSERT_GTE(idx, 0);
     ASSERT_STR_EQ(r->resolved_calls.items[idx].strategy, "lsp_interface_dispatch");
     ASSERT_TRUE(r->resolved_calls.items[idx].confidence <= 0.90f);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Category 14-15: Generics ──────────────────────────────────── */
 
 TEST(golsp_explicit_generics) {
-    CBMFileResult *r = extract_go(
+    LSMFileResult *r = extract_go(
         "package main\n\n"
         "type User struct{}\nfunc (u User) Name() string { return \"\" }\n\n"
         "type Result struct{}\nfunc (r Result) Value() int { return 0 }\n\n"
@@ -358,12 +358,12 @@ TEST(golsp_explicit_generics) {
     ASSERT_GTE(require_resolved(r, "main", "Filter"), 0);
     ASSERT_GTE(require_resolved(r, "main", "Transform"), 0);
     ASSERT_GTE(require_resolved(r, "main", "Value"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_implicit_generics) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type User struct{}\nfunc (u User) Name() string { return \"\" }\n\n"
                    "func Filter[T any](s []T, pred func(T) bool) []T { return nil }\n\n"
@@ -374,14 +374,14 @@ TEST(golsp_implicit_generics) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "main", "Filter"), 0);
     ASSERT_GTE(require_resolved(r, "main", "Name"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Return types + param names ────────────────────────────────── */
 
 TEST(golsp_return_types_extracted) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Foo struct{}\n\n"
                                   "func GetFoo() *Foo { return nil }\n"
                                   "func Multi() (int, error) { return 0, nil }\n");
@@ -400,12 +400,12 @@ TEST(golsp_return_types_extracted) {
     }
     ASSERT_TRUE(found_getfoo);
     ASSERT_TRUE(found_multi);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_param_names_extracted) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "func Process(name string, count int, verbose bool) {}\n");
     ASSERT_NOT_NULL(r);
     /* Verify param_names on the Process def */
@@ -418,51 +418,51 @@ TEST(golsp_param_names_extracted) {
         }
     }
     ASSERT_TRUE(found);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Direct function calls ─────────────────────────────────────── */
 
 TEST(golsp_direct_func_call) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "func helper() int { return 42 }\n\n"
                                   "func caller() {\n\thelper()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "caller", "helper"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Stdlib integration ────────────────────────────────────────── */
 
 TEST(golsp_stdlib_os_open) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "import \"os\"\n\n"
                                   "func readFile(path string) {\n"
                                   "\tf, _ := os.Open(path)\n\tf.Close()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "readFile", "os.Open"), 0);
     ASSERT_GTE(require_resolved(r, "readFile", "Close"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_stdlib_fmt_sprintf) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "import \"fmt\"\n\n"
                                   "func format(name string) string {\n"
                                   "\treturn fmt.Sprintf(\"hello %s\", name)\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "format", "fmt.Sprintf"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Select receive ────────────────────────────────────────────── */
 
 TEST(golsp_select_receive) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Msg struct{}\n\n"
                                   "func (m *Msg) Process() {}\n\n"
                                   "func worker(ch chan *Msg, done chan bool) {\n"
@@ -470,14 +470,14 @@ TEST(golsp_select_receive) {
                                   "\tcase <-done:\n\t\treturn\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "worker", "Process"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Struct field access ───────────────────────────────────────── */
 
 TEST(golsp_struct_field_access) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type User struct {\n\tName    string\n\tAge     int\n\tProfile *Profile\n}\n\n"
                    "type Profile struct {\n\tBio string\n}\n\n"
@@ -485,14 +485,14 @@ TEST(golsp_struct_field_access) {
                    "func showUser(u *User) {\n\t_ = u.Name\n\tp := u.Profile\n\tp.Summary()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "showUser", "Summary"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Pointer/value receivers ───────────────────────────────────── */
 
 TEST(golsp_pointer_value_receivers) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Conn struct{}\n\n"
                                   "func (c *Conn) Close() {}\n"
                                   "func (c Conn) Status() string { return \"\" }\n\n"
@@ -503,14 +503,14 @@ TEST(golsp_pointer_value_receivers) {
     ASSERT_GTE(require_resolved(r, "usePointer", "Status"), 0);
     ASSERT_GTE(require_resolved(r, "useValue", "Status"), 0);
     ASSERT_GTE(require_resolved(r, "useValue", "Close"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Diagnostics ───────────────────────────────────────────────── */
 
 TEST(golsp_diagnostics) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "import \"unknownpkg\"\n\n"
                                   "func doStuff() {\n"
                                   "\tunknownpkg.Foo()\n\tx := getUnknown()\n\tx.Bar()\n}\n");
@@ -518,21 +518,21 @@ TEST(golsp_diagnostics) {
     /* Should have at least one diagnostic (confidence==0, reason non-null) */
     int diag_count = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->confidence == 0 && rc->reason != NULL && strlen(rc->reason) > 0) {
             diag_count++;
             ASSERT_STR_EQ(rc->strategy, "lsp_unresolved");
         }
     }
     ASSERT_GT(diag_count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Variadic args ─────────────────────────────────────────────── */
 
 TEST(golsp_variadic_args) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Logger struct{}\n\n"
                                   "func (l *Logger) Info(msg string) {}\n\n"
                                   "func logAll(loggers ...*Logger) {\n"
@@ -541,14 +541,14 @@ TEST(golsp_variadic_args) {
     int idx = require_resolved(r, "logAll", "Info");
     ASSERT_GTE(idx, 0);
     ASSERT_TRUE(r->resolved_calls.items[idx].confidence > 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Named returns ─────────────────────────────────────────────── */
 
 TEST(golsp_named_returns) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Conn struct{}\n\n"
                                   "func (c *Conn) Close() {}\n\n"
                                   "func open() (conn *Conn, err error) {\n"
@@ -557,14 +557,14 @@ TEST(golsp_named_returns) {
     int idx = require_resolved(r, "open", "Close");
     ASSERT_GTE(idx, 0);
     ASSERT_TRUE(r->resolved_calls.items[idx].confidence > 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Type alias ────────────────────────────────────────────────── */
 
 TEST(golsp_type_alias) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Base struct{}\n\n"
                                   "func (b *Base) DoWork() {}\n\n"
                                   "type Alias = Base\n\n"
@@ -573,14 +573,14 @@ TEST(golsp_type_alias) {
     int idx = require_resolved(r, "useAlias", "DoWork");
     ASSERT_GTE(idx, 0);
     ASSERT_TRUE(r->resolved_calls.items[idx].confidence > 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Interface satisfaction (single implementer) ───────────────── */
 
 TEST(golsp_interface_satisfaction) {
-    CBMFileResult *r = extract_go(
+    LSMFileResult *r = extract_go(
         "package main\n\n"
         "type DataProcessor interface {\n"
         "\tProcessChunk(data []byte) (int, error)\n"
@@ -600,14 +600,14 @@ TEST(golsp_interface_satisfaction) {
     int idx2 = find_resolved(r, "runProcessor", "Finalize");
     ASSERT_GTE(idx2, 0);
     ASSERT_STR_EQ(r->resolved_calls.items[idx2].strategy, "lsp_interface_resolve");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Package-level var/const ───────────────────────────────────── */
 
 TEST(golsp_package_level_var) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Database struct{}\n\n"
                                   "func (d *Database) Query(sql string) string { return \"\" }\n\n"
                                   "func NewDatabase() *Database { return &Database{} }\n\n"
@@ -615,12 +615,12 @@ TEST(golsp_package_level_var) {
                                   "func handler() {\n\tdb.Query(\"SELECT 1\")\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "handler", "Query"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(golsp_package_level_const) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Logger struct{}\n\n"
                                   "func (l *Logger) Info(msg string) {}\n\n"
                                   "func NewLogger() *Logger { return &Logger{} }\n\n"
@@ -628,14 +628,14 @@ TEST(golsp_package_level_const) {
                                   "func doWork() {\n\tlogger.Info(\"starting\")\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doWork", "Info"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── If-init ───────────────────────────────────────────────────── */
 
 TEST(golsp_if_init) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type MyError struct{}\n\n"
                                   "func (e *MyError) Error() string { return \"\" }\n"
                                   "func (e *MyError) Code() int { return 0 }\n\n"
@@ -644,14 +644,14 @@ TEST(golsp_if_init) {
                                   "\tif err := getError(); err != nil {\n\t\terr.Code()\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "handle", "Code"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Embedded field promotion ──────────────────────────────────── */
 
 TEST(golsp_embedded_field_promotion) {
-    CBMFileResult *r = extract_go(
+    LSMFileResult *r = extract_go(
         "package main\n\n"
         "type Inner struct {\n\tName string\n}\n\n"
         "type Outer struct {\n\tInner\n}\n\n"
@@ -660,14 +660,14 @@ TEST(golsp_embedded_field_promotion) {
         "func doWork() {\n\to := &Outer{}\n\tp := &Processor{}\n\tp.Process(o.Name)\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "doWork", "Process"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── For-init ──────────────────────────────────────────────────── */
 
 TEST(golsp_for_init) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Counter struct{}\n\n"
                    "func (c *Counter) Value() int { return 0 }\n\n"
@@ -676,27 +676,27 @@ TEST(golsp_for_init) {
                    "\tfor c := NewCounter(); c.Value() < 10; {\n\t\tc.Value()\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "loop", "Value"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Type conversion ───────────────────────────────────────────── */
 
 TEST(golsp_type_conversion) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type MyString string\n\n"
                                   "func (s MyString) Upper() string { return \"\" }\n\n"
                                   "func convert() {\n\ts := MyString(\"hello\")\n\ts.Upper()\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "convert", "Upper"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Multi-name var ────────────────────────────────────────────── */
 
 TEST(golsp_multi_name_var) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Config struct{}\n\n"
                    "func (c *Config) Get(key string) string { return \"\" }\n\n"
@@ -705,14 +705,14 @@ TEST(golsp_multi_name_var) {
     ASSERT_NOT_NULL(r);
     int n = count_resolved(r, "readConfig", "Get");
     ASSERT_GTE(n, 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Switch init ───────────────────────────────────────────────── */
 
 TEST(golsp_switch_init) {
-    CBMFileResult *r = extract_go("package main\n\n"
+    LSMFileResult *r = extract_go("package main\n\n"
                                   "type Validator struct{}\n\n"
                                   "func (v *Validator) Check() bool { return true }\n\n"
                                   "func NewValidator() *Validator { return &Validator{} }\n\n"
@@ -721,14 +721,14 @@ TEST(golsp_switch_init) {
                                   "\tcase true:\n\t\tv.Check()\n\t}\n}\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "validate", "Check"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Interface method dispatch (single file) ───────────────────── */
 
 TEST(golsp_interface_method_single_file) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Binder interface {\n\tBind(target any) error\n}\n\n"
                    "type DefaultBinder struct{}\n\n"
@@ -740,14 +740,14 @@ TEST(golsp_interface_method_single_file) {
     const char *s = r->resolved_calls.items[idx].strategy;
     ASSERT_TRUE(strcmp(s, "lsp_interface_resolve") == 0 ||
                 strcmp(s, "lsp_interface_dispatch") == 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ── Interface method dispatch (field chain) ───────────────────── */
 
 TEST(golsp_interface_method_field_chain) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract_go("package main\n\n"
                    "type Binder interface {\n\tBind(target any) error\n}\n\n"
                    "type DefaultBinder struct{}\n"
@@ -761,7 +761,7 @@ TEST(golsp_interface_method_field_chain) {
     const char *s = r->resolved_calls.items[idx].strategy;
     ASSERT_TRUE(strcmp(s, "lsp_interface_resolve") == 0 ||
                 strcmp(s, "lsp_interface_dispatch") == 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -793,14 +793,14 @@ TEST(golsp_ordinary_same_leaf_calls_join_by_exact_site) {
     uint32_t b_start = (uint32_t)(b_site - source);
     uint32_t b_end = b_start + (uint32_t)strlen(b_text);
 
-    CBMFileResult *r = extract_go(source);
+    LSMFileResult *r = extract_go(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *a_call = NULL;
-    const CBMCall *b_call = NULL;
+    const LSMCall *a_call = NULL;
+    const LSMCall *b_call = NULL;
     int render_carriers = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, "run") ||
             !call->callee_name || !strstr(call->callee_name, "Render")) {
             continue;
@@ -821,13 +821,13 @@ TEST(golsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_EQ(b_call->site_end_byte, b_end);
     ASSERT_NEQ(a_call->site_start_byte, b_call->site_start_byte);
 
-    const CBMResolvedCall *a_semantic = NULL;
-    const CBMResolvedCall *b_semantic = NULL;
+    const LSMResolvedCall *a_semantic = NULL;
+    const LSMResolvedCall *b_semantic = NULL;
     int render_semantics = 0;
     int zero_span_hijackers = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
             !strstr(rc->caller_qn, "run") || !rc->callee_qn || !strstr(rc->callee_qn, ".Render")) {
             continue;
         }
@@ -852,10 +852,10 @@ TEST(golsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_TRUE(a_semantic != b_semantic);
     ASSERT_NEQ(a_semantic->site_start_byte, b_semantic->site_start_byte);
 
-    const CBMResolvedCall *a_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, a_call, false);
-    const CBMResolvedCall *b_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, b_call, false);
+    const LSMResolvedCall *a_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, a_call, false);
+    const LSMResolvedCall *b_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, b_call, false);
     ASSERT_NOT_NULL(a_joined);
     ASSERT_NOT_NULL(b_joined);
     ASSERT_TRUE(a_joined == a_semantic);
@@ -866,11 +866,11 @@ TEST(golsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_EQ(b_joined->site_start_byte, b_start);
     ASSERT_EQ(b_joined->site_end_byte, b_end);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
-/* ── Cross-file tests (use cbm_run_go_lsp_cross directly) ──────── */
+/* ── Cross-file tests (use lsm_run_go_lsp_cross directly) ──────── */
 
 /* The production Go Tier-3 path promotes per-file unresolved records through
  * registry lookups without another AST walk. That promotion must copy the
@@ -896,14 +896,14 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     uint32_t b_start = (uint32_t)(b_site - source);
     uint32_t b_end = b_start + (uint32_t)strlen(b_text);
 
-    CBMFileResult *r = extract_go(source);
+    LSMFileResult *r = extract_go(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *a_call = NULL;
-    const CBMCall *b_call = NULL;
+    const LSMCall *a_call = NULL;
+    const LSMCall *b_call = NULL;
     int render_carriers = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, "run") ||
             !call->callee_name || !strstr(call->callee_name, "Render")) {
             continue;
@@ -928,7 +928,7 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     const char *a_unresolved_qn = NULL;
     const char *b_unresolved_qn = NULL;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->strategy && strcmp(rc->strategy, "lsp_unresolved") == 0 && rc->reason &&
             strcmp(rc->reason, "method_not_found") == 0 && rc->caller_qn &&
             strstr(rc->caller_qn, "run") && rc->callee_qn && strstr(rc->callee_qn, ".Render")) {
@@ -948,36 +948,36 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     ASSERT_NOT_NULL(a_leaf);
     ASSERT_NOT_NULL(b_leaf);
     const char *a_receiver =
-        cbm_arena_strndup(&r->arena, a_unresolved_qn, (size_t)(a_leaf - a_unresolved_qn));
+        lsm_arena_strndup(&r->arena, a_unresolved_qn, (size_t)(a_leaf - a_unresolved_qn));
     const char *b_receiver =
-        cbm_arena_strndup(&r->arena, b_unresolved_qn, (size_t)(b_leaf - b_unresolved_qn));
+        lsm_arena_strndup(&r->arena, b_unresolved_qn, (size_t)(b_leaf - b_unresolved_qn));
     ASSERT_NOT_NULL(a_receiver);
     ASSERT_NOT_NULL(b_receiver);
 
-    CBMLSPDef defs[2];
+    LSMLSPDef defs[2];
     memset(defs, 0, sizeof(defs));
     defs[0].qualified_name = a_unresolved_qn;
     defs[0].short_name = "Render";
     defs[0].label = "Method";
     defs[0].receiver_type = a_receiver;
     defs[0].def_module_qn = r->module_qn;
-    defs[0].lang = CBM_LANG_GO;
+    defs[0].lang = LSM_LANG_GO;
     defs[1] = defs[0];
     defs[1].qualified_name = b_unresolved_qn;
     defs[1].receiver_type = b_receiver;
 
-    CBMTypeRegistry *reg = cbm_go_build_cross_registry(&r->arena, defs, 2);
+    LSMTypeRegistry *reg = lsm_go_build_cross_registry(&r->arena, defs, 2);
     ASSERT_NOT_NULL(reg);
-    ASSERT_EQ(cbm_go_fast_resolve_qualified_calls(r, reg, NULL, NULL, 0), 0);
+    ASSERT_EQ(lsm_go_fast_resolve_qualified_calls(r, reg, NULL, NULL, 0), 0);
 
-    const CBMResolvedCall *a_semantic = NULL;
-    const CBMResolvedCall *b_semantic = NULL;
+    const LSMResolvedCall *a_semantic = NULL;
+    const LSMResolvedCall *b_semantic = NULL;
     int promoted_render_semantics = 0;
     int zero_span_hijackers = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (!rc->strategy || strcmp(rc->strategy, "lsp_strategy_cross_file") != 0 ||
-            rc->kind != CBM_RESOLVED_INVOCATION || !rc->caller_qn ||
+            rc->kind != LSM_RESOLVED_INVOCATION || !rc->caller_qn ||
             !strstr(rc->caller_qn, "run") || !rc->callee_qn || !strstr(rc->callee_qn, ".Render")) {
             continue;
         }
@@ -997,7 +997,7 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     if (promoted_render_semantics != 2) {
         printf("  fast-cross Render diagnostics (%d records):\n", r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s reason=%s site=%u:%u]\n",
                    rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)", rc->strategy ? rc->strategy : "(null)",
@@ -1012,10 +1012,10 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     ASSERT_TRUE(a_semantic != b_semantic);
     ASSERT_NEQ(a_semantic->site_start_byte, b_semantic->site_start_byte);
 
-    const CBMResolvedCall *a_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, a_call, false);
-    const CBMResolvedCall *b_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, b_call, false);
+    const LSMResolvedCall *a_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, a_call, false);
+    const LSMResolvedCall *b_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, b_call, false);
     ASSERT_NOT_NULL(a_joined);
     ASSERT_NOT_NULL(b_joined);
     ASSERT_STR_EQ(a_joined->callee_qn, a_unresolved_qn);
@@ -1025,7 +1025,7 @@ TEST(golsp_fast_crossfile_same_leaf_calls_preserve_exact_sites) {
     ASSERT_EQ(b_joined->site_start_byte, b_start);
     ASSERT_EQ(b_joined->site_end_byte, b_end);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1036,7 +1036,7 @@ TEST(golsp_crossfile_method_dispatch) {
                          "\tconn := db.Connect(\"localhost\")\n"
                          "\tconn.Query(\"SELECT 1\")\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.doQuery",
          .short_name = "doQuery",
          .label = "Function",
@@ -1059,11 +1059,11 @@ TEST(golsp_crossfile_method_dispatch) {
     const char *imp_names[] = {"db"};
     const char *imp_qns[] = {"myapp/db"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
                          imp_qns, 1, NULL, &out);
 
     ASSERT_GTE(find_resolved_arr(&out, "doQuery", "Connect"), 0);
@@ -1071,7 +1071,7 @@ TEST(golsp_crossfile_method_dispatch) {
     ASSERT_GTE(idx, 0);
     ASSERT_STR_EQ(out.items[idx].strategy, "lsp_type_dispatch");
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1082,7 +1082,7 @@ TEST(golsp_crossfile_return_type_chain) {
                          "\tuser := repo.GetUser(1)\n"
                          "\tuser.Name()\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.showUser",
          .short_name = "showUser",
          .label = "Function",
@@ -1105,15 +1105,15 @@ TEST(golsp_crossfile_return_type_chain) {
     const char *imp_names[] = {"repo"};
     const char *imp_qns[] = {"myapp/repo"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
                          imp_qns, 1, NULL, &out);
 
     ASSERT_GTE(find_resolved_arr(&out, "showUser", "Name"), 0);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1122,7 +1122,7 @@ TEST(golsp_crossfile_interface_dispatch) {
                          "import \"myapp/svc\"\n\n"
                          "func handler(b svc.Binder) {\n\tb.Bind(\"data\")\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.handler",
          .short_name = "handler",
          .label = "Function",
@@ -1145,11 +1145,11 @@ TEST(golsp_crossfile_interface_dispatch) {
     const char *imp_names[] = {"svc"};
     const char *imp_qns[] = {"myapp/svc"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 4, imp_names,
                          imp_qns, 1, NULL, &out);
 
     int idx = find_resolved_arr_confident(&out, "handler", "Bind");
@@ -1158,7 +1158,7 @@ TEST(golsp_crossfile_interface_dispatch) {
     ASSERT_TRUE(strcmp(s, "lsp_interface_resolve") == 0 ||
                 strcmp(s, "lsp_interface_dispatch") == 0);
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1168,7 +1168,7 @@ TEST(golsp_crossfile_interface_field_chain) {
                          "type Context struct {\n\techo *echo.Echo\n}\n\n"
                          "func (c *Context) process() {\n\tc.echo.Binder.Bind(\"hello\")\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.Context",
          .short_name = "Context",
          .label = "Type",
@@ -1201,18 +1201,18 @@ TEST(golsp_crossfile_interface_field_chain) {
     const char *imp_names[] = {"echo"};
     const char *imp_qns[] = {"myapp/echo"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 6, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 6, imp_names,
                          imp_qns, 1, NULL, &out);
 
     int idx = find_resolved_arr_confident(&out, "process", "Bind");
     ASSERT_GTE(idx, 0);
     ASSERT_TRUE(out.items[idx].confidence >= 0.8f);
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1223,7 +1223,7 @@ TEST(golsp_crossfile_map_index) {
                          "\tif vh, ok := vhosts[host]; ok {\n"
                          "\t\tvh.ServeHTTP(nil, nil)\n\t}\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.dispatch",
          .short_name = "dispatch",
          .label = "Function",
@@ -1241,18 +1241,18 @@ TEST(golsp_crossfile_map_index) {
     const char *imp_names[] = {"echo"};
     const char *imp_qns[] = {"myapp/echo"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 3, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 3, imp_names,
                          imp_qns, 1, NULL, &out);
 
     int idx = find_resolved_arr_confident(&out, "dispatch", "ServeHTTP");
     ASSERT_GTE(idx, 0);
     ASSERT_STR_EQ(out.items[idx].strategy, "lsp_type_dispatch");
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1262,7 +1262,7 @@ TEST(golsp_crossfile_stdlib_interface) {
                          "func process(ctx context.Context) {\n"
                          "\t<-ctx.Done()\n\tctx.Err()\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.process",
          .short_name = "process",
          .label = "Function",
@@ -1271,17 +1271,17 @@ TEST(golsp_crossfile_stdlib_interface) {
     const char *imp_names[] = {"context"};
     const char *imp_qns[] = {"context"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 1, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 1, imp_names,
                          imp_qns, 1, NULL, &out);
 
     ASSERT_GTE(find_resolved_arr_confident(&out, "process", "Done"), 0);
     ASSERT_GTE(find_resolved_arr_confident(&out, "process", "Err"), 0);
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1291,7 +1291,7 @@ TEST(golsp_crossfile_local_interface_single_impl) {
         "import \"myapp/svc\"\n\n"
         "func process(s svc.Store) {\n\ts.Get(\"key\")\n\ts.Put(\"key\", \"val\")\n}\n";
 
-    CBMLSPDef defs[] = {
+    LSMLSPDef defs[] = {
         {.qualified_name = "test.main.process",
          .short_name = "process",
          .label = "Function",
@@ -1320,11 +1320,11 @@ TEST(golsp_crossfile_local_interface_single_impl) {
     const char *imp_names[] = {"svc"};
     const char *imp_qns[] = {"myapp/svc"};
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray out = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray out = {0};
 
-    cbm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 5, imp_names,
+    lsm_run_go_lsp_cross(&arena, source, (int)strlen(source), "test.main", defs, 5, imp_names,
                          imp_qns, 1, NULL, &out);
 
     int idxGet = find_resolved_arr_confident(&out, "process", "Get");
@@ -1336,7 +1336,7 @@ TEST(golsp_crossfile_local_interface_single_impl) {
     ASSERT_GTE(idxPut, 0);
     ASSERT_STR_EQ(out.items[idxPut].strategy, "lsp_interface_resolve");
 
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 

@@ -1,7 +1,7 @@
 /*
  * config.c — Persistent UI configuration (JSON via yyjson).
  *
- * Config file: ~/.cache/codebase-memory-mcp/config.json
+ * Config file: ~/.cache/logan-spine-mcp/config.json
  * Format: {"ui_enabled": false, "ui_port": 9749}
  */
 #include "foundation/constants.h"
@@ -32,10 +32,10 @@
 
 /* ── Path ────────────────────────────────────────────────────── */
 
-void cbm_ui_config_path(char *buf, int bufsz) {
-    const char *dir = cbm_resolve_cache_dir();
+void lsm_ui_config_path(char *buf, int bufsz) {
+    const char *dir = lsm_resolve_cache_dir();
     if (!dir) {
-        dir = cbm_tmpdir();
+        dir = lsm_tmpdir();
     }
     snprintf(buf, (size_t)bufsz, "%s/config.json", dir);
 }
@@ -53,7 +53,7 @@ static char *config_read_file(const char *path, size_t *length_out, bool *opened
         return NULL;
     }
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_path_to_wide(path);
+    wchar_t *wide_path = lsm_path_to_wide(path);
     if (!wide_path) {
         return NULL;
     }
@@ -80,7 +80,7 @@ static char *config_read_file(const char *path, size_t *length_out, bool *opened
         return NULL;
     }
 #else
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file) {
         return NULL;
     }
@@ -108,22 +108,22 @@ static char *config_read_file(const char *path, size_t *length_out, bool *opened
     return buffer;
 }
 
-void cbm_ui_config_load(cbm_ui_config_t *cfg) {
+void lsm_ui_config_load(lsm_ui_config_t *cfg) {
     if (!cfg) {
         return;
     }
-    cfg->ui_enabled = CBM_UI_DEFAULT_ENABLED;
-    cfg->ui_port = CBM_UI_DEFAULT_PORT;
+    cfg->ui_enabled = LSM_UI_DEFAULT_ENABLED;
+    cfg->ui_port = LSM_UI_DEFAULT_PORT;
 
-    char path[CBM_SZ_1K];
-    cbm_ui_config_path(path, (int)sizeof(path));
+    char path[LSM_SZ_1K];
+    lsm_ui_config_path(path, (int)sizeof(path));
 
     size_t length = 0;
     bool opened = false;
     char *buffer = config_read_file(path, &length, &opened);
     if (!opened) {
         /* No config file — auto-enable UI if binary has embedded assets */
-        if (CBM_EMBEDDED_FILE_COUNT > 0) {
+        if (LSM_EMBEDDED_FILE_COUNT > 0) {
             cfg->ui_enabled = true;
         }
         return;
@@ -135,7 +135,7 @@ void cbm_ui_config_load(cbm_ui_config_t *cfg) {
     yyjson_doc *doc = yyjson_read(buffer, length, 0);
     free(buffer);
     if (!doc) {
-        cbm_log_warn("ui.config.corrupt", "path", path);
+        lsm_log_warn("ui.config.corrupt", "path", path);
         return; /* corrupt JSON → defaults */
     }
 
@@ -233,7 +233,7 @@ static bool config_posix_rename_handle(HANDLE file, const wchar_t *target_path) 
 }
 
 static bool config_write_atomic(const char *path, const char *json, size_t json_length) {
-    wchar_t *wide_path = cbm_path_to_wide(path);
+    wchar_t *wide_path = lsm_path_to_wide(path);
     if (!wide_path) {
         return false;
     }
@@ -314,7 +314,7 @@ static bool config_sync_descriptor(int descriptor) {
 }
 
 static bool config_sync_parent_directory(const char *path) {
-    char directory[CBM_SZ_1K];
+    char directory[LSM_SZ_1K];
     if (!config_parent_directory(path, directory, sizeof(directory))) {
         return false;
     }
@@ -348,12 +348,12 @@ static bool config_sync_parent_directory(const char *path) {
 }
 
 static bool config_write_atomic(const char *path, const char *json, size_t json_length) {
-    char temporary[CBM_SZ_2K];
+    char temporary[LSM_SZ_2K];
     int written = snprintf(temporary, sizeof(temporary), "%s.tmp.XXXXXX", path);
     if (written <= 0 || (size_t)written >= sizeof(temporary)) {
         return false;
     }
-    int descriptor = cbm_mkstemp(temporary);
+    int descriptor = lsm_mkstemp(temporary);
     if (descriptor < 0) {
         return false;
     }
@@ -373,28 +373,28 @@ static bool config_write_atomic(const char *path, const char *json, size_t json_
         ok = config_sync_parent_directory(path);
     }
     if (!ok) {
-        (void)cbm_unlink(temporary);
+        (void)lsm_unlink(temporary);
     }
     return ok;
 }
 #endif
 
-bool cbm_ui_config_save(const cbm_ui_config_t *cfg) {
+bool lsm_ui_config_save(const lsm_ui_config_t *cfg) {
     if (!cfg || cfg->ui_port <= 0 || cfg->ui_port > 65535) {
-        cbm_log_error("ui.config.write_fail", "reason", "invalid_config");
+        lsm_log_error("ui.config.write_fail", "reason", "invalid_config");
         return false;
     }
-    char path[CBM_SZ_1K];
-    cbm_ui_config_path(path, (int)sizeof(path));
+    char path[LSM_SZ_1K];
+    lsm_ui_config_path(path, (int)sizeof(path));
 
     /* Ensure directory exists (recursive) */
-    char dir[CBM_SZ_1K];
+    char dir[LSM_SZ_1K];
     bool directory_ready = config_parent_directory(path, dir, sizeof(dir));
-    if (directory_ready && !cbm_is_dir(dir)) {
-        directory_ready = cbm_mkdir_p(dir, 0750) || cbm_is_dir(dir);
+    if (directory_ready && !lsm_is_dir(dir)) {
+        directory_ready = lsm_mkdir_p(dir, 0750) || lsm_is_dir(dir);
     }
     if (!directory_ready) {
-        cbm_log_error("ui.config.write_fail", "path", path, "reason", "create_directory");
+        lsm_log_error("ui.config.write_fail", "path", path, "reason", "create_directory");
         return false;
     }
 
@@ -414,17 +414,17 @@ bool cbm_ui_config_save(const cbm_ui_config_t *cfg) {
     }
 
     if (!json) {
-        cbm_log_error("ui.config.write_fail", "reason", "serialize");
+        lsm_log_error("ui.config.write_fail", "reason", "serialize");
         return false;
     }
 
     bool saved = config_write_atomic(path, json, json_len);
     free(json);
     if (!saved) {
-        cbm_log_error("ui.config.write_fail", "path", path, "reason", "atomic_publish");
+        lsm_log_error("ui.config.write_fail", "path", path, "reason", "atomic_publish");
         return false;
     }
 
-    cbm_log_debug("ui.config.saved", "path", path);
+    lsm_log_debug("ui.config.saved", "path", path);
     return true;
 }

@@ -14,7 +14,7 @@ Thanks for opening this — it has been seen, and it is queued.
 
 This note is automated, but it is not a brush-off: it exists so you know where your PR stands instead of having to guess from silence.
 
-**Current review status: working through a backlog.** `0.9.1-rc.1` is out, so the release freeze that held reviews is over — but it left a large queue of open pull requests behind it, and we are reading through them oldest-first. The background is in [discussion #1144](https://github.com/DeusData/codebase-memory-mcp/discussions/1144).
+**Current review status: working through a backlog.** `0.9.1-rc.1` is out, so the release freeze that held reviews is over — but it left a large queue of open pull requests behind it, and we are reading through them oldest-first. The background is in [discussion #1144](https://github.com/DeusData/logan-spine-mcp/discussions/1144).
 
 What that means for this PR, concretely:
 

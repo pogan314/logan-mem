@@ -1,8 +1,8 @@
 /*
  * config_yaml_edit.h — Conservative, structure-preserving YAML config edits.
  */
-#ifndef CBM_CONFIG_YAML_EDIT_H
-#define CBM_CONFIG_YAML_EDIT_H
+#ifndef LSM_CONFIG_YAML_EDIT_H
+#define LSM_CONFIG_YAML_EDIT_H
 
 #include <stddef.h>
 
@@ -20,7 +20,7 @@ extern "C" {
  * permission bits and sync the parent directory.
  * Cooperating editor processes are serialized across read, transform, final
  * verification, and replacement. POSIX uses an adjacent persistent
- * "<file_path>.cbm-yaml.lock" regular file, created with mode 0600 and held by
+ * "<file_path>.lsm-yaml.lock" regular file, created with mode 0600 and held by
  * a non-blocking advisory lock; release unlocks and closes it without removing
  * the pathname, and process exit releases the lock automatically. Windows uses
  * an adjacent temporary lock directory removed by its verified open handle.
@@ -40,16 +40,16 @@ extern "C" {
  * Inline comments on field lines are rejected so a raw dynamic value cannot
  * be silently truncated at '#'. Every dynamic scalar interpolated into an
  * entry_block must first be encoded with
- * cbm_yaml_encode_double_quoted_scalar(). Full-line comments remain allowed.
+ * lsm_yaml_encode_double_quoted_scalar(). Full-line comments remain allowed.
  *
  * entry_key names an explicitly installer-managed mapping entry. Updating it
  * replaces that entry's complete child block; sibling entries and surrounding
  * comments remain user-owned and are preserved. Callers must not use a key
  * whose child fields should remain independently user-owned.
  */
-int cbm_yaml_upsert_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_upsert_mapping_entry(const char *file_path, const char *section_key,
                                   const char *entry_key, const char *entry_block);
-int cbm_yaml_remove_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_remove_mapping_entry(const char *file_path, const char *section_key,
                                   const char *entry_key);
 
 /* Ownership-aware variants for installer-managed mapping entries.
@@ -57,11 +57,11 @@ int cbm_yaml_remove_mapping_entry(const char *file_path, const char *section_key
  * above. A missing entry is created by upsert and is a successful no-op for
  * removal. A same-name entry is owned only when its complete header and body
  * equal the canonical rendering; otherwise both operations preserve it and
- * return CBM_YAML_IDENTITY_EDIT_FOREIGN. Errors return
- * CBM_YAML_IDENTITY_EDIT_ERROR. */
-int cbm_yaml_upsert_owned_mapping_entry(const char *file_path, const char *section_key,
+ * return LSM_YAML_IDENTITY_EDIT_FOREIGN. Errors return
+ * LSM_YAML_IDENTITY_EDIT_ERROR. */
+int lsm_yaml_upsert_owned_mapping_entry(const char *file_path, const char *section_key,
                                         const char *entry_key, const char *canonical_entry_block);
-int cbm_yaml_remove_owned_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_remove_owned_mapping_entry(const char *file_path, const char *section_key,
                                         const char *entry_key, const char *canonical_entry_block);
 
 /* Identity-aware editing of one mapping item in a nested block sequence.
@@ -75,51 +75,51 @@ int cbm_yaml_remove_owned_mapping_entry(const char *file_path, const char *secti
  * sequence_path. identity_key and identity_scalar identify ownership inside
  * that mapping item. identity_scalar and every dynamic scalar in
  * canonical_item must already be encoded by the caller with
- * cbm_yaml_encode_double_quoted_scalar().
+ * lsm_yaml_encode_double_quoted_scalar().
  *
  * Upsert is byte-idempotent when the canonical item already exists. If an item
  * with the same decoded identity exists but differs from canonical_item, both
  * upsert and removal preserve the document and return
- * CBM_YAML_IDENTITY_EDIT_FOREIGN. Removal deletes only the exact canonical
+ * LSM_YAML_IDENTITY_EDIT_FOREIGN. Removal deletes only the exact canonical
  * item; an absent identity is a successful no-op. Structural ambiguity,
  * unsupported YAML, unsafe filesystem state, invalid arguments, and I/O or
- * concurrency failures return CBM_YAML_IDENTITY_EDIT_ERROR byte-identically. */
+ * concurrency failures return LSM_YAML_IDENTITY_EDIT_ERROR byte-identically. */
 enum {
-    CBM_YAML_IDENTITY_EDIT_ERROR = -1,
-    CBM_YAML_IDENTITY_EDIT_OK = 0,
-    CBM_YAML_IDENTITY_EDIT_FOREIGN = 1
+    LSM_YAML_IDENTITY_EDIT_ERROR = -1,
+    LSM_YAML_IDENTITY_EDIT_OK = 0,
+    LSM_YAML_IDENTITY_EDIT_FOREIGN = 1
 };
-int cbm_yaml_upsert_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
+int lsm_yaml_upsert_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
                                           size_t sequence_path_len, const char *identity_key,
                                           const char *identity_scalar, const char *canonical_item);
-int cbm_yaml_remove_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
+int lsm_yaml_remove_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
                                           size_t sequence_path_len, const char *identity_key,
                                           const char *identity_scalar, const char *canonical_item);
 
 /* Add or remove one exact string value in a top-level YAML string-list key. */
-int cbm_yaml_upsert_string_list_item(const char *file_path, const char *key, const char *item);
-int cbm_yaml_remove_string_list_item(const char *file_path, const char *key, const char *item);
+int lsm_yaml_upsert_string_list_item(const char *file_path, const char *key, const char *item);
+int lsm_yaml_remove_string_list_item(const char *file_path, const char *key, const char *item);
 
 /* Encode one non-empty UTF-8 value as a YAML double-quoted scalar. Spaces,
  * '#', ':', and Unicode are preserved; quotes and backslashes are escaped.
  * Newlines, control bytes, invalid UTF-8, and oversized values are rejected.
  * On success, *encoded_out is heap-allocated and must be freed by the caller.
  * On failure, *encoded_out is set to NULL. */
-int cbm_yaml_encode_double_quoted_scalar(const char *value, char **encoded_out);
+int lsm_yaml_encode_double_quoted_scalar(const char *value, char **encoded_out);
 
-#ifdef CBM_YAML_ENABLE_TEST_API
+#ifdef LSM_YAML_ENABLE_TEST_API
 /* Deterministic concurrency seam for standalone editor tests. The hook runs
  * after the temporary replacement is synced and immediately before the stale
  * content/identity check. Production callers must not enable this API. */
-typedef void (*cbm_yaml_precommit_test_hook_t)(const char *file_path, void *context);
-void cbm_yaml_set_precommit_hook_for_testing(cbm_yaml_precommit_test_hook_t hook, void *context);
+typedef void (*lsm_yaml_precommit_test_hook_t)(const char *file_path, void *context);
+void lsm_yaml_set_precommit_hook_for_testing(lsm_yaml_precommit_test_hook_t hook, void *context);
 /* Runs after the first stale-snapshot check and before final destination and
  * temporary-file identity revalidation. */
-void cbm_yaml_set_prepublish_hook_for_testing(cbm_yaml_precommit_test_hook_t hook, void *context);
+void lsm_yaml_set_prepublish_hook_for_testing(lsm_yaml_precommit_test_hook_t hook, void *context);
 /* Runs after the adjacent lock object's initial identity is captured and
  * before locking and final ownership, mode, and handle identity verification. */
-typedef void (*cbm_yaml_lock_postcreate_test_hook_t)(const char *lock_path, void *context);
-void cbm_yaml_set_lock_postcreate_hook_for_testing(cbm_yaml_lock_postcreate_test_hook_t hook,
+typedef void (*lsm_yaml_lock_postcreate_test_hook_t)(const char *lock_path, void *context);
+void lsm_yaml_set_lock_postcreate_hook_for_testing(lsm_yaml_lock_postcreate_test_hook_t hook,
                                                    void *context);
 #endif
 
@@ -127,4 +127,4 @@ void cbm_yaml_set_lock_postcreate_hook_for_testing(cbm_yaml_lock_postcreate_test
 }
 #endif
 
-#endif /* CBM_CONFIG_YAML_EDIT_H */
+#endif /* LSM_CONFIG_YAML_EDIT_H */

@@ -17,32 +17,32 @@
  * while the child tree can still write, then delivers that final fragment once
  * the tree is quiescent.
  */
-#ifndef CBM_SUBPROCESS_H
-#define CBM_SUBPROCESS_H
+#ifndef LSM_SUBPROCESS_H
+#define LSM_SUBPROCESS_H
 
 #include <stdbool.h>
-#include <stddef.h> /* size_t (cbm_build_win_cmdline) */
+#include <stddef.h> /* size_t (lsm_build_win_cmdline) */
 
 /* How a supervised child ended. */
 typedef enum {
-    CBM_PROC_CLEAN = 0,    /* exited with code 0 */
-    CBM_PROC_EXIT_NONZERO, /* exited with a nonzero code (a graceful failure) */
-    CBM_PROC_CRASH,        /* died from a fault: POSIX SIGSEGV/BUS/ILL/FPE/ABRT/SYS,
+    LSM_PROC_CLEAN = 0,    /* exited with code 0 */
+    LSM_PROC_EXIT_NONZERO, /* exited with a nonzero code (a graceful failure) */
+    LSM_PROC_CRASH,        /* died from a fault: POSIX SIGSEGV/BUS/ILL/FPE/ABRT/SYS,
                             * or a Windows NTSTATUS exception exit code (>= 0xC0000000) */
-    CBM_PROC_HANG,         /* made no progress within the quiet-timeout; we killed it */
-    CBM_PROC_KILLED,       /* terminated by a non-fault signal we did not initiate */
-    CBM_PROC_SPAWN_FAILED  /* fork/exec/CreateProcess failed — no child ever ran */
-} cbm_proc_outcome_t;
+    LSM_PROC_HANG,         /* made no progress within the quiet-timeout; we killed it */
+    LSM_PROC_KILLED,       /* terminated by a non-fault signal we did not initiate */
+    LSM_PROC_SPAWN_FAILED  /* fork/exec/CreateProcess failed — no child ever ran */
+} lsm_proc_outcome_t;
 
 typedef struct {
-    cbm_proc_outcome_t outcome;
+    lsm_proc_outcome_t outcome;
     int exit_code;               /* WEXITSTATUS / GetExitCodeProcess; -1 for a POSIX signal */
     int term_signal;             /* WTERMSIG on POSIX; 0 otherwise */
     bool cancellation_requested; /* an explicit cancel request was accepted before terminal */
     bool forced; /* force was needed after grace expiry or to reap descendants after root exit */
     bool tree_quiesced;      /* the owned process tree has no surviving processes */
     bool supervision_failed; /* the bounded containment deadline expired; tree_quiesced is false */
-} cbm_proc_result_t;
+} lsm_proc_result_t;
 
 /* Called synchronously for each newly-completed log chunk while the child runs.
  * Newline-terminated lines are delivered without their newline; oversized lines
@@ -50,7 +50,7 @@ typedef struct {
  * delivered after the tree is quiescent. Each delivered chunk resets the quiet
  * timeout. Poll bounds callback work by chunk/byte count, not elapsed time, so
  * callbacks must return promptly. */
-typedef void (*cbm_proc_log_cb)(const char *line, void *ud);
+typedef void (*lsm_proc_log_cb)(const char *line, void *ud);
 
 typedef struct {
     const char *bin;                 /* executable path or literal PATH name;
@@ -62,30 +62,30 @@ typedef struct {
                                       * this payload is copied verbatim for cmd.exe to parse. */
     const char *log_file;            /* child stdout+stderr are redirected here and tailed;
                                       * NULL => discard child output, no tailing */
-    cbm_proc_log_cb on_log_line;     /* optional per-line callback */
+    lsm_proc_log_cb on_log_line;     /* optional per-line callback */
     void *log_ud;                    /* user data for on_log_line */
     int quiet_timeout_ms;            /* <= 0 => no timeout; else kill+HANG after this many
                                       * ms with no new completed log line */
     int cancel_grace_ms;             /* graceful tree-termination window; <= 0 uses the finite
-                                      * CBM_SUBPROCESS_DEFAULT_CANCEL_GRACE_MS */
+                                      * LSM_SUBPROCESS_DEFAULT_CANCEL_GRACE_MS */
     bool delete_log_on_exit;         /* unlink log_file after reaping */
-} cbm_proc_opts_t;
+} lsm_proc_opts_t;
 
-#define CBM_SUBPROCESS_DEFAULT_CANCEL_GRACE_MS 1000
-#define CBM_SUBPROCESS_MAX_CANCEL_GRACE_MS 1000
-#define CBM_SUBPROCESS_FORCE_SETTLE_MS 1000
+#define LSM_SUBPROCESS_DEFAULT_CANCEL_GRACE_MS 1000
+#define LSM_SUBPROCESS_MAX_CANCEL_GRACE_MS 1000
+#define LSM_SUBPROCESS_FORCE_SETTLE_MS 1000
 
 /* Opaque, owned supervisor for one child and its contained descendant tree.
  * POSIX implementations contain the child in its own process group; Windows
  * implementations use a Job Object. The containment is what makes a terminal
  * result stronger than merely observing that the direct child exited. */
-typedef struct cbm_subprocess cbm_subprocess_t;
+typedef struct lsm_subprocess lsm_subprocess_t;
 
 typedef enum {
-    CBM_PROC_POLL_ERROR = -1, /* invalid handle/arguments */
-    CBM_PROC_POLL_RUNNING = 0,
-    CBM_PROC_POLL_TERMINAL = 1
-} cbm_proc_poll_t;
+    LSM_PROC_POLL_ERROR = -1, /* invalid handle/arguments */
+    LSM_PROC_POLL_RUNNING = 0,
+    LSM_PROC_POLL_TERMINAL = 1
+} lsm_proc_poll_t;
 
 /* Spawn opts->bin and return immediately with a supervisor handle. On success,
  * *out owns the process until a terminal poll followed by destroy. Spawn copies
@@ -94,8 +94,8 @@ typedef enum {
  *
  * A quiet timeout begins at successful spawn and is reset by each completed log
  * line. Expiry starts the same graceful->forced tree shutdown as explicit cancel,
- * but the terminal outcome remains CBM_PROC_HANG. */
-int cbm_subprocess_spawn(const cbm_proc_opts_t *opts, cbm_subprocess_t **out);
+ * but the terminal outcome remains LSM_PROC_HANG. */
+int lsm_subprocess_spawn(const lsm_proc_opts_t *opts, lsm_subprocess_t **out);
 
 /* Advance supervision without sleeping or waiting for the child. RUNNING means
  * the caller must poll again. TERMINAL is returned only after the direct child is
@@ -115,7 +115,7 @@ int cbm_subprocess_spawn(const cbm_proc_opts_t *opts, cbm_subprocess_t **out);
  * Poll performs the graceful->force state transition: after explicit cancel (or
  * quiet-timeout), it requests graceful termination once, then force-terminates the
  * tree when cancel_grace_ms elapses. Callers must keep polling to make progress. */
-cbm_proc_poll_t cbm_subprocess_poll(cbm_subprocess_t *process, cbm_proc_result_t *out);
+lsm_proc_poll_t lsm_subprocess_poll(lsm_subprocess_t *process, lsm_proc_result_t *out);
 
 /* Record an explicit cancellation request without waiting. Safe to repeat and
  * safe to call from a cancellation thread while one owner thread polls. The
@@ -123,18 +123,18 @@ cbm_proc_poll_t cbm_subprocess_poll(cbm_subprocess_t *process, cbm_proc_result_t
  * means the process tree is live and cancellation is now/already pending; false
  * means process is NULL, draining terminal logs, or already terminal. Poll
  * performs signal delivery/escalation. */
-bool cbm_subprocess_request_cancel(cbm_subprocess_t *process);
+bool lsm_subprocess_request_cancel(lsm_subprocess_t *process);
 
 /* Release a terminal handle. This never waits or implicitly cancels; passing a
  * still-running handle violates the API contract. NULL is a no-op. */
-void cbm_subprocess_destroy(cbm_subprocess_t *process);
+void lsm_subprocess_destroy(lsm_subprocess_t *process);
 
 /* Spawn opts->bin, supervise (tail + optional quiet-timeout), block until it ends,
  * and classify the result into *out. Compatibility wrapper around spawn + repeated
  * poll + bounded sleeps. Returns 0 if a child was spawned and its tree reached
  * terminal (out filled), or -1 if spawning/supervision failed
- * (out->outcome == CBM_PROC_SPAWN_FAILED). */
-int cbm_subprocess_run(const cbm_proc_opts_t *opts, cbm_proc_result_t *out);
+ * (out->outcome == LSM_PROC_SPAWN_FAILED). */
+int lsm_subprocess_run(const lsm_proc_opts_t *opts, lsm_proc_result_t *out);
 
 /* Pure outcome classifier — exposed so the platform-specific exit-code mapping
  * (notably the Windows NTSTATUS crash codes) is unit-testable on every platform.
@@ -143,11 +143,11 @@ int cbm_subprocess_run(const cbm_proc_opts_t *opts, cbm_proc_result_t *out);
  *   exit_code:       the exit / exception code (meaningful when exited_normally).
  *   term_signal:     POSIX terminating signal (meaningful when !exited_normally).
  *   timed_out:       we killed the child for exceeding the quiet-timeout. */
-cbm_proc_outcome_t cbm_proc_classify(bool exited_normally, int exit_code, int term_signal,
+lsm_proc_outcome_t lsm_proc_classify(bool exited_normally, int exit_code, int term_signal,
                                      bool timed_out);
 
 /* Stable lowercase name for an outcome (for structured logs / skip reasons). */
-const char *cbm_proc_outcome_str(cbm_proc_outcome_t o);
+const char *lsm_proc_outcome_str(lsm_proc_outcome_t o);
 
 /* Build a Windows CreateProcess command line from a NULL-terminated argv, applying
  * the Microsoft C runtime quoting rules (quote-wrap + escape embedded quotes and
@@ -159,12 +159,12 @@ const char *cbm_proc_outcome_str(cbm_proc_outcome_t o);
  * silently corrupts any element containing a double-quote — e.g. the index worker's
  * JSON arg {"repo_path":"…"} arrives as {repo_path:…}, the Windows index-worker bug.
  * Exposed (and compiled on every platform — it is pure string logic) so the quoting
- * is unit-tested on Linux/macOS CI, and so both spawn sites (cbm_subprocess_run and
+ * is unit-tested on Linux/macOS CI, and so both spawn sites (lsm_subprocess_run and
  * the UI http_server index spawn) escape through one shared, tested implementation. */
-bool cbm_build_win_cmdline(char *buf, size_t cap, const char *const *argv);
+bool lsm_build_win_cmdline(char *buf, size_t cap, const char *const *argv);
 
 /* Build the special CreateProcess command line needed to invoke cmd.exe with a
- * command-language payload. Unlike cbm_build_win_cmdline(), payload is not a C
+ * command-language payload. Unlike lsm_build_win_cmdline(), payload is not a C
  * runtime argv element: cmd.exe must receive its embedded quotes and backslashes
  * unchanged. cmd_executable must be an absolute Windows path whose basename is
  * cmd.exe. The result is:
@@ -174,15 +174,15 @@ bool cbm_build_win_cmdline(char *buf, size_t cap, const char *const *argv);
  * Returns false for invalid input or overflow and leaves a valid empty string
  * whenever buf/cap permit one. Pure string logic, available on every platform
  * so the Windows serialization contract is unit-testable everywhere. */
-bool cbm_build_win_cmd_payload(char *buf, size_t cap, const char *cmd_executable,
+bool lsm_build_win_cmd_payload(char *buf, size_t cap, const char *cmd_executable,
                                const char *payload);
 
-#ifdef CBM_ENABLE_TEST_SEAMS
+#ifdef LSM_ENABLE_TEST_SEAMS
 /* Force the next N spawn attempts to behave as if the kernel returned EAGAIN
  * ("try again"), so the retry path can be exercised deterministically instead
  * of hoping a loaded machine reproduces it. Test builds only. */
-void cbm_subprocess_force_spawn_eagain_for_testing(int attempts);
-int cbm_subprocess_pending_spawn_eagain_for_testing(void);
+void lsm_subprocess_force_spawn_eagain_for_testing(int attempts);
+int lsm_subprocess_pending_spawn_eagain_for_testing(void);
 #endif
 
-#endif /* CBM_SUBPROCESS_H */
+#endif /* LSM_SUBPROCESS_H */

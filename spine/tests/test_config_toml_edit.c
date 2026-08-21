@@ -3,7 +3,7 @@
  *
  * This suite is intentionally not registered in test_main.c.
  */
-#define CBM_TOML_EDIT_ENABLE_TEST_API 1
+#define LSM_TOML_EDIT_ENABLE_TEST_API 1
 #include "cli/config_toml_edit.h"
 #include "foundation/compat.h"
 #include "foundation/compat_fs.h"
@@ -24,48 +24,48 @@
 #define CTE_PATH_CAP 1024
 #define CTE_FILE_CAP 16384
 
-static const char *CTE_BEGIN = "# BEGIN codebase-memory-mcp";
-static const char *CTE_END = "# END codebase-memory-mcp";
+static const char *CTE_BEGIN = "# BEGIN logan-spine-mcp";
+static const char *CTE_END = "# END logan-spine-mcp";
 static const char *CTE_TABLE = "mcp_servers";
 static const char *CTE_KEY = "name";
-static const char *CTE_IDENTITY = "codebase-memory-mcp";
-static const char *CTE_BODY = "name = \"codebase-memory-mcp\"\n"
-                              "command = \"codebase-memory-mcp\"\n";
-static const char *CTE_CODEX_BEGIN = "# >>> codebase-memory-mcp SessionStart >>>";
-static const char *CTE_CODEX_END = "# <<< codebase-memory-mcp SessionStart <<<";
-static const char *CTE_CODEX_COMMAND = "codebase-memory-mcp hook-augment";
+static const char *CTE_IDENTITY = "logan-spine-mcp";
+static const char *CTE_BODY = "name = \"logan-spine-mcp\"\n"
+                              "command = \"logan-spine-mcp\"\n";
+static const char *CTE_CODEX_BEGIN = "# >>> logan-spine-mcp SessionStart >>>";
+static const char *CTE_CODEX_END = "# <<< logan-spine-mcp SessionStart <<<";
+static const char *CTE_CODEX_COMMAND = "logan-spine-mcp hook-augment";
 static const char *CTE_CODEX_BLOCK =
     "[[hooks.SessionStart]]\n"
     "matcher = \"startup|resume|clear|compact\"\n\n"
     "[[hooks.SessionStart.hooks]]\n"
-    "type = \"command\"\ncommand = \"/opt/codebase-memory-mcp hook-augment\"\n"
-    "command_windows = \"& C:\\\\bin\\\\codebase-memory-mcp.exe hook-augment\"\ntimeout = 5\n\n"
+    "type = \"command\"\ncommand = \"/opt/logan-spine-mcp hook-augment\"\n"
+    "command_windows = \"& C:\\\\bin\\\\logan-spine-mcp.exe hook-augment\"\ntimeout = 5\n\n"
     "[[hooks.SubagentStart]]\nmatcher = \"*\"\n\n"
     "[[hooks.SubagentStart.hooks]]\n"
-    "type = \"command\"\ncommand = \"/opt/codebase-memory-mcp hook-augment\"\n"
-    "command_windows = \"& C:\\\\bin\\\\codebase-memory-mcp.exe hook-augment\"\ntimeout = 5\n";
+    "type = \"command\"\ncommand = \"/opt/logan-spine-mcp hook-augment\"\n"
+    "command_windows = \"& C:\\\\bin\\\\logan-spine-mcp.exe hook-augment\"\ntimeout = 5\n";
 
-static int cte_codex_edit(const char *path, cbm_toml_codex_hook_action_t action, int check_only) {
-    return cbm_toml_reconcile_codex_hooks(path, CTE_CODEX_BEGIN, CTE_CODEX_END, CTE_CODEX_COMMAND,
+static int cte_codex_edit(const char *path, lsm_toml_codex_hook_action_t action, int check_only) {
+    return lsm_toml_reconcile_codex_hooks(path, CTE_CODEX_BEGIN, CTE_CODEX_END, CTE_CODEX_COMMAND,
                                           CTE_CODEX_COMMAND, action, check_only);
 }
 
 static int cte_codex_edit_commands_detailed(const char *path, const char *command,
                                             const char *command_windows,
-                                            cbm_toml_codex_hook_action_t action, int check_only,
-                                            cbm_toml_codex_hook_failure_t *failure) {
-    return cbm_toml_reconcile_codex_hooks_detailed(path, CTE_CODEX_BEGIN, CTE_CODEX_END, command,
+                                            lsm_toml_codex_hook_action_t action, int check_only,
+                                            lsm_toml_codex_hook_failure_t *failure) {
+    return lsm_toml_reconcile_codex_hooks_detailed(path, CTE_CODEX_BEGIN, CTE_CODEX_END, command,
                                                    command_windows, action, check_only, failure);
 }
 
-static int cte_codex_edit_detailed(const char *path, cbm_toml_codex_hook_action_t action,
-                                   int check_only, cbm_toml_codex_hook_failure_t *failure) {
+static int cte_codex_edit_detailed(const char *path, lsm_toml_codex_hook_action_t action,
+                                   int check_only, lsm_toml_codex_hook_failure_t *failure) {
     return cte_codex_edit_commands_detailed(path, CTE_CODEX_COMMAND, CTE_CODEX_COMMAND, action,
                                             check_only, failure);
 }
 
 static int cte_fixture(char *dir, size_t dir_size, char *path, size_t path_size) {
-    char *created = th_mktempdir("cbm_toml_edit");
+    char *created = th_mktempdir("lsm_toml_edit");
     if (!created) {
         return -1;
     }
@@ -83,7 +83,7 @@ static int cte_read(const char *path, char *output, size_t output_size) {
     if (!path || !output || output_size == 0) {
         return -1;
     }
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file) {
         return -1;
     }
@@ -137,18 +137,18 @@ static int cte_replace_once(const char *source, const char *needle, const char *
 }
 
 static size_t cte_temp_count(const char *dir) {
-    cbm_dir_t *directory = cbm_opendir(dir);
+    lsm_dir_t *directory = lsm_opendir(dir);
     if (!directory) {
         return SIZE_MAX;
     }
     size_t count = 0;
-    cbm_dirent_t *entry = NULL;
-    while ((entry = cbm_readdir(directory)) != NULL) {
+    lsm_dirent_t *entry = NULL;
+    while ((entry = lsm_readdir(directory)) != NULL) {
         if (strncmp(entry->name, "config.toml.", strlen("config.toml.")) == 0) {
             count++;
         }
     }
-    cbm_closedir(directory);
+    lsm_closedir(directory);
     return count;
 }
 
@@ -162,7 +162,7 @@ typedef struct {
 static void cte_change_before_commit(const char *path, void *context) {
     cte_precommit_change_t *change = context;
     if (change->replace_identity &&
-        (!change->backup_path || cbm_rename_replace(path, change->backup_path) != 0)) {
+        (!change->backup_path || lsm_rename_replace(path, change->backup_path) != 0)) {
         change->result = -1;
         return;
     }
@@ -173,7 +173,7 @@ static int cte_assert_unchanged_after_managed_upsert(const char *path, const cha
                                                      const char *block) {
     char actual[CTE_FILE_CAP];
     return th_write_file(path, original) == 0 &&
-                   cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, block) == -1 &&
+                   lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, block) == -1 &&
                    cte_read(path, actual, sizeof(actual)) == 0 && strcmp(actual, original) == 0
                ? 1
                : 0;
@@ -183,7 +183,7 @@ static int cte_assert_unchanged_after_vibe_upsert(const char *path, const char *
                                                   const char *body) {
     char actual[CTE_FILE_CAP];
     return th_write_file(path, original) == 0 &&
-                   cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
+                   lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
                                                      body) == -1 &&
                    cte_read(path, actual, sizeof(actual)) == 0 && strcmp(actual, original) == 0
                ? 1
@@ -205,9 +205,9 @@ TEST(config_toml_rejects_stale_content_and_identity) {
         .replace_identity = false,
         .result = -1,
     };
-    cbm_toml_set_precommit_hook_for_testing(cte_change_before_commit, &content_change);
-    int result = cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
-    cbm_toml_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_toml_set_precommit_hook_for_testing(cte_change_before_commit, &content_change);
+    int result = lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
+    lsm_toml_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(content_change.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
@@ -221,15 +221,15 @@ TEST(config_toml_rejects_stale_content_and_identity) {
         .replace_identity = true,
         .result = -1,
     };
-    cbm_toml_set_precommit_hook_for_testing(cte_change_before_commit, &identity_change);
-    result = cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
-    cbm_toml_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_toml_set_precommit_hook_for_testing(cte_change_before_commit, &identity_change);
+    result = lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
+    lsm_toml_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(identity_change.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "keep = true\n");
     ASSERT_EQ(cte_temp_count(dir), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -245,9 +245,9 @@ TEST(config_toml_missing_target_race_does_not_replace_winner) {
         .replace_identity = false,
         .result = -1,
     };
-    cbm_toml_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
-    cbm_toml_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_toml_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
+    lsm_toml_set_prepublish_hook_for_testing(NULL, NULL);
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
@@ -274,16 +274,16 @@ TEST(config_toml_existing_target_swap_after_check_preserves_winner) {
         .result = -1,
     };
 
-    cbm_toml_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
-    cbm_toml_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_toml_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n");
+    lsm_toml_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, winner);
     ASSERT_EQ(cte_temp_count(dir), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -292,10 +292,10 @@ TEST(config_toml_rejects_non_regular_path) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    ASSERT_EQ(cbm_mkdir(path), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
+    ASSERT_EQ(lsm_mkdir(path), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
     ASSERT_EQ(cte_temp_count(dir), 0U);
-    ASSERT_EQ(cbm_rmdir(path), 0);
+    ASSERT_EQ(lsm_rmdir(path), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -312,20 +312,20 @@ TEST(config_toml_rejects_symlink_hardlink_and_preserves_metadata) {
     ASSERT(snprintf(alias, sizeof(alias), "%s/alias.toml", dir) > 0);
     ASSERT_EQ(th_write_file(target, "target = true\n"), 0);
     ASSERT_EQ(symlink(target, path), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
     struct stat link_state;
     ASSERT_EQ(lstat(path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
     ASSERT_EQ(cte_read(target, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "target = true\n");
-    ASSERT_EQ(cbm_unlink(path), 0);
+    ASSERT_EQ(lsm_unlink(path), 0);
 
     ASSERT_EQ(th_write_file(path, "shared = true\n"), 0);
     ASSERT_EQ(link(path, alias), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
     ASSERT_EQ(cte_read(alias, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "shared = true\n");
-    ASSERT_EQ(cbm_unlink(alias), 0);
+    ASSERT_EQ(lsm_unlink(alias), 0);
 
     ASSERT_EQ(chmod(path, 04755), 0);
     struct stat privileged;
@@ -334,18 +334,18 @@ TEST(config_toml_rejects_symlink_hardlink_and_preserves_metadata) {
      * reports success. Exercise the rejection contract only when the fixture
      * can actually retain the privileged bit. */
     if ((privileged.st_mode & S_ISUID) != 0) {
-        ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
+        ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
     }
     ASSERT_EQ(chmod(path, 0640), 0);
     struct stat before;
     ASSERT_EQ(stat(path, &before), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     struct stat after;
     ASSERT_EQ(stat(path, &after), 0);
     ASSERT_EQ(after.st_uid, before.st_uid);
     ASSERT_EQ(after.st_gid, before.st_gid);
     ASSERT_EQ(after.st_mode & 07777, before.st_mode & 07777);
-    ASSERT_EQ(cbm_unlink(target), 0);
+    ASSERT_EQ(lsm_unlink(target), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -356,21 +356,21 @@ TEST(config_toml_managed_markers_ignore_multiline_strings) {
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
     const char *original = "basic = \"\"\"\n"
-                           "# BEGIN codebase-memory-mcp\n"
-                           "# END codebase-memory-mcp\n"
+                           "# BEGIN logan-spine-mcp\n"
+                           "# END logan-spine-mcp\n"
                            "\"\"\"\n"
                            "literal = '''\n"
-                           "# BEGIN codebase-memory-mcp\n"
-                           "# END codebase-memory-mcp\n"
+                           "# BEGIN logan-spine-mcp\n"
+                           "# END logan-spine-mcp\n"
                            "'''\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, original), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_EQ(cte_occurrences(actual, CTE_BEGIN), 3);
     ASSERT_EQ(cte_occurrences(actual, CTE_END), 3);
     ASSERT_NOT_NULL(strstr(actual, "owned = true"));
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, original);
     th_cleanup(dir);
@@ -383,15 +383,15 @@ TEST(config_toml_managed_rejects_marker_in_block_and_unclosed_multiline) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "keep = true\n"), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END,
-                                            "value = true\n# END codebase-memory-mcp\n"),
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END,
+                                            "value = true\n# END logan-spine-mcp\n"),
               -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "keep = true\n");
 
-    const char *unclosed = "description = \"\"\"\n# BEGIN codebase-memory-mcp\n";
+    const char *unclosed = "description = \"\"\"\n# BEGIN logan-spine-mcp\n";
     ASSERT_EQ(th_write_file(path, unclosed), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, unclosed);
     th_cleanup(dir);
@@ -401,14 +401,14 @@ TEST(config_toml_managed_rejects_marker_in_block_and_unclosed_multiline) {
 TEST(config_toml_codex_semantic_conflicts_fail_closed) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
-    const char *codex_block = "[mcp_servers.codebase-memory-mcp]\ncommand = \"new\"\n";
+    const char *codex_block = "[mcp_servers.logan-spine-mcp]\ncommand = \"new\"\n";
     static const char *conflicts[] = {
-        "[mcp_servers.\"codebase-memory-mcp\"]\ncommand = \"old\"\n",
-        "[\"mcp_servers\".'codebase-memory-mcp']\ncommand = \"old\"\n",
-        "mcp_servers.\"codebase-memory-mcp\".command = \"old\"\n",
-        "[mcp_servers]\n\"codebase-memory-mcp\".command = \"old\"\n",
-        ("[mcp_servers.codebase-memory-mcp]\ncommand = \"one\"\n"
-         "[mcp_servers.\"codebase-memory-mcp\"]\ncommand = \"two\"\n"),
+        "[mcp_servers.\"logan-spine-mcp\"]\ncommand = \"old\"\n",
+        "[\"mcp_servers\".'logan-spine-mcp']\ncommand = \"old\"\n",
+        "mcp_servers.\"logan-spine-mcp\".command = \"old\"\n",
+        "[mcp_servers]\n\"logan-spine-mcp\".command = \"old\"\n",
+        ("[mcp_servers.logan-spine-mcp]\ncommand = \"one\"\n"
+         "[mcp_servers.\"logan-spine-mcp\"]\ncommand = \"two\"\n"),
     };
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     for (size_t i = 0; i < sizeof(conflicts) / sizeof(conflicts[0]); ++i) {
@@ -426,12 +426,12 @@ TEST(config_toml_vibe_body_validation_fail_closed) {
     static const char *invalid_bodies[] = {
         "command = \"missing identity\"\n",
         "name = \"wrong\"\ncommand = \"x\"\n",
-        "name = \"codebase-memory-mcp\"\nname = \"codebase-memory-mcp\"\n",
-        "name = \"codebase-memory-mcp\"\n[evil]\npwned = true\n",
-        "name = \"codebase-memory-mcp\"\n[[evil]]\npwned = true\n",
-        "name = \"codebase-memory-mcp\"\ncommand.value = \"x\"\n",
-        "name = \"codebase-memory-mcp\"\ndescription = \"\"\"ambiguous\"\"\"\n",
-        "name = \"codebase-memory-mcp\"\nthis is not an assignment\n",
+        "name = \"logan-spine-mcp\"\nname = \"logan-spine-mcp\"\n",
+        "name = \"logan-spine-mcp\"\n[evil]\npwned = true\n",
+        "name = \"logan-spine-mcp\"\n[[evil]]\npwned = true\n",
+        "name = \"logan-spine-mcp\"\ncommand.value = \"x\"\n",
+        "name = \"logan-spine-mcp\"\ndescription = \"\"\"ambiguous\"\"\"\n",
+        "name = \"logan-spine-mcp\"\nthis is not an assignment\n",
     };
     for (size_t i = 0; i < sizeof(invalid_bodies) / sizeof(invalid_bodies[0]); ++i) {
         ASSERT(cte_assert_unchanged_after_vibe_upsert(path, original, invalid_bodies[i]));
@@ -446,38 +446,38 @@ TEST(config_toml_target_table_rejects_significant_nonassignments_byte_identicall
     char actual[CTE_FILE_CAP];
     static const char *malformed[] = {
         "[[mcp_servers]]\n"
-        "name = \"codebase-memory-mcp\"\n"
+        "name = \"logan-spine-mcp\"\n"
         "this is not an assignment\n"
         "command = \"winner\"\n",
         "[[mcp_servers]]\n"
-        "name = \"codebase-memory-mcp\"\n"
+        "name = \"logan-spine-mcp\"\n"
         "command \"missing equals\"\n",
         "[[mcp_servers]]\n"
-        "name = \"codebase-memory-mcp\"\n"
+        "name = \"logan-spine-mcp\"\n"
         "@invalid\n",
     };
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     for (size_t i = 0U; i < sizeof(malformed) / sizeof(malformed[0]); ++i) {
         ASSERT_EQ(th_write_file(path, malformed[i]), 0);
         ASSERT_EQ(
-            cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+            lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
             -1);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, malformed[i]);
 
-        ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), -1);
+        ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), -1);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, malformed[i]);
     }
 
-    const char *malformed_regular = "[mcp_servers.codebase-memory-mcp]\n"
+    const char *malformed_regular = "[mcp_servers.logan-spine-mcp]\n"
                                     "command = \"winner\"\n"
                                     "this is not an assignment\n"
                                     "[unrelated]\n"
                                     "keep = true\n";
     ASSERT_EQ(th_write_file(path, malformed_regular), 0);
     ASSERT_EQ(
-        cbm_toml_remove_legacy_table(path, "mcp_servers.codebase-memory-mcp", CTE_BEGIN, CTE_END),
+        lsm_toml_remove_legacy_table(path, "mcp_servers.logan-spine-mcp", CTE_BEGIN, CTE_END),
         -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, malformed_regular);
@@ -490,14 +490,14 @@ TEST(config_toml_legacy_remove_reports_foreign_table_without_mutation) {
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
     const char *foreign = "theme = \"dark\"\n"
-                          "[mcp_servers.codebase-memory-mcp]\n"
+                          "[mcp_servers.logan-spine-mcp]\n"
                           "command = \"/opt/user-tool\"\n"
                           "args = []\n"
                           "user_field = true\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, foreign), 0);
     ASSERT_EQ(
-        cbm_toml_remove_legacy_table(path, "mcp_servers.codebase-memory-mcp", CTE_BEGIN, CTE_END),
+        lsm_toml_remove_legacy_table(path, "mcp_servers.logan-spine-mcp", CTE_BEGIN, CTE_END),
         1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, foreign);
@@ -530,7 +530,7 @@ TEST(config_toml_vibe_remove_includes_descendant_tables) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\"\n"
+                                  "name = \"logan-spine-mcp\"\n"
                                   "command = \"owned\"\n"
                                   "[mcp_servers.environment]\n"
                                   "TOKEN = \"owned\"\n"
@@ -540,7 +540,7 @@ TEST(config_toml_vibe_remove_includes_descendant_tables) {
                                   "name = \"other\"\n"
                                   "command = \"keep\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NULL(strstr(actual, "TOKEN"));
     ASSERT_NULL(strstr(actual, "owned-child"));
@@ -553,19 +553,19 @@ TEST(config_toml_vibe_reinstall_preserves_user_fields_and_descendants) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
-    const char *desired = "name = \"codebase-memory-mcp\"\n"
+    const char *desired = "name = \"logan-spine-mcp\"\n"
                           "transport = \"stdio\"\n"
                           "command = \"new\"\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\" # identity comment\n"
+                                  "name = \"logan-spine-mcp\" # identity comment\n"
                                   "command = \"old\"\n"
                                   "timeout = 45 # user field\n"
                                   "args = [\"--user\"]\n"
                                   "[mcp_servers.environment]\n"
                                   "KEEP = \"yes\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, desired),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, desired),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "command = \"new\""));
@@ -585,43 +585,43 @@ TEST(config_toml_preserves_bom_crlf_and_handles_no_final_newline) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "\xEF\xBB\xBFkeep = true\r\n"), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT(memcmp(actual, "\xEF\xBB\xBF", 3U) == 0);
     ASSERT_NOT_NULL(strstr(actual, "keep = true\r\n"));
-    ASSERT_NOT_NULL(strstr(actual, "# BEGIN codebase-memory-mcp\r\nowned = true\r\n"));
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_NOT_NULL(strstr(actual, "# BEGIN logan-spine-mcp\r\nowned = true\r\n"));
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_EQ(cte_occurrences(actual, CTE_BEGIN), 1);
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "\xEF\xBB\xBFkeep = true\r\n");
 
-    ASSERT_EQ(th_write_file(path, "\xEF\xBB\xBF# BEGIN codebase-memory-mcp\r\n"
+    ASSERT_EQ(th_write_file(path, "\xEF\xBB\xBF# BEGIN logan-spine-mcp\r\n"
                                   "old = true\r\n"
-                                  "# END codebase-memory-mcp\r\n"),
+                                  "# END logan-spine-mcp\r\n"),
               0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = true\n"), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT(memcmp(actual, "\xEF\xBB\xBF# BEGIN", 10U) == 0);
     ASSERT_EQ(cte_occurrences(actual, CTE_BEGIN), 1);
     ASSERT_NOT_NULL(strstr(actual, "new = true\r\n"));
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "\xEF\xBB\xBF");
 
     ASSERT_EQ(th_write_file(path, "\xEF\xBB\xBF[[\"mcp_servers\"]]\r\n"
-                                  "name = \"codebase-memory-mcp\"\r\n"
+                                  "name = \"logan-spine-mcp\"\r\n"
                                   "command = \"old\""),
               0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT(memcmp(actual, "\xEF\xBB\xBF", 3U) == 0);
-    ASSERT_NOT_NULL(strstr(actual, "command = \"codebase-memory-mcp\"\r\n"));
+    ASSERT_NOT_NULL(strstr(actual, "command = \"logan-spine-mcp\"\r\n"));
 
     ASSERT_EQ(th_write_file(path, "keep = true"), 0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "keep = true\n\n[[mcp_servers]]\n"));
@@ -633,7 +633,7 @@ TEST(config_toml_rejects_oversized_input_file) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     ASSERT_NOT_NULL(file);
     char chunk[4096];
     memset(chunk, '#', sizeof(chunk));
@@ -641,7 +641,7 @@ TEST(config_toml_rejects_oversized_input_file) {
         ASSERT_EQ(fwrite(chunk, 1U, sizeof(chunk), file), sizeof(chunk));
     }
     ASSERT_EQ(fclose(file), 0);
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
     th_cleanup(dir);
     PASS();
 }
@@ -649,7 +649,7 @@ TEST(config_toml_rejects_oversized_input_file) {
 TEST(config_toml_escape_windows_path_quotes) {
     char escaped[256];
     ASSERT_EQ(
-        cbm_toml_escape_basic_string("C:\\Users\\Jane\\tool \"quoted\"", escaped, sizeof(escaped)),
+        lsm_toml_escape_basic_string("C:\\Users\\Jane\\tool \"quoted\"", escaped, sizeof(escaped)),
         0);
     ASSERT_STR_EQ(escaped, "C:\\\\Users\\\\Jane\\\\tool \\\"quoted\\\"");
     PASS();
@@ -657,17 +657,17 @@ TEST(config_toml_escape_windows_path_quotes) {
 
 TEST(config_toml_escape_newlines_controls) {
     char escaped[256];
-    ASSERT_EQ(cbm_toml_escape_basic_string("line1\nline2\t\r\b\f\x01", escaped, sizeof(escaped)),
+    ASSERT_EQ(lsm_toml_escape_basic_string("line1\nline2\t\r\b\f\x01", escaped, sizeof(escaped)),
               0);
     ASSERT_STR_EQ(escaped, "line1\\nline2\\t\\r\\b\\f\\u0001");
 
     char too_small[4] = "bad";
-    ASSERT_EQ(cbm_toml_escape_basic_string("overflow", too_small, sizeof(too_small)), -1);
+    ASSERT_EQ(lsm_toml_escape_basic_string("overflow", too_small, sizeof(too_small)), -1);
     ASSERT_STR_EQ(too_small, "");
-    ASSERT_EQ(cbm_toml_escape_basic_string(NULL, escaped, sizeof(escaped)), -1);
-    ASSERT_EQ(cbm_toml_escape_basic_string("value", NULL, 0), -1);
+    ASSERT_EQ(lsm_toml_escape_basic_string(NULL, escaped, sizeof(escaped)), -1);
+    ASSERT_EQ(lsm_toml_escape_basic_string("value", NULL, 0), -1);
     char invalid_utf8[] = {(char)0xff, '\0'};
-    ASSERT_EQ(cbm_toml_escape_basic_string(invalid_utf8, escaped, sizeof(escaped)), -1);
+    ASSERT_EQ(lsm_toml_escape_basic_string(invalid_utf8, escaped, sizeof(escaped)), -1);
     ASSERT_STR_EQ(escaped, "");
     PASS();
 }
@@ -678,11 +678,11 @@ TEST(config_toml_managed_fresh_missing_file) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
 
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "enabled = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "enabled = true\n"), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
-    ASSERT_STR_EQ(actual, "# BEGIN codebase-memory-mcp\n"
+    ASSERT_STR_EQ(actual, "# BEGIN logan-spine-mcp\n"
                           "enabled = true\n"
-                          "# END codebase-memory-mcp\n");
+                          "# END logan-spine-mcp\n");
     th_cleanup(dir);
     PASS();
 }
@@ -693,18 +693,18 @@ TEST(config_toml_managed_replace_preserves_unrelated) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "title = \"keep\"\n"
-                                  "# BEGIN codebase-memory-mcp\n"
+                                  "# BEGIN logan-spine-mcp\n"
                                   "old = true\n"
-                                  "# END codebase-memory-mcp\n"
+                                  "# END logan-spine-mcp\n"
                                   "tail = \"keep\"\n"),
               0);
 
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = \"value\""), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = \"value\""), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "title = \"keep\"\n"
-                          "# BEGIN codebase-memory-mcp\n"
+                          "# BEGIN logan-spine-mcp\n"
                           "new = \"value\"\n"
-                          "# END codebase-memory-mcp\n"
+                          "# END logan-spine-mcp\n"
                           "tail = \"keep\"\n");
     th_cleanup(dir);
     PASS();
@@ -716,16 +716,16 @@ TEST(config_toml_managed_remove) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "before = true\n"
-                                  "# BEGIN codebase-memory-mcp\n"
+                                  "# BEGIN logan-spine-mcp\n"
                                   "owned = true\n"
-                                  "# END codebase-memory-mcp\n"
+                                  "# END logan-spine-mcp\n"
                                   "after = true\n"),
               0);
 
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "before = true\nafter = true\n");
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -738,9 +738,9 @@ TEST(config_toml_managed_idempotent) {
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "keep = true\n"), 0);
 
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     ASSERT_EQ(cte_read(path, first, sizeof(first)), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned = true\n"), 0);
     ASSERT_EQ(cte_read(path, second, sizeof(second)), 0);
     ASSERT_STR_EQ(first, second);
     ASSERT_EQ(cte_occurrences(second, CTE_BEGIN), 1);
@@ -753,22 +753,22 @@ TEST(config_toml_managed_unbalanced_duplicate_fail_closed) {
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
     const char *unbalanced = "keep = true\n"
-                             "# BEGIN codebase-memory-mcp\n"
+                             "# BEGIN logan-spine-mcp\n"
                              "owned = true\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, unbalanced), 0);
-    ASSERT_EQ(cbm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = true\n"), -1);
+    ASSERT_EQ(lsm_toml_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new = true\n"), -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, unbalanced);
 
-    const char *duplicate = "# BEGIN codebase-memory-mcp\n"
+    const char *duplicate = "# BEGIN logan-spine-mcp\n"
                             "one = true\n"
-                            "# END codebase-memory-mcp\n"
-                            "# BEGIN codebase-memory-mcp\n"
+                            "# END logan-spine-mcp\n"
+                            "# BEGIN logan-spine-mcp\n"
                             "two = true\n"
-                            "# END codebase-memory-mcp\n";
+                            "# END logan-spine-mcp\n";
     ASSERT_EQ(th_write_file(path, duplicate), 0);
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, duplicate);
     th_cleanup(dir);
@@ -788,7 +788,7 @@ TEST(config_toml_vibe_insert_among_other_tables) {
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, original), 0);
 
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "# global comment\n"
@@ -798,8 +798,8 @@ TEST(config_toml_vibe_insert_among_other_tables) {
                           "name = \"other-server\"\n"
                           "command = \"other\"\n\n"
                           "[[mcp_servers]]\n"
-                          "name = \"codebase-memory-mcp\"\n"
-                          "command = \"codebase-memory-mcp\"\n");
+                          "name = \"logan-spine-mcp\"\n"
+                          "command = \"logan-spine-mcp\"\n");
     th_cleanup(dir);
     PASS();
 }
@@ -808,7 +808,7 @@ TEST(config_toml_vibe_replace_target_preserves_comments_tables) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
-    const char *replacement = "name = \"codebase-memory-mcp\"\n"
+    const char *replacement = "name = \"logan-spine-mcp\"\n"
                               "command = \"/new/path\"\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "# keep top\n"
@@ -817,7 +817,7 @@ TEST(config_toml_vibe_replace_target_preserves_comments_tables) {
                                   "command = \"other\"\n\n"
                                   "# keep target preface\n"
                                   "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\" # owned\n"
+                                  "name = \"logan-spine-mcp\" # owned\n"
                                   "command = \"old\"\n"
                                   "args = [\"--old\"]\n\n"
                                   "# keep after target\n"
@@ -826,7 +826,7 @@ TEST(config_toml_vibe_replace_target_preserves_comments_tables) {
               0);
 
     ASSERT_EQ(
-        cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, replacement), 0);
+        lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, replacement), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "# keep top"));
     ASSERT_NOT_NULL(strstr(actual, "# keep target preface"));
@@ -844,31 +844,31 @@ TEST(config_toml_vibe_owned_table_installs_idempotently_and_removes_exact_state)
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
-    const char *canonical = "name = \"codebase-memory-mcp\"\n"
+    const char *canonical = "name = \"logan-spine-mcp\"\n"
                             "transport = \"stdio\"\n"
-                            "command = \"/opt/codebase-memory-mcp\"\n"
+                            "command = \"/opt/logan-spine-mcp\"\n"
                             "args = []\n";
     const char *installed = "[[mcp_servers]]\n"
-                            "name = \"codebase-memory-mcp\"\n"
+                            "name = \"logan-spine-mcp\"\n"
                             "transport = \"stdio\"\n"
-                            "command = \"/opt/codebase-memory-mcp\"\n"
+                            "command = \"/opt/logan-spine-mcp\"\n"
                             "args = []\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
 
     ASSERT_EQ(
-        cbm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
+        lsm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
         0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, installed);
 
     ASSERT_EQ(
-        cbm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
+        lsm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
         0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, installed);
 
     ASSERT_EQ(
-        cbm_toml_remove_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
+        lsm_toml_remove_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, canonical),
         0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "");
@@ -880,21 +880,21 @@ TEST(config_toml_vibe_owned_table_preserves_foreign_same_name_state) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
-    const char *canonical = "name = \"codebase-memory-mcp\"\n"
+    const char *canonical = "name = \"logan-spine-mcp\"\n"
                             "transport = \"stdio\"\n"
-                            "command = \"/opt/codebase-memory-mcp\"\n"
+                            "command = \"/opt/logan-spine-mcp\"\n"
                             "args = []\n";
     const char *foreign_cases[] = {
         "# user-owned Vibe server\n"
         "[[mcp_servers]]\n"
-        "name = \"codebase-memory-mcp\"\n"
+        "name = \"logan-spine-mcp\"\n"
         "transport = \"stdio\"\n"
         "command = \"/opt/user-owned-mcp\"\n"
         "args = [\"--custom\"]\n",
         "[[mcp_servers]]\n"
-        "name = \"codebase-memory-mcp\"\n"
+        "name = \"logan-spine-mcp\"\n"
         "transport = \"stdio\"\n"
-        "command = \"/opt/codebase-memory-mcp\"\n"
+        "command = \"/opt/logan-spine-mcp\"\n"
         "args = []\n"
         "startup_timeout_sec = 45\n",
     };
@@ -902,15 +902,15 @@ TEST(config_toml_vibe_owned_table_preserves_foreign_same_name_state) {
 
     for (size_t i = 0U; i < sizeof(foreign_cases) / sizeof(foreign_cases[0]); i++) {
         ASSERT_EQ(th_write_file(path, foreign_cases[i]), 0);
-        ASSERT_EQ(cbm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
+        ASSERT_EQ(lsm_toml_upsert_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
                                                           canonical),
-                  CBM_TOML_OWNED_EDIT_FOREIGN);
+                  LSM_TOML_OWNED_EDIT_FOREIGN);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, foreign_cases[i]);
 
-        ASSERT_EQ(cbm_toml_remove_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
+        ASSERT_EQ(lsm_toml_remove_owned_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY,
                                                           canonical),
-                  CBM_TOML_OWNED_EDIT_FOREIGN);
+                  LSM_TOML_OWNED_EDIT_FOREIGN);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, foreign_cases[i]);
     }
@@ -924,13 +924,13 @@ TEST(config_toml_vibe_remove_first_target) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\"\n"
+                                  "name = \"logan-spine-mcp\"\n"
                                   "command = \"owned\"\n\n"
                                   "[[mcp_servers]]\n"
                                   "name = \"other\"\n"
                                   "command = \"keep\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NULL(strstr(actual, "command = \"owned\""));
     ASSERT_NOT_NULL(strstr(actual, "name = \"other\""));
@@ -947,12 +947,12 @@ TEST(config_toml_vibe_remove_middle_target) {
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
                                   "name = \"first\"\n\n"
                                   "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\"\n"
+                                  "name = \"logan-spine-mcp\"\n"
                                   "command = \"owned\"\n\n"
                                   "[[mcp_servers]]\n"
                                   "name = \"last\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "name = \"first\""));
     ASSERT_NOT_NULL(strstr(actual, "name = \"last\""));
@@ -970,9 +970,9 @@ TEST(config_toml_vibe_remove_last_target) {
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
                                   "name = \"other\"\n\n"
                                   "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\"\n"),
+                                  "name = \"logan-spine-mcp\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "name = \"other\""));
     ASSERT_NULL(strstr(actual, CTE_IDENTITY));
@@ -987,10 +987,10 @@ TEST(config_toml_vibe_remove_only_target) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-mcp\"\n"
+                                  "name = \"logan-spine-mcp\"\n"
                                   "command = \"owned\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "");
     th_cleanup(dir);
@@ -1003,23 +1003,23 @@ TEST(config_toml_vibe_literal_and_basic_identity) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = 'codebase-memory-mcp' # literal\n"
+                                  "name = 'logan-spine-mcp' # literal\n"
                                   "command = 'owned'\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "");
 
     ASSERT_EQ(th_write_file(path, "[[mcp_servers]]\n"
-                                  "name = \"codebase-memory-\\u006dcp\" # basic\n"
+                                  "name = \"logan-spine-\\u006dcp\" # basic\n"
                                   "command = \"old\"\n"),
               0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "[[mcp_servers]]\n"
-                          "name = \"codebase-memory-mcp\"\n"
-                          "command = \"codebase-memory-mcp\"\n");
+                          "name = \"logan-spine-mcp\"\n"
+                          "command = \"logan-spine-mcp\"\n");
     th_cleanup(dir);
     PASS();
 }
@@ -1030,14 +1030,14 @@ TEST(config_toml_vibe_duplicate_target_fail_closed) {
     char actual[CTE_FILE_CAP];
     const char *duplicate = "# preserve exactly\n"
                             "[[mcp_servers]]\n"
-                            "name = \"codebase-memory-mcp\"\n"
+                            "name = \"logan-spine-mcp\"\n"
                             "command = \"first\"\n\n"
                             "[[mcp_servers]]\n"
-                            "name = 'codebase-memory-mcp'\n"
+                            "name = 'logan-spine-mcp'\n"
                             "command = 'second'\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, duplicate), 0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, duplicate);
@@ -1053,22 +1053,22 @@ TEST(config_toml_vibe_ambiguous_target_fail_closed) {
                             "command = \"missing-name\"\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, ambiguous), 0);
-    ASSERT_EQ(cbm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), -1);
+    ASSERT_EQ(lsm_toml_remove_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY), -1);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, ambiguous);
 
     const char *multiline = "[[mcp_servers]]\n"
                             "description = \"\"\"\n"
-                            "name = \"codebase-memory-mcp\"\n"
+                            "name = \"logan-spine-mcp\"\n"
                             "\"\"\"\n"
                             "name = \"other\"\n";
     ASSERT_EQ(th_write_file(path, multiline), 0);
-    ASSERT_EQ(cbm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
+    ASSERT_EQ(lsm_toml_upsert_named_array_table(path, CTE_TABLE, CTE_KEY, CTE_IDENTITY, CTE_BODY),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "description = \"\"\""));
     ASSERT_NOT_NULL(strstr(actual, "name = \"other\""));
-    ASSERT_NOT_NULL(strstr(actual, "name = \"codebase-memory-mcp\""));
+    ASSERT_NOT_NULL(strstr(actual, "name = \"logan-spine-mcp\""));
     th_cleanup(dir);
     PASS();
 }
@@ -1079,42 +1079,42 @@ TEST(config_toml_codex_reconciles_minimal_owned_forms) {
     char actual[CTE_FILE_CAP];
     char before[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 1), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 1), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), -1);
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, CTE_CODEX_BEGIN));
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_REMOVE, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_REMOVE, 0), 0);
 
     static const char *fixtures[] = {
         "[hooks]\nSessionStart = [{ matcher = \"startup|resume|clear|compact\", hooks = "
         "[{ type = \"command\", command = 'echo \"Code discovery: prefer "
-        "codebase-memory-mcp\"' }] }]\n",
+        "logan-spine-mcp\"' }] }]\n",
         "\"hooks\" . 'SessionStart' = [ {matcher='startup|resume|clear|compact', "
-        "hooks=[{type='command', command='/opt/codebase-memory-mcp hook-augment', "
-        "command_windows='& C:\\\\bin\\\\codebase-memory-mcp.exe hook-augment',timeout=5}]} ]\n",
+        "hooks=[{type='command', command='/opt/logan-spine-mcp hook-augment', "
+        "command_windows='& C:\\\\bin\\\\logan-spine-mcp.exe hook-augment',timeout=5}]} ]\n",
     };
     for (size_t i = 0U; i < sizeof(fixtures) / sizeof(fixtures[0]); ++i) {
         ASSERT_EQ(th_write_file(path, fixtures[i]), 0);
         ASSERT_EQ(cte_read(path, before, sizeof(before)), 0);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 1), 0);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 1), 0);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, before);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_NULL(strstr(actual, "SessionStart = ["));
         ASSERT_EQ(cte_occurrences(actual, CTE_CODEX_BEGIN), 1);
         ASSERT_EQ(cte_read(path, before, sizeof(before)), 0);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, before);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_REMOVE, 0), 0);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_REMOVE, 0), 0);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_NULL(strstr(actual, "hook-augment"));
     }
 
     ASSERT_EQ(th_write_file(path, CTE_CODEX_BLOCK), 0);
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_EQ(cte_occurrences(actual, CTE_CODEX_BEGIN), 1);
     ASSERT_EQ(cte_occurrences(actual, "[[hooks.SessionStart]]"), 1);
@@ -1123,7 +1123,7 @@ TEST(config_toml_codex_reconciles_minimal_owned_forms) {
                        CTE_CODEX_BLOCK, CTE_CODEX_END, "keep = true"),
               0);
     ASSERT_EQ(th_write_file(path, damaged), 0);
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NULL(strstr(actual, "SessionStart = ["));
     ASSERT_EQ(cte_occurrences(actual, CTE_CODEX_BEGIN), 1);
@@ -1136,25 +1136,25 @@ TEST(config_toml_codex_reconciles_minimal_owned_forms) {
  * v0.10.2 release, with the release's POSIX and PowerShell command builders. */
 TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
     static const char *command =
-        "'C:\\Users\\Example\\AppData\\Local\\Programs\\codebase-memory-mcp\\"
-        "codebase-memory-mcp.exe' hook-augment";
+        "'C:\\Users\\Example\\AppData\\Local\\Programs\\logan-spine-mcp\\"
+        "logan-spine-mcp.exe' hook-augment";
     static const char *command_windows =
-        "& 'C:\\Users\\Example\\AppData\\Local\\Programs\\codebase-memory-mcp\\"
-        "codebase-memory-mcp.exe' hook-augment";
+        "& 'C:\\Users\\Example\\AppData\\Local\\Programs\\logan-spine-mcp\\"
+        "logan-spine-mcp.exe' hook-augment";
     static const char *original =
         "\xEF\xBB\xBF[mcp_servers.other]\r\n"
         "command = \"other\"\r\n"
         "keep = true\r\n"
-        "# >>> codebase-memory-mcp SessionStart >>>\r\n"
+        "# >>> logan-spine-mcp SessionStart >>>\r\n"
         "[[hooks.SessionStart]]\r\n"
         "matcher = \"startup|resume|clear|compact\"\r\n"
         "\r\n"
         "[[hooks.SessionStart.hooks]]\r\n"
         "type = \"command\"\r\n"
         "command = \"'C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Programs\\\\"
-        "codebase-memory-mcp\\\\codebase-memory-mcp.exe' hook-augment\"\r\n"
+        "logan-spine-mcp\\\\logan-spine-mcp.exe' hook-augment\"\r\n"
         "command_windows = \"& 'C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Programs\\\\"
-        "codebase-memory-mcp\\\\codebase-memory-mcp.exe' hook-augment\"\r\n"
+        "logan-spine-mcp\\\\logan-spine-mcp.exe' hook-augment\"\r\n"
         "timeout = 5\r\n"
         "\r\n"
         "[[hooks.SubagentStart]]\r\n"
@@ -1163,11 +1163,11 @@ TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
         "[[hooks.SubagentStart.hooks]]\r\n"
         "type = \"command\"\r\n"
         "command = \"'C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Programs\\\\"
-        "codebase-memory-mcp\\\\codebase-memory-mcp.exe' hook-augment\"\r\n"
+        "logan-spine-mcp\\\\logan-spine-mcp.exe' hook-augment\"\r\n"
         "command_windows = \"& 'C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Programs\\\\"
-        "codebase-memory-mcp\\\\codebase-memory-mcp.exe' hook-augment\"\r\n"
+        "logan-spine-mcp\\\\logan-spine-mcp.exe' hook-augment\"\r\n"
         "timeout = 5\r\n"
-        "# <<< codebase-memory-mcp SessionStart <<<\r\n";
+        "# <<< logan-spine-mcp SessionStart <<<\r\n";
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     char before[CTE_FILE_CAP];
@@ -1177,16 +1177,16 @@ TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
     ASSERT_EQ(th_write_file(path, original), 0);
     ASSERT_EQ(cte_read(path, before, sizeof(before)), 0);
 
-    cbm_toml_codex_hook_failure_t failure = CBM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT;
+    lsm_toml_codex_hook_failure_t failure = LSM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT;
     int reconcile_rc = cte_codex_edit_commands_detailed(path, command, command_windows,
-                                                        CBM_TOML_CODEX_HOOK_UPSERT, 1, &failure);
-    ASSERT_EQ(failure, CBM_TOML_CODEX_HOOK_FAILURE_NONE);
+                                                        LSM_TOML_CODEX_HOOK_UPSERT, 1, &failure);
+    ASSERT_EQ(failure, LSM_TOML_CODEX_HOOK_FAILURE_NONE);
     ASSERT_EQ(reconcile_rc, 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, before);
 
     ASSERT_EQ(cte_codex_edit_commands_detailed(path, command, command_windows,
-                                               CBM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
+                                               LSM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, before);
@@ -1202,13 +1202,13 @@ TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
     }
 
     ASSERT_EQ(cte_codex_edit_commands_detailed(path, command, command_windows,
-                                               CBM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
+                                               LSM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, before);
 
     ASSERT_EQ(cte_codex_edit_commands_detailed(path, command, command_windows,
-                                               CBM_TOML_CODEX_HOOK_REMOVE, 0, &failure),
+                                               LSM_TOML_CODEX_HOOK_REMOVE, 0, &failure),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "[mcp_servers.other]"));
@@ -1218,7 +1218,7 @@ TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
 
     static const char *owned_line =
         "command = \"'C:\\\\Users\\\\Example\\\\AppData\\\\Local\\\\Programs\\\\"
-        "codebase-memory-mcp\\\\codebase-memory-mcp.exe' hook-augment\"\r\n";
+        "logan-spine-mcp\\\\logan-spine-mcp.exe' hook-augment\"\r\n";
     ASSERT_EQ(cte_replace_once(original, owned_line, "command = \"foreign\"\r\n", invalid[0],
                                sizeof(invalid[0])),
               0);
@@ -1228,17 +1228,17 @@ TEST(config_toml_codex_accepts_v0102_managed_windows_crlf) {
               0);
     for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
         ASSERT_EQ(th_write_file(path, invalid[i]), 0);
-        failure = CBM_TOML_CODEX_HOOK_FAILURE_NONE;
+        failure = LSM_TOML_CODEX_HOOK_FAILURE_NONE;
         ASSERT_EQ(cte_codex_edit_commands_detailed(path, command, command_windows,
-                                                   CBM_TOML_CODEX_HOOK_UPSERT, 1, &failure),
+                                                   LSM_TOML_CODEX_HOOK_UPSERT, 1, &failure),
                   -1);
-        ASSERT_EQ(failure, CBM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP);
+        ASSERT_EQ(failure, LSM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, invalid[i]);
         ASSERT_EQ(cte_codex_edit_commands_detailed(path, command, command_windows,
-                                                   CBM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
+                                                   LSM_TOML_CODEX_HOOK_UPSERT, 0, &failure),
                   -1);
-        ASSERT_EQ(failure, CBM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP);
+        ASSERT_EQ(failure, LSM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, invalid[i]);
     }
@@ -1252,23 +1252,23 @@ TEST(config_toml_codex_rejects_ambiguous_inline_byte_identically) {
     char actual[CTE_FILE_CAP];
     static const char *invalid[] = {
         ("[hooks]\nSessionStart = [{matcher='startup|resume|clear|compact',hooks=[{type="
-         "'command',command='codebase-memory-mcp hook-augment',command_windows="
-         "'codebase-memory-mcp hook-augment',timeout=5},{type='command',command='foreign'}]}]\n"),
+         "'command',command='logan-spine-mcp hook-augment',command_windows="
+         "'logan-spine-mcp hook-augment',timeout=5},{type='command',command='foreign'}]}]\n"),
         ("[hooks]\nSessionStart = [{matcher='startup|resume|clear|compact',hooks=[{type="
-         "'command',command='codebase-memory-mcp hook-augment',command_windows="
-         "'codebase-memory-mcp hook-augment',timeout=5,owner='user'}]}]\n"),
+         "'command',command='logan-spine-mcp hook-augment',command_windows="
+         "'logan-spine-mcp hook-augment',timeout=5,owner='user'}]}]\n"),
         "[hooks]\nSessionStart=[]\nSessionStart=[]\n",
         "[hooks]\nSessionStart = [\n { matcher = 'startup|resume|clear|compact' }\n]\n",
         ("[hooks]\nSessionStart = [{matcher='startup|resume|clear|compact',hooks=[{type="
-         "'command',command='echo \"Code discovery: prefer codebase-memory-mcp\"'}]}] # keep\n"),
+         "'command',command='echo \"Code discovery: prefer logan-spine-mcp\"'}]}] # keep\n"),
         "[hooks]\nSessionStart = [{ matcher = 'startup|resume|clear|compact'\n",
     };
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
         ASSERT_EQ(th_write_file(path, invalid[i]), 0);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 1), -1);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), -1);
-        ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_REMOVE, 0), -1);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 1), -1);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), -1);
+        ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_REMOVE, 0), -1);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, invalid[i]);
     }
@@ -1282,50 +1282,50 @@ TEST(config_toml_codex_reports_stable_failure_reasons) {
     char actual[CTE_FILE_CAP];
     static const struct {
         const char *content;
-        cbm_toml_codex_hook_failure_t expected;
+        lsm_toml_codex_hook_failure_t expected;
         const char *name;
     } cases[] = {
         {
             .content =
                 "[hooks]\nSessionStart = [{ matcher = 'startup|resume|clear|compact', hooks = ["
-                "{ type = 'command', command = 'codebase-memory-mcp hook-augment' }, "
+                "{ type = 'command', command = 'logan-spine-mcp hook-augment' }, "
                 "{ type = 'command', command = 'foreign' }] }]\n",
-            .expected = CBM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP,
+            .expected = LSM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP,
             .name = "ambiguous_hook_ownership",
         },
         {
             .content =
                 "[hooks]\n"
                 "SessionStart = [{ matcher = 'startup|resume|clear|compact', hooks = [{ type = "
-                "'command', command = 'echo \"Code discovery: prefer codebase-memory-mcp\"' }] "
+                "'command', command = 'echo \"Code discovery: prefer logan-spine-mcp\"' }] "
                 "}]\n"
                 "SessionStart = [{ matcher = 'startup|resume|clear|compact', hooks = [{ type = "
-                "'command', command = 'echo \"Code discovery: prefer codebase-memory-mcp\"' }] "
+                "'command', command = 'echo \"Code discovery: prefer logan-spine-mcp\"' }] "
                 "}]\n",
-            .expected = CBM_TOML_CODEX_HOOK_FAILURE_CONFLICTING_HOOKS,
+            .expected = LSM_TOML_CODEX_HOOK_FAILURE_CONFLICTING_HOOKS,
             .name = "conflicting_hook_representations",
         },
         {
             .content = "[hooks\n",
-            .expected = CBM_TOML_CODEX_HOOK_FAILURE_MALFORMED_CONFIG,
+            .expected = LSM_TOML_CODEX_HOOK_FAILURE_MALFORMED_CONFIG,
             .name = "malformed_config",
         },
     };
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-        cbm_toml_codex_hook_failure_t failure = CBM_TOML_CODEX_HOOK_FAILURE_NONE;
+        lsm_toml_codex_hook_failure_t failure = LSM_TOML_CODEX_HOOK_FAILURE_NONE;
         ASSERT_EQ(th_write_file(path, cases[i].content), 0);
-        ASSERT_EQ(cte_codex_edit_detailed(path, CBM_TOML_CODEX_HOOK_UPSERT, 1, &failure), -1);
+        ASSERT_EQ(cte_codex_edit_detailed(path, LSM_TOML_CODEX_HOOK_UPSERT, 1, &failure), -1);
         ASSERT_EQ(failure, cases[i].expected);
-        ASSERT_STR_EQ(cbm_toml_codex_hook_failure_name(failure), cases[i].name);
+        ASSERT_STR_EQ(lsm_toml_codex_hook_failure_name(failure), cases[i].name);
         ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
         ASSERT_STR_EQ(actual, cases[i].content);
     }
 
-    cbm_toml_codex_hook_failure_t failure = CBM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT;
+    lsm_toml_codex_hook_failure_t failure = LSM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT;
     ASSERT_EQ(th_write_file(path, "keep = true\n"), 0);
-    ASSERT_EQ(cte_codex_edit_detailed(path, CBM_TOML_CODEX_HOOK_UPSERT, 1, &failure), 0);
-    ASSERT_EQ(failure, CBM_TOML_CODEX_HOOK_FAILURE_NONE);
+    ASSERT_EQ(cte_codex_edit_detailed(path, LSM_TOML_CODEX_HOOK_UPSERT, 1, &failure), 0);
+    ASSERT_EQ(failure, LSM_TOML_CODEX_HOOK_FAILURE_NONE);
     th_cleanup(dir);
     PASS();
 }
@@ -1339,17 +1339,17 @@ TEST(config_toml_codex_preserves_bom_crlf_and_foreign_aot) {
                           "command = \"foreign\"\r\ntimeout = 9\r\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, foreign), 0);
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_UPSERT, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_UPSERT, 0), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_EQ((unsigned char)actual[0], 0xEFU);
     ASSERT_NOT_NULL(strstr(actual, "command = \"foreign\""));
-    ASSERT_NOT_NULL(strstr(actual, "\r\n# >>> codebase-memory-mcp SessionStart >>>\r\n"));
+    ASSERT_NOT_NULL(strstr(actual, "\r\n# >>> logan-spine-mcp SessionStart >>>\r\n"));
     for (const char *cursor = actual; *cursor; ++cursor) {
         if (*cursor == '\n') {
             ASSERT(cursor > actual && cursor[-1] == '\r');
         }
     }
-    ASSERT_EQ(cte_codex_edit(path, CBM_TOML_CODEX_HOOK_REMOVE, 0), 0);
+    ASSERT_EQ(cte_codex_edit(path, LSM_TOML_CODEX_HOOK_REMOVE, 0), 0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_NOT_NULL(strstr(actual, "command = \"foreign\""));
     ASSERT_NULL(strstr(actual, CTE_CODEX_COMMAND));
@@ -1371,11 +1371,11 @@ TEST(config_toml_remove_self_heals_orphan_closing_marker_issue1558) {
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "user_key = true\n"
-                                  "# <<< codebase-memory-mcp SessionStart <<<\n"
+                                  "# <<< logan-spine-mcp SessionStart <<<\n"
                                   "other_key = 1\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, "# >>> codebase-memory-mcp SessionStart >>>",
-                                            "# <<< codebase-memory-mcp SessionStart <<<"),
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, "# >>> logan-spine-mcp SessionStart >>>",
+                                            "# <<< logan-spine-mcp SessionStart <<<"),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     /* The stray marker is gone; the user's own content is untouched. */
@@ -1390,11 +1390,11 @@ TEST(config_toml_remove_self_heals_orphan_opening_marker_issue1558) {
     char path[CTE_PATH_CAP];
     char actual[CTE_FILE_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    ASSERT_EQ(th_write_file(path, "# >>> codebase-memory-mcp SessionStart >>>\n"
+    ASSERT_EQ(th_write_file(path, "# >>> logan-spine-mcp SessionStart >>>\n"
                                   "keep = true\n"),
               0);
-    ASSERT_EQ(cbm_toml_remove_managed_block(path, "# >>> codebase-memory-mcp SessionStart >>>",
-                                            "# <<< codebase-memory-mcp SessionStart <<<"),
+    ASSERT_EQ(lsm_toml_remove_managed_block(path, "# >>> logan-spine-mcp SessionStart >>>",
+                                            "# <<< logan-spine-mcp SessionStart <<<"),
               0);
     ASSERT_EQ(cte_read(path, actual, sizeof(actual)), 0);
     ASSERT_STR_EQ(actual, "keep = true\n");

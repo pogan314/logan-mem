@@ -11,9 +11,9 @@
  *
  * This is distinct from the extraction-level suites (test_extraction.c,
  * test_extraction_inheritance.c, test_extraction_imports.c) which test whether
- * cbm_extract_file() populates the right fields.  Here we run the FULL
+ * lsm_extract_file() populates the right fields.  Here we run the FULL
  * production pipeline (index_repository via MCP) and assert the resulting
- * graph DB contains the expected edges via cbm_store_count_edges_by_type.
+ * graph DB contains the expected edges via lsm_store_count_edges_by_type.
  *
  * The companion file test_edge_imports.c (another workstream) covers IMPORTS
  * edge creation.  This file covers every OTHER edge type.
@@ -56,7 +56,7 @@
  *     semantic pass creates INHERITS for `extends` and IMPLEMENTS for interfaces
  *     (pass_parallel.c line ~1943).  Expected GREEN same-file, RED cross-file
  *     until the resolver properly distinguishes Class vs Interface targets.
- *   Go implicit interface satisfaction: pass_semantic.c cbm_pipeline_implements_go()
+ *   Go implicit interface satisfaction: pass_semantic.c lsm_pipeline_implements_go()
  *     is triggered only when the struct's method-set fully covers the interface's.
  *     Expected GREEN when struct methods and interface are in same index.
  *   C# `class X : IFoo`: extraction stores base_classes; same INHERITS/IMPLEMENTS
@@ -124,7 +124,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -148,7 +148,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } ES_LangProj;
 
 typedef struct {
@@ -164,8 +164,8 @@ static void es_lc_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *es_lang_open_indexed(ES_LangProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *es_lang_open_indexed(ES_LangProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) {
         return NULL;
     }
@@ -174,27 +174,27 @@ static cbm_store_t *es_lang_open_indexed(ES_LangProj *lp) {
         home = "/tmp";
     }
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) {
         return NULL;
     }
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) {
         free(resp);
     }
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *es_lang_index_files(ES_LangProj *lp, const ES_LangFile *files, int nfiles) {
+static lsm_store_t *es_lang_index_files(ES_LangProj *lp, const ES_LangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_es_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) {
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_es_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) {
         return NULL;
     }
     es_lc_to_fwd_slashes(lp->tmpdir);
@@ -204,7 +204,7 @@ static cbm_store_t *es_lang_index_files(ES_LangProj *lp, const ES_LangFile *file
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -217,12 +217,12 @@ static cbm_store_t *es_lang_index_files(ES_LangProj *lp, const ES_LangFile *file
     return es_lang_open_indexed(lp);
 }
 
-static void es_lang_cleanup(ES_LangProj *lp, cbm_store_t *store) {
+static void es_lang_cleanup(ES_LangProj *lp, lsm_store_t *store) {
     if (store) {
-        cbm_store_close(store);
+        lsm_store_close(store);
     }
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -267,14 +267,14 @@ static const char *ES_ALL_EDGE_TYPES[] = {"CALLS",
                                           "ASYNC_CALLS",
                                           NULL};
 
-static void es_dump_edge_histogram(cbm_store_t *store, const char *project) {
+static void es_dump_edge_histogram(lsm_store_t *store, const char *project) {
     if (!store) {
         fprintf(stderr, "      └─ (no graph DB)\n");
         return;
     }
     char line[640] = {0};
     for (int i = 0; ES_ALL_EDGE_TYPES[i]; i++) {
-        int c = cbm_store_count_edges_by_type(store, project, ES_ALL_EDGE_TYPES[i]);
+        int c = lsm_store_count_edges_by_type(store, project, ES_ALL_EDGE_TYPES[i]);
         if (c > 0 && strlen(line) < sizeof(line) - 48) {
             char one[64];
             snprintf(one, sizeof(one), "%s=%d ", ES_ALL_EDGE_TYPES[i], c);
@@ -288,8 +288,8 @@ static void es_dump_edge_histogram(cbm_store_t *store, const char *project) {
  * On failure, dump the full edge histogram. */
 static int es_edge_present(const ES_LangFile *files, int nfiles, const char *edge, int floor) {
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, files, nfiles);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, edge) : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, files, nfiles);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, edge) : -1;
     if (got < floor) {
         fprintf(stderr, "  [ES-EDGE] FAIL %-20s got=%d expected>=%d\n", edge, got, floor);
         es_dump_edge_histogram(store, lp.project);
@@ -301,22 +301,22 @@ static int es_edge_present(const ES_LangFile *files, int nfiles, const char *edg
 static int es_exact_edge_by_name(const ES_LangFile *files, int nfiles, const char *edge_type,
                                  const char *source_name, const char *target_name) {
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, files, nfiles);
-    cbm_node_t *sources = NULL;
-    cbm_node_t *targets = NULL;
+    lsm_store_t *store = es_lang_index_files(&lp, files, nfiles);
+    lsm_node_t *sources = NULL;
+    lsm_node_t *targets = NULL;
     int source_count = 0;
     int target_count = 0;
     int matches = -1;
     if (store &&
-        cbm_store_find_nodes_by_name(store, lp.project, source_name, &sources, &source_count) ==
-            CBM_STORE_OK &&
-        cbm_store_find_nodes_by_name(store, lp.project, target_name, &targets, &target_count) ==
-            CBM_STORE_OK &&
+        lsm_store_find_nodes_by_name(store, lp.project, source_name, &sources, &source_count) ==
+            LSM_STORE_OK &&
+        lsm_store_find_nodes_by_name(store, lp.project, target_name, &targets, &target_count) ==
+            LSM_STORE_OK &&
         source_count == 1 && target_count == 1) {
-        cbm_edge_t *edges = NULL;
+        lsm_edge_t *edges = NULL;
         int edge_count = 0;
-        if (cbm_store_find_edges_by_source_type(store, sources[0].id, edge_type, &edges,
-                                                &edge_count) == CBM_STORE_OK) {
+        if (lsm_store_find_edges_by_source_type(store, sources[0].id, edge_type, &edges,
+                                                &edge_count) == LSM_STORE_OK) {
             matches = 0;
             for (int i = 0; i < edge_count; i++) {
                 if (edges[i].target_id == targets[0].id) {
@@ -324,10 +324,10 @@ static int es_exact_edge_by_name(const ES_LangFile *files, int nfiles, const cha
                 }
             }
         }
-        cbm_store_free_edges(edges, edge_count);
+        lsm_store_free_edges(edges, edge_count);
     }
-    cbm_store_free_nodes(sources, source_count);
-    cbm_store_free_nodes(targets, target_count);
+    lsm_store_free_nodes(sources, source_count);
+    lsm_store_free_nodes(targets, target_count);
     es_lang_cleanup(&lp, store);
     return matches;
 }
@@ -509,8 +509,8 @@ TEST(es_inherits_crossfile_python_red) {
      * Fix location: extract_defs.c collect_bases_from_field / Python case.
      * This test SHOULD FAIL (count=0) until that fix lands. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 2);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 2);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     if (got >= 1) {
         fprintf(stderr, "  [ES-EDGE] UNEXPECTED PASS: Python cross-file INHERITS got=%d "
                         "(extraction bug may have been fixed — promote to GREEN)\n", got);
@@ -540,8 +540,8 @@ TEST(es_inherits_crossfile_typescript_red) {
      * Fix location: extract_defs.c TypeScript heritage clause handling.
      * This test SHOULD FAIL until fixed. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 2);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 2);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     if (got >= 1) {
         fprintf(stderr, "  [ES-EDGE] UNEXPECTED PASS: TypeScript cross-file INHERITS got=%d "
                         "(promote to GREEN if extraction fixed)\n", got);
@@ -565,8 +565,8 @@ TEST(es_inherits_crossfile_php_red) {
      * Fix location: extract_defs.c PHP class heritage clause.
      * FAILS (RED) until fixed. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 2);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 2);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     if (got >= 1) {
         fprintf(stderr, "  [ES-EDGE] UNEXPECTED PASS: PHP cross-file INHERITS got=%d "
                         "(promote to GREEN)\n", got);
@@ -589,8 +589,8 @@ TEST(es_inherits_crossfile_kotlin_red) {
      * Fix location: extract_defs.c Kotlin class body / supertype_list handling.
      * FAILS (RED) until fixed. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 2);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 2);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     if (got >= 1) {
         fprintf(stderr, "  [ES-EDGE] UNEXPECTED PASS: Kotlin cross-file INHERITS got=%d "
                         "(promote to GREEN)\n", got);
@@ -662,7 +662,7 @@ TEST(es_implements_samefile_csharp) {
 }
 
 /* Go implicit interface satisfaction — pass_semantic.c
- * cbm_pipeline_implements_go() checks method-set coverage. */
+ * lsm_pipeline_implements_go() checks method-set coverage. */
 TEST(es_implements_go_implicit) {
     static const ES_LangFile f[] = {
         {"iface.go",
@@ -670,7 +670,7 @@ TEST(es_implements_go_implicit) {
         {"impl.go",
          "package app\n\ntype MyType struct{ val string }\n\n"
          "func (m MyType) String() string {\n    return m.val\n}\n"}};
-    /* GREEN: cbm_pipeline_implements_go() finds MyType satisfies Stringer
+    /* GREEN: lsm_pipeline_implements_go() finds MyType satisfies Stringer
      * (both methods present in the same index), emits IMPLEMENTS. */
     ASSERT_TRUE(es_edge_present(f, 2, "IMPLEMENTS", 1)); /* MyType implements Stringer */
     PASS();
@@ -690,7 +690,7 @@ TEST(es_override_go_implicit) {
         {"impl.go",
          "package app\n\ntype Entity struct{ name string }\n\n"
          "func (e Entity) Name() string {\n    return e.name\n}\n"}};
-    /* GREEN: cbm_pipeline_implements_go() emits OVERRIDE for Entity.Name -> Namer.Name. */
+    /* GREEN: lsm_pipeline_implements_go() emits OVERRIDE for Entity.Name -> Namer.Name. */
     ASSERT_TRUE(es_edge_present(f, 2, "OVERRIDE", 1));
     PASS();
 }
@@ -746,8 +746,8 @@ TEST(es_decorates_annotation_java) {
      * This test probes whether any DECORATES edge is created.
      * Expected to be RED (count=0) — reproduces the gap if so. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 1);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 1);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
     fprintf(stderr, "  [ES-EDGE] Java annotation DECORATES got=%d (expected 0 if unimplemented; "
                     "promote to GREEN if edge appears)\n", got);
     es_lang_cleanup(&lp, store);
@@ -765,8 +765,8 @@ TEST(es_decorates_annotation_kotlin) {
     /* Uncertain/RED: Kotlin decorator/annotation extraction unclear.
      * FAILS (RED) until Kotlin annotation DECORATES is implemented. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 1);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 1);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
     fprintf(stderr, "  [ES-EDGE] Kotlin annotation DECORATES got=%d\n", got);
     es_lang_cleanup(&lp, store);
     ASSERT_TRUE(got >= 1); /* RED until implemented */
@@ -783,8 +783,8 @@ TEST(es_decorates_attribute_csharp) {
     /* Uncertain/RED: C# attribute extraction unclear.
      * FAILS (RED) until C# attribute DECORATES is implemented. */
     ES_LangProj lp;
-    cbm_store_t *store = es_lang_index_files(&lp, f, 1);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
+    lsm_store_t *store = es_lang_index_files(&lp, f, 1);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "DECORATES") : -1;
     fprintf(stderr, "  [ES-EDGE] C# attribute DECORATES got=%d\n", got);
     es_lang_cleanup(&lp, store);
     ASSERT_TRUE(got >= 1); /* RED until implemented */
@@ -936,7 +936,7 @@ SUITE(edge_structural) {
     RUN_TEST(es_implements_go_implicit);
 
     /* ── FAMILY 5: OVERRIDE (Go implicit interface method) ───── */
-    /* Expected GREEN: cbm_pipeline_implements_go() emits OVERRIDE. */
+    /* Expected GREEN: lsm_pipeline_implements_go() emits OVERRIDE. */
     RUN_TEST(es_override_go_implicit);
 
     /* ── FAMILY 6: DECORATES ─────────────────────────────────── */

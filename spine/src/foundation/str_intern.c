@@ -34,8 +34,8 @@ typedef struct {
     uint32_t len; /* string length (excluding NUL) */
 } InternEntry;
 
-struct CBMInternPool {
-    CBMArena arena;
+struct LSMInternPool {
+    LSMArena arena;
     InternEntry *buckets;
     uint32_t capacity;
     uint32_t count;
@@ -43,33 +43,33 @@ struct CBMInternPool {
     size_t total_bytes; /* sum of string lengths stored */
 };
 
-CBMInternPool *cbm_intern_create(void) {
-    CBMInternPool *p = (CBMInternPool *)calloc(CBM_ALLOC_ONE, sizeof(*p));
+LSMInternPool *lsm_intern_create(void) {
+    LSMInternPool *p = (LSMInternPool *)calloc(LSM_ALLOC_ONE, sizeof(*p));
     if (!p) {
         return NULL;
     }
-    cbm_arena_init(&p->arena);
-    p->capacity = CBM_SZ_256;
+    lsm_arena_init(&p->arena);
+    p->capacity = LSM_SZ_256;
     p->mask = p->capacity - SKIP_ONE;
     p->buckets = (InternEntry *)calloc(p->capacity, sizeof(InternEntry));
     if (!p->buckets) {
-        cbm_arena_destroy(&p->arena);
+        lsm_arena_destroy(&p->arena);
         free(p);
         return NULL;
     }
     return p;
 }
 
-void cbm_intern_free(CBMInternPool *pool) {
+void lsm_intern_free(LSMInternPool *pool) {
     if (!pool) {
         return;
     }
-    cbm_arena_destroy(&pool->arena);
+    lsm_arena_destroy(&pool->arena);
     free(pool->buckets);
     free(pool);
 }
 
-static void intern_resize(CBMInternPool *p) {
+static void intern_resize(LSMInternPool *p) {
     uint32_t new_cap = p->capacity * PAIR_LEN;
     uint32_t new_mask = new_cap - SKIP_ONE;
     InternEntry *new_buckets = (InternEntry *)calloc(new_cap, sizeof(InternEntry));
@@ -95,7 +95,7 @@ static void intern_resize(CBMInternPool *p) {
     p->mask = new_mask;
 }
 
-const char *cbm_intern_n(CBMInternPool *pool, const char *s, size_t len) {
+const char *lsm_intern_n(LSMInternPool *pool, const char *s, size_t len) {
     if (!pool || !s) {
         return NULL;
     }
@@ -116,7 +116,7 @@ const char *cbm_intern_n(CBMInternPool *pool, const char *s, size_t len) {
     }
 
     /* Resize at 70% load */
-    if (pool->count * CBM_DECIMAL_BASE >= pool->capacity * INTERN_LOAD_NUM) {
+    if (pool->count * LSM_DECIMAL_BASE >= pool->capacity * INTERN_LOAD_NUM) {
         intern_resize(pool);
         /* Re-probe after resize */
         idx = h & pool->mask;
@@ -126,7 +126,7 @@ const char *cbm_intern_n(CBMInternPool *pool, const char *s, size_t len) {
     }
 
     /* Copy string into arena */
-    char *copy = cbm_arena_strndup(&pool->arena, s, len);
+    char *copy = lsm_arena_strndup(&pool->arena, s, len);
     if (!copy) {
         return NULL;
     }
@@ -137,17 +137,17 @@ const char *cbm_intern_n(CBMInternPool *pool, const char *s, size_t len) {
     return copy;
 }
 
-const char *cbm_intern(CBMInternPool *pool, const char *s) {
+const char *lsm_intern(LSMInternPool *pool, const char *s) {
     if (!s) {
         return NULL;
     }
-    return cbm_intern_n(pool, s, strlen(s));
+    return lsm_intern_n(pool, s, strlen(s));
 }
 
-uint32_t cbm_intern_count(const CBMInternPool *pool) {
+uint32_t lsm_intern_count(const LSMInternPool *pool) {
     return pool ? pool->count : 0;
 }
 
-size_t cbm_intern_bytes(const CBMInternPool *pool) {
+size_t lsm_intern_bytes(const LSMInternPool *pool) {
     return pool ? pool->total_bytes : 0;
 }

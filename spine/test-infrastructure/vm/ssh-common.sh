@@ -1,48 +1,48 @@
 #!/usr/bin/env bash
 # Shared pinned-host verification for the local Windows VM drivers.
 
-cbm_vm_require_safe_branch() {
+lsm_vm_require_safe_branch() {
     local branch="${1-}"
     if [[ ! "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] ||
         ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
-        echo "FATAL: CBM_VM_BRANCH is not a safe Git branch name: $branch" >&2
+        echo "FATAL: LSM_VM_BRANCH is not a safe Git branch name: $branch" >&2
         return 1
     fi
 }
 
-cbm_vm_prepare_known_hosts() {
+lsm_vm_prepare_known_hosts() {
     local host="$1"
     local expected="$2"
     local actual
 
     if [[ ! "$expected" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
-        echo "FATAL: CBM_VM_HOST_KEY_SHA256 is missing or malformed." >&2
+        echo "FATAL: LSM_VM_HOST_KEY_SHA256 is missing or malformed." >&2
         echo "  Copy the SHA256:... Ed25519 fingerprint printed by windows-bootstrap.ps1." >&2
         return 1
     fi
 
-    CBM_VM_KNOWN_HOSTS="$(mktemp "${TMPDIR:-/tmp}/cbm-vm-known-hosts.XXXXXX")"
-    chmod 600 "$CBM_VM_KNOWN_HOSTS"
-    if ! ssh-keyscan -T 10 -t ed25519 "$host" >"$CBM_VM_KNOWN_HOSTS" 2>/dev/null; then
+    LSM_VM_KNOWN_HOSTS="$(mktemp "${TMPDIR:-/tmp}/lsm-vm-known-hosts.XXXXXX")"
+    chmod 600 "$LSM_VM_KNOWN_HOSTS"
+    if ! ssh-keyscan -T 10 -t ed25519 "$host" >"$LSM_VM_KNOWN_HOSTS" 2>/dev/null; then
         echo "FATAL: could not read the Windows VM Ed25519 host key at $host." >&2
-        cbm_vm_cleanup_known_hosts
+        lsm_vm_cleanup_known_hosts
         return 1
     fi
-    actual="$(ssh-keygen -lf "$CBM_VM_KNOWN_HOSTS" -E sha256 2>/dev/null | awk '{print $2}')"
+    actual="$(ssh-keygen -lf "$LSM_VM_KNOWN_HOSTS" -E sha256 2>/dev/null | awk '{print $2}')"
     if [ "$actual" != "$expected" ]; then
         echo "FATAL: Windows VM SSH host-key mismatch." >&2
         echo "  expected: $expected" >&2
         echo "  observed: ${actual:-unreadable}" >&2
         echo "  Stop: verify the fingerprint from the VM console; do not accept it blindly." >&2
-        cbm_vm_cleanup_known_hosts
+        lsm_vm_cleanup_known_hosts
         return 1
     fi
 }
 
-cbm_vm_cleanup_known_hosts() {
-    if [ -n "${CBM_VM_KNOWN_HOSTS:-}" ]; then
-        rm -f -- "$CBM_VM_KNOWN_HOSTS"
-        CBM_VM_KNOWN_HOSTS=""
+lsm_vm_cleanup_known_hosts() {
+    if [ -n "${LSM_VM_KNOWN_HOSTS:-}" ]; then
+        rm -f -- "$LSM_VM_KNOWN_HOSTS"
+        LSM_VM_KNOWN_HOSTS=""
     fi
 }
 
@@ -51,8 +51,8 @@ cbm_vm_cleanup_known_hosts() {
 # parentheses, pipes, and semicolons can therefore be reinterpreted before
 # PowerShell sees them. Windows PowerShell's encoded-command contract is
 # UTF-16LE base64, produced locally from trusted repository-owned source.
-# Usage: cbm_vm_run_powershell '<source>' "${SSH[@]}"
-cbm_vm_run_powershell() {
+# Usage: lsm_vm_run_powershell '<source>' "${SSH[@]}"
+lsm_vm_run_powershell() {
     local source="${1-}"
     shift || true
     if [ "$#" -eq 0 ]; then
@@ -73,7 +73,7 @@ cbm_vm_run_powershell() {
 # incorrectly reason about dependencies. Set the dedicated test VM from the
 # trusted local host clock, then fail unless the observed UTC epoch is close.
 # Arguments are the complete pinned SSH command array.
-cbm_vm_sync_windows_clock() {
+lsm_vm_sync_windows_clock() {
     if [ "$#" -eq 0 ]; then
         echo "FATAL: Windows VM clock sync requires an SSH command" >&2
         return 1
@@ -92,7 +92,7 @@ cbm_vm_sync_windows_clock() {
     for attempt in 1 2 3; do
         host_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         powershell_source="Set-Date -Date ([DateTimeOffset]::Parse('${host_utc}', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal).LocalDateTime) | Out-Null; [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()"
-        if ! guest_output="$(cbm_vm_run_powershell "$powershell_source" "$@")"; then
+        if ! guest_output="$(lsm_vm_run_powershell "$powershell_source" "$@")"; then
             echo "FATAL: could not synchronize the Windows VM clock from the host." >&2
             return 1
         fi
@@ -117,7 +117,7 @@ cbm_vm_sync_windows_clock() {
     return 1
 }
 
-cbm_vm_write_untracked_manifest() {
+lsm_vm_write_untracked_manifest() {
     local root="$1"
     local manifest="$2"
     local symlinks
@@ -127,7 +127,7 @@ cbm_vm_write_untracked_manifest() {
     local link
     local nested
 
-    symlinks="$(mktemp "${TMPDIR:-/tmp}/cbm-vm-symlinks.XXXXXX")"
+    symlinks="$(mktemp "${TMPDIR:-/tmp}/lsm-vm-symlinks.XXXXXX")"
     : >"$manifest"
     while IFS= read -r -d '' entry; do
         mode="${entry%% *}"

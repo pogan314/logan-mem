@@ -21,7 +21,7 @@ usage() {
 Usage: scripts/lint.sh [--ci] [VAR=VAL ...]
 
 The canonical lint entry: CI (_lint.yml) calls this script; it drives the same
-Makefile.cbm lint targets `make lint`/`make lint-ci` run, plus the no-skips
+Makefile.lsm lint targets `make lint`/`make lint-ci` run, plus the no-skips
 policy check. Runs clang-tidy + cppcheck + clang-format by default.
 
 Options:
@@ -63,11 +63,11 @@ bash "$ROOT/scripts/check-no-test-skips.sh"
 
 if $CI_ONLY; then
     echo "=== CI mode: cppcheck + clang-format ==="
-    make -j2 -f Makefile.cbm lint-ci "${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}"
+    make -j2 -f Makefile.lsm lint-ci "${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}"
     echo "=== CI linters passed ==="
 else
     echo "=== Full lint: clang-tidy + cppcheck + clang-format ==="
-    make -j3 -f Makefile.cbm lint "${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}"
+    make -j3 -f Makefile.lsm lint "${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}"
 fi
 
 echo "=== All linters passed ==="

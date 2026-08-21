@@ -12,7 +12,7 @@
 #include "test_framework.h"
 
 #include "arena.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/java_lsp.h"
 #include "lsp/ts_lsp.h"
 
@@ -28,24 +28,24 @@ static bool ends_with(const char *text, const char *suffix) {
     return suffix_len <= text_len && strcmp(text + text_len - suffix_len, suffix) == 0;
 }
 
-static void print_resolved_calls(const CBMResolvedCallArray *calls) {
+static void print_resolved_calls(const LSMResolvedCallArray *calls) {
     if (!calls)
         return;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
+        const LSMResolvedCall *call = &calls->items[i];
         printf("    %s -> %s [%s %.2f kind=%d]\n", call->caller_qn ? call->caller_qn : "(null)",
                call->callee_qn ? call->callee_qn : "(null)",
                call->strategy ? call->strategy : "(null)", call->confidence, (int)call->kind);
     }
 }
 
-static bool has_resolved_suffix(const CBMResolvedCallArray *calls, const char *caller_sub,
+static bool has_resolved_suffix(const LSMResolvedCallArray *calls, const char *caller_sub,
                                 const char *callee_suffix, const char *strategy) {
     if (!calls)
         return false;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
-        if (call->kind != CBM_RESOLVED_INVOCATION || call->confidence < 0.5f || !call->caller_qn ||
+        const LSMResolvedCall *call = &calls->items[i];
+        if (call->kind != LSM_RESOLVED_INVOCATION || call->confidence < 0.5f || !call->caller_qn ||
             !strstr(call->caller_qn, caller_sub) || !ends_with(call->callee_qn, callee_suffix) ||
             !call->strategy || strcmp(call->strategy, strategy) != 0) {
             continue;
@@ -55,13 +55,13 @@ static bool has_resolved_suffix(const CBMResolvedCallArray *calls, const char *c
     return false;
 }
 
-static bool has_resolved_exact(const CBMResolvedCallArray *calls, const char *caller_sub,
+static bool has_resolved_exact(const LSMResolvedCallArray *calls, const char *caller_sub,
                                const char *callee_qn, const char *strategy) {
     if (!calls)
         return false;
     for (int i = 0; i < calls->count; i++) {
-        const CBMResolvedCall *call = &calls->items[i];
-        if (call->kind == CBM_RESOLVED_INVOCATION && call->confidence >= 0.5f && call->caller_qn &&
+        const LSMResolvedCall *call = &calls->items[i];
+        if (call->kind == LSM_RESOLVED_INVOCATION && call->confidence >= 0.5f && call->caller_qn &&
             strstr(call->caller_qn, caller_sub) && call->callee_qn &&
             strcmp(call->callee_qn, callee_qn) == 0 && call->strategy &&
             strcmp(call->strategy, strategy) == 0) {
@@ -71,10 +71,10 @@ static bool has_resolved_exact(const CBMResolvedCallArray *calls, const char *ca
     return false;
 }
 
-static int assert_local_chained_target(CBMLanguage language, const char *rel_path,
+static int assert_local_chained_target(LSMLanguage language, const char *rel_path,
                                        const char *source, const char *callee_suffix,
                                        const char *strategy) {
-    CBMFileResult *result = cbm_extract_file(source, (int)strlen(source), language,
+    LSMFileResult *result = lsm_extract_file(source, (int)strlen(source), language,
                                              "repro_ordered_local", rel_path, 0, NULL, NULL);
     if (!result) {
         printf("  ordered-local: extraction returned NULL for %s\n", rel_path);
@@ -82,7 +82,7 @@ static int assert_local_chained_target(CBMLanguage language, const char *rel_pat
     }
     if (result->has_error) {
         printf("  ordered-local: fixture parse failed for %s\n", rel_path);
-        cbm_free_result(result);
+        lsm_free_result(result);
         return 1;
     }
 
@@ -92,7 +92,7 @@ static int assert_local_chained_target(CBMLanguage language, const char *rel_pat
                strategy, rel_path, result->resolved_calls.count);
         print_resolved_calls(&result->resolved_calls);
     }
-    cbm_free_result(result);
+    lsm_free_result(result);
     return found ? 0 : 1;
 }
 
@@ -115,7 +115,7 @@ TEST(repro_lsp_ordered_local_go_grouped_generic) {
      * receiver ownership is carried separately by receiver_type/parent_class.
      * Only Right defines RightOnly, and lsp_type_dispatch therefore proves the
      * positional generic result was inferred as Right. */
-    return assert_local_chained_target(CBM_LANG_GO, "main.go", kGoGroupedGeneric, "RightOnly",
+    return assert_local_chained_target(LSM_LANG_GO, "main.go", kGoGroupedGeneric, "RightOnly",
                                        "lsp_type_dispatch");
 }
 
@@ -130,21 +130,21 @@ static const char kCppReferenceReturnOperator[] =
     "};\n"
     "void run(Vec& values) { values[0]; }\n";
 
-static int assert_reference_return_operator_arity(CBMLanguage language, const char *rel_path,
+static int assert_reference_return_operator_arity(LSMLanguage language, const char *rel_path,
                                                   const char *language_name) {
-    CBMFileResult *result =
-        cbm_extract_file(kCppReferenceReturnOperator, (int)strlen(kCppReferenceReturnOperator),
+    LSMFileResult *result =
+        lsm_extract_file(kCppReferenceReturnOperator, (int)strlen(kCppReferenceReturnOperator),
                          language, "repro_ordered_local", rel_path, 0, NULL, NULL);
     if (!result || result->has_error) {
         printf("  ordered-local: %s reference-return fixture extraction failed\n", language_name);
         if (result)
-            cbm_free_result(result);
+            lsm_free_result(result);
         return 1;
     }
 
     bool counted_signature = false;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         if (definition->name && strcmp(definition->name, "operator[]") == 0 &&
             definition->signature_param_count == 1 && definition->signature_param_types &&
             definition->signature_param_types[0] &&
@@ -160,19 +160,19 @@ static int assert_reference_return_operator_arity(CBMLanguage language, const ch
                language_name, counted_signature, resolved);
         print_resolved_calls(&result->resolved_calls);
     }
-    cbm_free_result(result);
+    lsm_free_result(result);
     return counted_signature && resolved ? 0 : 1;
 }
 
 TEST(repro_lsp_ordered_local_cpp_reference_return_operator_arity) {
-    return assert_reference_return_operator_arity(CBM_LANG_CPP, "main.cpp", "C++");
+    return assert_reference_return_operator_arity(LSM_LANG_CPP, "main.cpp", "C++");
 }
 
 /* CUDA uses its own vendored grammar.  It aliases this syntax to the same
  * reference_declarator node shape today, but must retain an independent guard
  * so a future grammar update cannot silently reintroduce the arity collapse. */
 TEST(repro_lsp_ordered_local_cuda_reference_return_operator_arity) {
-    return assert_reference_return_operator_arity(CBM_LANG_CUDA, "main.cu", "CUDA");
+    return assert_reference_return_operator_arity(LSM_LANG_CUDA, "main.cu", "CUDA");
 }
 
 /* The shared C-family name resolver permits eight declarator wrappers, but the
@@ -181,21 +181,21 @@ TEST(repro_lsp_ordered_local_cuda_reference_return_operator_arity) {
  * C, C++, and CUDA each get a real grammar guard; GLSL has no pointer syntax. */
 static const char kDeepPointerReturn[] = "int *****deep(int value) { return 0; }\n";
 
-static int assert_deep_pointer_return_arity(CBMLanguage language, const char *rel_path,
+static int assert_deep_pointer_return_arity(LSMLanguage language, const char *rel_path,
                                             const char *language_name) {
-    CBMFileResult *result =
-        cbm_extract_file(kDeepPointerReturn, (int)strlen(kDeepPointerReturn), language,
+    LSMFileResult *result =
+        lsm_extract_file(kDeepPointerReturn, (int)strlen(kDeepPointerReturn), language,
                          "repro_ordered_local", rel_path, 0, NULL, NULL);
     if (!result || result->has_error) {
         printf("  ordered-local: %s deep-pointer fixture extraction failed\n", language_name);
         if (result)
-            cbm_free_result(result);
+            lsm_free_result(result);
         return 1;
     }
 
     bool found = false;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         if (definition->name && strcmp(definition->name, "deep") == 0 &&
             definition->signature_param_count == 1 && definition->signature_param_types &&
             definition->signature_param_types[0] &&
@@ -207,20 +207,20 @@ static int assert_deep_pointer_return_arity(CBMLanguage language, const char *re
     if (!found) {
         printf("  ordered-local: %s deep-pointer return lost parameter arity\n", language_name);
     }
-    cbm_free_result(result);
+    lsm_free_result(result);
     return found ? 0 : 1;
 }
 
 TEST(repro_lsp_ordered_local_c_deep_pointer_return_arity) {
-    return assert_deep_pointer_return_arity(CBM_LANG_C, "main.c", "C");
+    return assert_deep_pointer_return_arity(LSM_LANG_C, "main.c", "C");
 }
 
 TEST(repro_lsp_ordered_local_cpp_deep_pointer_return_arity) {
-    return assert_deep_pointer_return_arity(CBM_LANG_CPP, "main.cpp", "C++");
+    return assert_deep_pointer_return_arity(LSM_LANG_CPP, "main.cpp", "C++");
 }
 
 TEST(repro_lsp_ordered_local_cuda_deep_pointer_return_arity) {
-    return assert_deep_pointer_return_arity(CBM_LANG_CUDA, "main.cu", "CUDA");
+    return assert_deep_pointer_return_arity(LSM_LANG_CUDA, "main.cu", "CUDA");
 }
 
 /* GREEN controls for the local TypeScript AST-rebuild path.  The pseudo `this`
@@ -240,12 +240,12 @@ static const char kTsThisGeneric[] =
     "}\n";
 
 TEST(repro_lsp_ordered_local_control_typescript_this_receiver) {
-    return assert_local_chained_target(CBM_LANG_TYPESCRIPT, "main.ts", kTsThisGeneric,
+    return assert_local_chained_target(LSM_LANG_TYPESCRIPT, "main.ts", kTsThisGeneric,
                                        "Right.rightOnly", "lsp_ts_method");
 }
 
 TEST(repro_lsp_ordered_local_control_tsx_this_receiver) {
-    return assert_local_chained_target(CBM_LANG_TSX, "main.tsx", kTsThisGeneric, "Right.rightOnly",
+    return assert_local_chained_target(LSM_LANG_TSX, "main.tsx", kTsThisGeneric, "Right.rightOnly",
                                        "lsp_ts_method");
 }
 
@@ -269,10 +269,10 @@ static const char kTsInterfaceOverloadReturnChains[] =
     "  f.pick(1, 'x').pairOnly();\n"
     "}\n";
 
-static int assert_ts_interface_overload_return_chains(CBMLanguage language, bool jsx_mode,
+static int assert_ts_interface_overload_return_chains(LSMLanguage language, bool jsx_mode,
                                                       const char *language_name) {
     static const char *const type_names[] = {"Reversed", "Empty", "Pair", "Factory"};
-    CBMLSPDef defs[5];
+    LSMLSPDef defs[5];
     memset(defs, 0, sizeof(defs));
     for (int i = 0; i < 4; i++) {
         defs[i].qualified_name = type_names[i];
@@ -293,12 +293,12 @@ static int assert_ts_interface_overload_return_chains(CBMLanguage language, bool
     defs[4].return_types = "void";
     defs[4].lang = language;
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMTypeRegistry *registry = cbm_ts_build_cross_registry(&arena, defs, 5);
-    CBMResolvedCallArray calls = {0};
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMTypeRegistry *registry = lsm_ts_build_cross_registry(&arena, defs, 5);
+    LSMResolvedCallArray calls = {0};
     if (registry) {
-        cbm_run_ts_lsp_cross_with_registry(
+        lsm_run_ts_lsp_cross_with_registry(
             &arena, kTsInterfaceOverloadReturnChains, (int)strlen(kTsInterfaceOverloadReturnChains),
             "repro.ts", false, jsx_mode, false, registry, defs, 5, NULL, NULL, 0, NULL, &calls);
     }
@@ -310,16 +310,16 @@ static int assert_ts_interface_overload_return_chains(CBMLanguage language, bool
                language_name, empty, pair, registry != NULL);
         print_resolved_calls(&calls);
     }
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return registry && empty && pair ? 0 : 1;
 }
 
 TEST(repro_lsp_ordered_local_typescript_interface_overload_return_chains) {
-    return assert_ts_interface_overload_return_chains(CBM_LANG_TYPESCRIPT, false, "TypeScript");
+    return assert_ts_interface_overload_return_chains(LSM_LANG_TYPESCRIPT, false, "TypeScript");
 }
 
 TEST(repro_lsp_ordered_local_tsx_interface_overload_return_chains) {
-    return assert_ts_interface_overload_return_chains(CBM_LANG_TSX, true, "TSX");
+    return assert_ts_interface_overload_return_chains(LSM_LANG_TSX, true, "TSX");
 }
 
 /* Java overloads normally share one graph QN, which hides which overload won.
@@ -335,14 +335,14 @@ TEST(repro_lsp_ordered_local_java_overload_arity) {
         "  public void callThree(demo.Target t) { t.pick(1, \"x\", true); }\n"
         "}\n";
     const char *three_params[] = {"int", "java.lang.String", "boolean", NULL};
-    CBMLSPDef defs[3];
+    LSMLSPDef defs[3];
     memset(defs, 0, sizeof(defs));
 
     defs[0].qualified_name = "demo.Target";
     defs[0].short_name = "Target";
     defs[0].label = "Class";
     defs[0].def_module_qn = "demo";
-    defs[0].lang = CBM_LANG_JAVA;
+    defs[0].lang = LSM_LANG_JAVA;
 
     defs[1].qualified_name = "demo.Target.pick$zero";
     defs[1].short_name = "pick";
@@ -352,7 +352,7 @@ TEST(repro_lsp_ordered_local_java_overload_arity) {
     defs[1].return_types = "void";
     defs[1].signature_param_types = NULL;
     defs[1].signature_param_count = 0;
-    defs[1].lang = CBM_LANG_JAVA;
+    defs[1].lang = LSM_LANG_JAVA;
 
     defs[2].qualified_name = "demo.Target.pick$three";
     defs[2].short_name = "pick";
@@ -362,12 +362,12 @@ TEST(repro_lsp_ordered_local_java_overload_arity) {
     defs[2].return_types = "void";
     defs[2].signature_param_types = three_params;
     defs[2].signature_param_count = 3;
-    defs[2].lang = CBM_LANG_JAVA;
+    defs[2].lang = LSM_LANG_JAVA;
 
-    CBMArena arena;
-    cbm_arena_init(&arena);
-    CBMResolvedCallArray calls = {0};
-    cbm_run_java_lsp_cross(&arena, source, (int)strlen(source), "demo", defs, 3, NULL, NULL, 0,
+    LSMArena arena;
+    lsm_arena_init(&arena);
+    LSMResolvedCallArray calls = {0};
+    lsm_run_java_lsp_cross(&arena, source, (int)strlen(source), "demo", defs, 3, NULL, NULL, 0,
                            NULL, &calls);
 
     bool zero =
@@ -381,7 +381,7 @@ TEST(repro_lsp_ordered_local_java_overload_arity) {
                three, wrong);
         print_resolved_calls(&calls);
     }
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     return zero && three && !wrong ? 0 : 1;
 }
 

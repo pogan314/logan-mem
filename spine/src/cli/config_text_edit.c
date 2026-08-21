@@ -45,13 +45,13 @@
 #define TEXT_TEMP_ATTEMPTS 64U
 #define TEXT_OWNER_READ 0400U
 
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
-static CBM_TLS cbm_text_precommit_test_hook_t text_precommit_test_hook = NULL;
-static CBM_TLS void *text_precommit_test_context = NULL;
-static CBM_TLS cbm_text_precommit_test_hook_t text_prepublish_test_hook = NULL;
-static CBM_TLS void *text_prepublish_test_context = NULL;
-static CBM_TLS cbm_text_precommit_test_hook_t text_temp_closed_test_hook = NULL;
-static CBM_TLS void *text_temp_closed_test_context = NULL;
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
+static LSM_TLS lsm_text_precommit_test_hook_t text_precommit_test_hook = NULL;
+static LSM_TLS void *text_precommit_test_context = NULL;
+static LSM_TLS lsm_text_precommit_test_hook_t text_prepublish_test_hook = NULL;
+static LSM_TLS void *text_prepublish_test_context = NULL;
+static LSM_TLS lsm_text_precommit_test_hook_t text_temp_closed_test_hook = NULL;
+static LSM_TLS void *text_temp_closed_test_context = NULL;
 #endif
 
 static atomic_uint text_temp_sequence = 1U;
@@ -366,13 +366,13 @@ static int text_snapshot_from_file(FILE *file, text_file_snapshot_t *snapshot) {
         return TEXT_ERROR;
     }
 #ifdef _WIN32
-    intptr_t native_handle = _get_osfhandle(cbm_fileno(file));
+    intptr_t native_handle = _get_osfhandle(lsm_fileno(file));
     return native_handle == -1
                ? TEXT_ERROR
                : text_snapshot_from_handle((HANDLE)(uintptr_t)native_handle, snapshot);
 #else
     struct stat state;
-    return fstat(cbm_fileno(file), &state) == 0 ? text_snapshot_from_stat(&state, snapshot)
+    return fstat(lsm_fileno(file), &state) == 0 ? text_snapshot_from_stat(&state, snapshot)
                                                 : TEXT_ERROR;
 #endif
 }
@@ -392,7 +392,7 @@ static int text_read_file(const char *path, char **data_out, size_t *len_out,
     memset(snapshot_out, 0, sizeof(*snapshot_out));
 
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_path) {
         return TEXT_ERROR;
     }
@@ -480,7 +480,7 @@ static int text_read_file(const char *path, char **data_out, size_t *len_out,
     int read_failed = ferror(file);
     struct stat after_state;
     text_file_snapshot_t after;
-    int after_result = fstat(cbm_fileno(file), &after_state) == 0
+    int after_result = fstat(lsm_fileno(file), &after_state) == 0
                            ? text_snapshot_from_stat(&after_state, &after)
                            : TEXT_ERROR;
     int close_failed = fclose(file);
@@ -502,12 +502,12 @@ static int text_read_file(const char *path, char **data_out, size_t *len_out,
 static char *text_parent_directory(const char *path) {
     const char *separator = strrchr(path, '/');
     if (!separator) {
-        return cbm_strdup(".");
+        return lsm_strdup(".");
     }
     if (separator == path) {
-        return cbm_strdup("/");
+        return lsm_strdup("/");
     }
-    return cbm_strndup(path, (size_t)(separator - path));
+    return lsm_strndup(path, (size_t)(separator - path));
 }
 #endif
 
@@ -559,8 +559,8 @@ static int text_sync_parent_directory(const char *path) {
 
 static int text_replace_file(const char *temp_path, const char *path, int destination_exists) {
 #ifdef _WIN32
-    wchar_t *wide_temp = cbm_utf8_to_wide(temp_path);
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_temp = lsm_utf8_to_wide(temp_path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_temp || !wide_path) {
         free(wide_temp);
         free(wide_path);
@@ -577,7 +577,7 @@ static int text_replace_file(const char *temp_path, const char *path, int destin
         if (link(temp_path, path) != 0) {
             return TEXT_ERROR;
         }
-        if (cbm_unlink(temp_path) != 0) {
+        if (lsm_unlink(temp_path) != 0) {
             return TEXT_ERROR;
         }
         return text_sync_parent_directory(path);
@@ -623,7 +623,7 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
     for (unsigned attempt = 0U; attempt < TEXT_TEMP_ATTEMPTS; attempt++) {
         unsigned sequence =
             atomic_fetch_add_explicit(&text_temp_sequence, 1U, memory_order_relaxed);
-        int written = snprintf(temp_path, capacity, "%s.cbm-text-%ld-%u.tmp", path,
+        int written = snprintf(temp_path, capacity, "%s.lsm-text-%ld-%u.tmp", path,
                                (long)TEXT_PROCESS_ID(), sequence);
         if (written < 0 || (size_t)written >= capacity) {
             free(temp_path);
@@ -633,7 +633,7 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
 #ifdef _WIN32
         /* The descriptor-bound identity snapshot uses GetFileInformationByHandle,
          * so request read access as well as exclusive binary creation. */
-        file = cbm_fopen(temp_path, "w+bx");
+        file = lsm_fopen(temp_path, "w+bx");
 #else
 #ifndef O_NOFOLLOW
         free(temp_path);
@@ -649,7 +649,7 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
             if (!file) {
                 int saved_error = errno;
                 text_close(descriptor);
-                (void)cbm_unlink(temp_path);
+                (void)lsm_unlink(temp_path);
                 errno = saved_error;
             }
         }
@@ -674,17 +674,17 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
     }
 #ifndef _WIN32
     if (!failed && snapshot->exists &&
-        fchown(cbm_fileno(file), snapshot->owner, snapshot->group) != 0) {
+        fchown(lsm_fileno(file), snapshot->owner, snapshot->group) != 0) {
         failed = 1;
     }
     mode_t mode = override_mode      ? (mode_t)(requested_mode & 0777U)
                   : snapshot->exists ? snapshot->mode & 0777U
                                      : 0600U;
-    if (!failed && fchmod(cbm_fileno(file), mode) != 0) {
+    if (!failed && fchmod(lsm_fileno(file), mode) != 0) {
         failed = 1;
     }
 #endif
-    if (!failed && TEXT_SYNC(cbm_fileno(file)) != 0) {
+    if (!failed && TEXT_SYNC(lsm_fileno(file)) != 0) {
         failed = 1;
     }
     text_file_snapshot_t trusted_temp_snapshot = {0};
@@ -702,11 +702,11 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
         failed = 1;
     }
     if (failed) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return TEXT_ERROR;
     }
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
     if (text_temp_closed_test_hook) {
         text_temp_closed_test_hook(temp_path, text_temp_closed_test_context);
     }
@@ -718,23 +718,23 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
         !text_snapshot_publication_equal(&trusted_temp_snapshot, &temp_snapshot) ||
         temp_len != new_len || (new_len != 0U && memcmp(temp_data, new_data, new_len) != 0)) {
         free(temp_data);
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return TEXT_ERROR;
     }
     free(temp_data);
 
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
     if (text_precommit_test_hook) {
         text_precommit_test_hook(path, text_precommit_test_context);
     }
 #endif
     if (text_snapshot_matches_path(path, old_data, old_len, snapshot) != TEXT_OK) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return TEXT_ERROR;
     }
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
     if (text_prepublish_test_hook) {
         text_prepublish_test_hook(path, text_prepublish_test_context);
     }
@@ -742,7 +742,7 @@ static int text_write_atomic_mode(const char *path, const char *new_data, size_t
     if (text_snapshot_matches_path(path, old_data, old_len, snapshot) != TEXT_OK ||
         text_snapshot_matches_path(temp_path, new_data, new_len, &temp_snapshot) != TEXT_OK ||
         text_replace_file(temp_path, path, snapshot->exists) != TEXT_OK) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return TEXT_ERROR;
     }
@@ -758,7 +758,7 @@ static int text_write_atomic(const char *path, const char *new_data, size_t new_
 
 static int text_delete_file(const char *path, const char *old_data, size_t old_len,
                             const text_file_snapshot_t *snapshot) {
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
     if (text_precommit_test_hook) {
         text_precommit_test_hook(path, text_precommit_test_context);
     }
@@ -766,7 +766,7 @@ static int text_delete_file(const char *path, const char *old_data, size_t old_l
     if (text_snapshot_matches_path(path, old_data, old_len, snapshot) != TEXT_OK) {
         return TEXT_ERROR;
     }
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
     if (text_prepublish_test_hook) {
         text_prepublish_test_hook(path, text_prepublish_test_context);
     }
@@ -775,7 +775,7 @@ static int text_delete_file(const char *path, const char *old_data, size_t old_l
         return TEXT_ERROR;
     }
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_path) {
         return TEXT_ERROR;
     }
@@ -790,18 +790,18 @@ static int text_delete_file(const char *path, const char *old_data, size_t old_l
 #endif
 }
 
-#ifdef CBM_TEXT_EDIT_ENABLE_TEST_API
-void cbm_text_set_precommit_hook_for_testing(cbm_text_precommit_test_hook_t hook, void *context) {
+#ifdef LSM_TEXT_EDIT_ENABLE_TEST_API
+void lsm_text_set_precommit_hook_for_testing(lsm_text_precommit_test_hook_t hook, void *context) {
     text_precommit_test_hook = hook;
     text_precommit_test_context = context;
 }
 
-void cbm_text_set_prepublish_hook_for_testing(cbm_text_precommit_test_hook_t hook, void *context) {
+void lsm_text_set_prepublish_hook_for_testing(lsm_text_precommit_test_hook_t hook, void *context) {
     text_prepublish_test_hook = hook;
     text_prepublish_test_context = context;
 }
 
-void cbm_text_set_temp_closed_hook_for_testing(cbm_text_precommit_test_hook_t hook, void *context) {
+void lsm_text_set_temp_closed_hook_for_testing(lsm_text_precommit_test_hook_t hook, void *context) {
     text_temp_closed_test_hook = hook;
     text_temp_closed_test_context = context;
 }
@@ -1040,20 +1040,20 @@ static int text_upsert_managed_block(const char *file_path, const char *begin_ma
     return result;
 }
 
-int cbm_text_upsert_managed_block(const char *file_path, const char *begin_marker,
+int lsm_text_upsert_managed_block(const char *file_path, const char *begin_marker,
                                   const char *end_marker, const char *owned_content) {
     return text_upsert_managed_block(file_path, begin_marker, end_marker, owned_content,
                                      TEXT_MAX_BYTES);
 }
 
-int cbm_text_upsert_managed_block_limited(const char *file_path, const char *begin_marker,
+int lsm_text_upsert_managed_block_limited(const char *file_path, const char *begin_marker,
                                           const char *end_marker, const char *owned_content,
                                           size_t max_document_bytes) {
     return text_upsert_managed_block(file_path, begin_marker, end_marker, owned_content,
                                      max_document_bytes);
 }
 
-int cbm_text_remove_managed_block(const char *file_path, const char *begin_marker,
+int lsm_text_remove_managed_block(const char *file_path, const char *begin_marker,
                                   const char *end_marker) {
     size_t begin_len = 0U;
     size_t end_len = 0U;
@@ -1102,7 +1102,7 @@ int cbm_text_remove_managed_block(const char *file_path, const char *begin_marke
     return result;
 }
 
-int cbm_text_write_owned_document(const char *file_path, const char *owned_content) {
+int lsm_text_write_owned_document(const char *file_path, const char *owned_content) {
     size_t content_len = 0U;
     if (!text_valid_path(file_path) ||
         text_bounded_strlen(owned_content, TEXT_MAX_BYTES, &content_len) != TEXT_OK ||
@@ -1123,7 +1123,7 @@ int cbm_text_write_owned_document(const char *file_path, const char *owned_conte
     return result;
 }
 
-int cbm_text_write_owned_document_if_unchanged(const char *file_path, const char *owned_content,
+int lsm_text_write_owned_document_if_unchanged(const char *file_path, const char *owned_content,
                                                const char *expected_content,
                                                size_t expected_length) {
     size_t content_len = 0U;
@@ -1158,7 +1158,7 @@ int cbm_text_write_owned_document_if_unchanged(const char *file_path, const char
     return result;
 }
 
-int cbm_text_create_owned_document(const char *file_path, const char *owned_content) {
+int lsm_text_create_owned_document(const char *file_path, const char *owned_content) {
     size_t content_len = 0U;
     if (!text_valid_path(file_path) ||
         text_bounded_strlen(owned_content, TEXT_MAX_BYTES, &content_len) != TEXT_OK ||
@@ -1182,7 +1182,7 @@ int cbm_text_create_owned_document(const char *file_path, const char *owned_cont
     return result;
 }
 
-int cbm_text_ensure_owned_document(const char *file_path, const char *owned_content) {
+int lsm_text_ensure_owned_document(const char *file_path, const char *owned_content) {
     size_t content_len = 0U;
     if (!text_valid_path(file_path) ||
         text_bounded_strlen(owned_content, TEXT_MAX_BYTES, &content_len) != TEXT_OK ||
@@ -1229,7 +1229,7 @@ static int text_matches_candidate(const char *data, size_t data_len, const char 
  * state. Mirrors text_migrate_owned_document's decision WITHOUT writing, so
  * `install --dry-run` can predict a refusal instead of promising an install it
  * cannot deliver (#1387). */
-int cbm_text_owned_document_status(const char *file_path, const char *current_content,
+int lsm_text_owned_document_status(const char *file_path, const char *current_content,
                                    const char *const *released_contents, size_t released_count) {
     size_t current_len = 0U;
     if (!text_valid_path(file_path) ||
@@ -1346,20 +1346,20 @@ static int text_migrate_owned_document(const char *file_path, const char *curren
     return TEXT_UNOWNED;
 }
 
-int cbm_text_migrate_owned_document(const char *file_path, const char *current_content,
+int lsm_text_migrate_owned_document(const char *file_path, const char *current_content,
                                     const char *const *released_contents, size_t released_count) {
     return text_migrate_owned_document(file_path, current_content, released_contents,
                                        released_count, 0, 0U);
 }
 
-int cbm_text_migrate_owned_document_mode(const char *file_path, const char *current_content,
+int lsm_text_migrate_owned_document_mode(const char *file_path, const char *current_content,
                                          const char *const *released_contents,
                                          size_t released_count, unsigned int mode) {
     return text_migrate_owned_document(file_path, current_content, released_contents,
                                        released_count, 1, mode);
 }
 
-int cbm_text_remove_owned_document(const char *file_path, const char *expected_owned_content) {
+int lsm_text_remove_owned_document(const char *file_path, const char *expected_owned_content) {
     size_t expected_len = 0U;
     if (!text_valid_path(file_path) ||
         text_bounded_strlen(expected_owned_content, TEXT_MAX_BYTES, &expected_len) != TEXT_OK ||
@@ -1388,7 +1388,7 @@ int cbm_text_remove_owned_document(const char *file_path, const char *expected_o
     return result;
 }
 
-int cbm_text_remove_owned_document_any(const char *file_path, const char *current_content,
+int lsm_text_remove_owned_document_any(const char *file_path, const char *current_content,
                                        const char *const *released_contents,
                                        size_t released_count) {
     if (!text_valid_path(file_path) || (released_count > 0U && !released_contents)) {

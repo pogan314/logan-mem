@@ -73,7 +73,7 @@ static bool ws_is_windows_style(const char *path) {
            ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z'));
 }
 
-int cbm_workspace_path_depth(const char *canonical_path) {
+int lsm_workspace_path_depth(const char *canonical_path) {
     size_t prefix = ws_volume_prefix_len(canonical_path);
     if (prefix == 0) {
         return 0;
@@ -231,20 +231,20 @@ static bool ws_paths_equal(const char *a, const char *b) {
     return ws_is_ancestor_or_equal(a, b) && ws_is_ancestor_or_equal(b, a);
 }
 
-cbm_ws_verdict_t cbm_workspace_classify_root(const char *canonical_path, const char *home_dir,
+lsm_ws_verdict_t lsm_workspace_classify_root(const char *canonical_path, const char *home_dir,
                                              const char *cache_dir) {
     if (!canonical_path || !canonical_path[0] || ws_volume_prefix_len(canonical_path) == 0) {
         /* A relative or empty path is not a usable root; refuse it the same way
          * as a volume root rather than letting it fall through as allowed. */
-        return CBM_WS_DENY_ABSOLUTE;
+        return LSM_WS_DENY_ABSOLUTE;
     }
 
     bool windows_style = ws_is_windows_style(canonical_path);
-    int depth = cbm_workspace_path_depth(canonical_path);
+    int depth = lsm_workspace_path_depth(canonical_path);
 
     /* A volume, drive or share root, whatever the platform. */
     if (depth == 0) {
-        return CBM_WS_DENY_ABSOLUTE;
+        return LSM_WS_DENY_ABSOLUTE;
     }
 
     /* Order matters below, and not for cosmetic reasons.
@@ -258,7 +258,7 @@ cbm_ws_verdict_t cbm_workspace_classify_root(const char *canonical_path, const c
      * both too broad and an ancestor of the cache, and "too broad, name a
      * project directory below it" is the reason that actually helps the reader. */
     if (home_dir && home_dir[0] && ws_paths_equal(canonical_path, home_dir)) {
-        return CBM_WS_DENY_SENSITIVE;
+        return LSM_WS_DENY_SENSITIVE;
     }
 
     /* Below a drive or a UNC share the first component is already user space
@@ -267,7 +267,7 @@ cbm_ws_verdict_t cbm_workspace_classify_root(const char *canonical_path, const c
     int min_depth =
         (windows_style || ws_is_unc(canonical_path)) ? WS_MIN_DEPTH_WINDOWS : WS_MIN_DEPTH_POSIX;
     if (depth < min_depth) {
-        return CBM_WS_DENY_TOO_SHALLOW;
+        return LSM_WS_DENY_TOO_SHALLOW;
     }
 
     /* No rule here for "this root contains the cache directory".
@@ -287,35 +287,35 @@ cbm_ws_verdict_t cbm_workspace_classify_root(const char *canonical_path, const c
     if (ws_any_component_matches(canonical_path, WS_CREDENTIAL_NAMES,
                                  sizeof(WS_CREDENTIAL_NAMES) / sizeof(WS_CREDENTIAL_NAMES[0]),
                                  windows_style)) {
-        return CBM_WS_DENY_SENSITIVE;
+        return LSM_WS_DENY_SENSITIVE;
     }
 
     if (windows_style && ws_first_component_matches(canonical_path, WS_WINDOWS_SYSTEM_TREES,
                                                     sizeof(WS_WINDOWS_SYSTEM_TREES) /
                                                         sizeof(WS_WINDOWS_SYSTEM_TREES[0]),
                                                     true)) {
-        return CBM_WS_DENY_SENSITIVE;
+        return LSM_WS_DENY_SENSITIVE;
     }
 
     /* "C:/Users" is the user tree itself — refuse it as a root, but leave the
      * projects below it alone; that is where Windows users actually work. */
     if (windows_style && depth == 1 &&
         ws_first_component_matches(canonical_path, &WS_WINDOWS_USER_TREE, 1, true)) {
-        return CBM_WS_DENY_SENSITIVE;
+        return LSM_WS_DENY_SENSITIVE;
     }
 
-    return CBM_WS_ALLOW;
+    return LSM_WS_ALLOW;
 }
 
-const char *cbm_workspace_verdict_reason(cbm_ws_verdict_t verdict) {
+const char *lsm_workspace_verdict_reason(lsm_ws_verdict_t verdict) {
     switch (verdict) {
-    case CBM_WS_ALLOW:
+    case LSM_WS_ALLOW:
         return "allowed";
-    case CBM_WS_DENY_TOO_SHALLOW:
+    case LSM_WS_DENY_TOO_SHALLOW:
         return "path is too broad to index as one root; name a project directory below it";
-    case CBM_WS_DENY_ABSOLUTE:
-        return "path is a volume root or holds the codebase-memory cache; it cannot be indexed";
-    case CBM_WS_DENY_SENSITIVE:
+    case LSM_WS_DENY_ABSOLUTE:
+        return "path is a volume root or holds the logan-spine cache; it cannot be indexed";
+    case LSM_WS_DENY_SENSITIVE:
         return "path is a home or credential directory";
     default:
         break;
@@ -323,8 +323,8 @@ const char *cbm_workspace_verdict_reason(cbm_ws_verdict_t verdict) {
     return "refused";
 }
 
-bool cbm_workspace_verdict_is_overridable(cbm_ws_verdict_t verdict) {
-    return verdict == CBM_WS_DENY_SENSITIVE;
+bool lsm_workspace_verdict_is_overridable(lsm_ws_verdict_t verdict) {
+    return verdict == LSM_WS_DENY_SENSITIVE;
 }
 
 /* ── Grant store ──────────────────────────────────────────────────────────── */
@@ -337,7 +337,7 @@ enum { WS_LINE_MAX = 4096 };
  * upgrade an ordinary grant into a sensitive one. */
 static const char WS_SENSITIVE_MARK = '!';
 
-bool cbm_workspace_grant_path(const char *cache_dir, char *out, size_t out_sz) {
+bool lsm_workspace_grant_path(const char *cache_dir, char *out, size_t out_sz) {
     if (!cache_dir || !cache_dir[0] || !out || out_sz == 0) {
         return false;
     }
@@ -350,10 +350,10 @@ bool cbm_workspace_grant_path(const char *cache_dir, char *out, size_t out_sz) {
 static int ws_grant_walk(const char *cache_dir,
                          bool (*visit)(const char *root, bool sensitive, void *ctx), void *ctx) {
     char store[WS_LINE_MAX];
-    if (!cbm_workspace_grant_path(cache_dir, store, sizeof(store))) {
+    if (!lsm_workspace_grant_path(cache_dir, store, sizeof(store))) {
         return 0;
     }
-    FILE *f = cbm_fopen(store, "r");
+    FILE *f = lsm_fopen(store, "r");
     if (!f) {
         return 0;
     }
@@ -389,7 +389,7 @@ typedef struct {
 
 static bool ws_match_visit(const char *root, bool sensitive, void *ctx) {
     ws_match_t *m = ctx;
-    if (cbm_path_within_root(root, m->candidate)) {
+    if (lsm_path_within_root(root, m->candidate)) {
         m->contained = true;
         if (sensitive && ws_paths_equal(root, m->candidate)) {
             m->exact_sensitive = true;
@@ -414,7 +414,7 @@ static bool ws_list_visit(const char *root, bool sensitive, void *ctx) {
     return false;
 }
 
-bool cbm_workspace_grant_list(const char *cache_dir, char *out, size_t out_sz) {
+bool lsm_workspace_grant_list(const char *cache_dir, char *out, size_t out_sz) {
     if (!out || out_sz == 0) {
         return false;
     }
@@ -423,7 +423,7 @@ bool cbm_workspace_grant_list(const char *cache_dir, char *out, size_t out_sz) {
     return ws_grant_walk(cache_dir, ws_list_visit, &l) > 0;
 }
 
-bool cbm_workspace_grant_add(const char *cache_dir, const char *home_dir,
+bool lsm_workspace_grant_add(const char *cache_dir, const char *home_dir,
                              const char *canonical_path, bool approve_sensitive, char *err,
                              size_t err_sz) {
     if (err && err_sz) {
@@ -436,11 +436,11 @@ bool cbm_workspace_grant_add(const char *cache_dir, const char *home_dir,
         return false;
     }
 
-    cbm_ws_verdict_t verdict = cbm_workspace_classify_root(canonical_path, home_dir, cache_dir);
-    if (verdict != CBM_WS_ALLOW) {
-        if (!cbm_workspace_verdict_is_overridable(verdict)) {
+    lsm_ws_verdict_t verdict = lsm_workspace_classify_root(canonical_path, home_dir, cache_dir);
+    if (verdict != LSM_WS_ALLOW) {
+        if (!lsm_workspace_verdict_is_overridable(verdict)) {
             if (err) {
-                snprintf(err, err_sz, "%s", cbm_workspace_verdict_reason(verdict));
+                snprintf(err, err_sz, "%s", lsm_workspace_verdict_reason(verdict));
             }
             return false;
         }
@@ -449,7 +449,7 @@ bool cbm_workspace_grant_add(const char *cache_dir, const char *home_dir,
              * whose answer we cannot authenticate. */
             if (err) {
                 snprintf(err, err_sz, "%s; re-run with --approve-sensitive if that is intended",
-                         cbm_workspace_verdict_reason(verdict));
+                         lsm_workspace_verdict_reason(verdict));
             }
             return false;
         }
@@ -463,20 +463,20 @@ bool cbm_workspace_grant_add(const char *cache_dir, const char *home_dir,
     }
 
     char store[WS_LINE_MAX];
-    if (!cbm_workspace_grant_path(cache_dir, store, sizeof(store))) {
+    if (!lsm_workspace_grant_path(cache_dir, store, sizeof(store))) {
         if (err) {
             snprintf(err, err_sz, "cache path too long");
         }
         return false;
     }
-    FILE *f = cbm_fopen(store, "a");
+    FILE *f = lsm_fopen(store, "a");
     if (!f) {
         if (err) {
             snprintf(err, err_sz, "cannot write %s", store);
         }
         return false;
     }
-    bool sensitive = verdict == CBM_WS_DENY_SENSITIVE;
+    bool sensitive = verdict == LSM_WS_DENY_SENSITIVE;
     (void)fprintf(f, "%s%s\n", sensitive ? "!" : "", canonical_path);
     bool ok = fclose(f) == 0;
     if (!ok && err) {
@@ -485,7 +485,7 @@ bool cbm_workspace_grant_add(const char *cache_dir, const char *home_dir,
     return ok;
 }
 
-bool cbm_workspace_root_allowed(const char *canonical_path, const char *home_dir,
+bool lsm_workspace_root_allowed(const char *canonical_path, const char *home_dir,
                                 const char *cache_dir, const char *configured_root, char *err,
                                 size_t err_sz) {
     if (err && err_sz) {
@@ -502,9 +502,9 @@ bool cbm_workspace_root_allowed(const char *canonical_path, const char *home_dir
     int grants = ws_grant_walk(cache_dir, ws_match_visit, &match);
 
     /* A configured root behaves as an additional grant so existing
-     * CBM_ALLOWED_ROOT deployments keep working unchanged. */
+     * LSM_ALLOWED_ROOT deployments keep working unchanged. */
     bool configured = configured_root && configured_root[0];
-    bool configured_contains = configured && cbm_path_within_root(configured_root, canonical_path);
+    bool configured_contains = configured && lsm_path_within_root(configured_root, canonical_path);
 
     /* Containment first when a boundary has actually been declared. A path
      * outside a configured root is best explained as exactly that, and the
@@ -522,40 +522,40 @@ bool cbm_workspace_root_allowed(const char *canonical_path, const char *home_dir
      * one that requested it and so never authorized anything.
      *
      * The consuming half belongs where the project context exists: discovery
-     * walking a project's approved extra roots. cbm_workspace_manifest_allows is
+     * walking a project's approved extra roots. lsm_workspace_manifest_allows is
      * the query that half will use. */
     if (boundary_declared && !match.contained && !configured_contains) {
         if (err) {
             /* Keep the "outside the allowed root" wording: changing it broke an
-             * assertion whose early return then leaked CBM_ALLOWED_ROOT into
+             * assertion whose early return then leaked LSM_ALLOWED_ROOT into
              * every later test in that suite. Guidance is appended, not
              * substituted. */
             snprintf(err, err_sz,
                      "%s is outside the allowed root. To allow it, run: "
-                     "codebase-memory-mcp allow-root %s",
+                     "logan-spine-mcp allow-root %s",
                      canonical_path, canonical_path);
         }
         return false;
     }
 
-    cbm_ws_verdict_t verdict = cbm_workspace_classify_root(canonical_path, home_dir, cache_dir);
-    if (verdict == CBM_WS_ALLOW) {
+    lsm_ws_verdict_t verdict = lsm_workspace_classify_root(canonical_path, home_dir, cache_dir);
+    if (verdict == LSM_WS_ALLOW) {
         return true;
     }
     /* An explicit human approval recorded for exactly this path is the only thing
      * that lifts a sensitive refusal. Absolute and shallow refusals cannot be
      * lifted at all. */
-    if (verdict == CBM_WS_DENY_SENSITIVE && match.exact_sensitive) {
+    if (verdict == LSM_WS_DENY_SENSITIVE && match.exact_sensitive) {
         return true;
     }
     if (err) {
-        if (cbm_workspace_verdict_is_overridable(verdict)) {
+        if (lsm_workspace_verdict_is_overridable(verdict)) {
             snprintf(err, err_sz,
-                     "%s: %s. To index it anyway, run: codebase-memory-mcp allow-root "
+                     "%s: %s. To index it anyway, run: logan-spine-mcp allow-root "
                      "--approve-sensitive %s",
-                     canonical_path, cbm_workspace_verdict_reason(verdict), canonical_path);
+                     canonical_path, lsm_workspace_verdict_reason(verdict), canonical_path);
         } else {
-            snprintf(err, err_sz, "%s: %s", canonical_path, cbm_workspace_verdict_reason(verdict));
+            snprintf(err, err_sz, "%s: %s", canonical_path, lsm_workspace_verdict_reason(verdict));
         }
     }
     return false;
@@ -565,7 +565,7 @@ bool cbm_workspace_root_allowed(const char *canonical_path, const char *home_dir
 
 /* Callers should not each re-derive these; a caller that resolved the home
  * directory differently would classify the same path differently. */
-const char *cbm_workspace_home_dir(void) {
+const char *lsm_workspace_home_dir(void) {
     const char *home = getenv("HOME");
     if (home && home[0]) {
         return home;
@@ -574,13 +574,13 @@ const char *cbm_workspace_home_dir(void) {
     return (home && home[0]) ? home : NULL;
 }
 
-const char *cbm_workspace_cache_dir(void) {
-    return cbm_resolve_cache_dir();
+const char *lsm_workspace_cache_dir(void) {
+    return lsm_resolve_cache_dir();
 }
 
 /* ── Per-project request manifest ─────────────────────────────────────────── */
 
-bool cbm_workspace_manifest_read(const char *project_root, cbm_ws_manifest_t *out) {
+bool lsm_workspace_manifest_read(const char *project_root, lsm_ws_manifest_t *out) {
     if (!out) {
         return false;
     }
@@ -590,11 +590,11 @@ bool cbm_workspace_manifest_read(const char *project_root, cbm_ws_manifest_t *ou
     }
 
     char path[WS_LINE_MAX];
-    int n = snprintf(path, sizeof(path), "%s/%s", project_root, CBM_WS_MANIFEST_NAME);
+    int n = snprintf(path, sizeof(path), "%s/%s", project_root, LSM_WS_MANIFEST_NAME);
     if (n <= 0 || (size_t)n >= sizeof(path)) {
         return true;
     }
-    FILE *f = cbm_fopen(path, "rb");
+    FILE *f = lsm_fopen(path, "rb");
     if (!f) {
         return true;
     }
@@ -618,7 +618,7 @@ bool cbm_workspace_manifest_read(const char *project_root, cbm_ws_manifest_t *ou
     }
     (void)fclose(f);
     out->present = true;
-    cbm_sha256_hex(raw ? raw : "", raw_len, out->digest);
+    lsm_sha256_hex(raw ? raw : "", raw_len, out->digest);
 
     /* Parse entries out of the same bytes. */
     bool ok = true;
@@ -633,7 +633,7 @@ bool cbm_workspace_manifest_read(const char *project_root, cbm_ws_manifest_t *ou
             len--;
         }
         if (len > 0 && raw[line_start] != '#') {
-            if (len >= sizeof(out->entries[0]) || out->count >= CBM_WS_MANIFEST_MAX_ENTRIES) {
+            if (len >= sizeof(out->entries[0]) || out->count >= LSM_WS_MANIFEST_MAX_ENTRIES) {
                 ok = false;
                 break;
             }
@@ -670,8 +670,8 @@ static bool ws_approval_path(const char *cache_dir, char *out, size_t out_sz) {
     return n > 0 && (size_t)n < out_sz;
 }
 
-bool cbm_workspace_manifest_is_approved(const char *cache_dir, const char *project_root,
-                                        const cbm_ws_manifest_t *manifest) {
+bool lsm_workspace_manifest_is_approved(const char *cache_dir, const char *project_root,
+                                        const lsm_ws_manifest_t *manifest) {
     if (!manifest || !manifest->present || !manifest->digest[0] || !project_root) {
         return false;
     }
@@ -679,7 +679,7 @@ bool cbm_workspace_manifest_is_approved(const char *cache_dir, const char *proje
     if (!ws_approval_path(cache_dir, store, sizeof(store))) {
         return false;
     }
-    FILE *f = cbm_fopen(store, "r");
+    FILE *f = lsm_fopen(store, "r");
     if (!f) {
         return false;
     }
@@ -703,24 +703,24 @@ bool cbm_workspace_manifest_is_approved(const char *cache_dir, const char *proje
     return found;
 }
 
-bool cbm_workspace_manifest_approve(const char *cache_dir, const char *home_dir,
+bool lsm_workspace_manifest_approve(const char *cache_dir, const char *home_dir,
                                     const char *project_root, char *err, size_t err_sz) {
     if (err && err_sz) {
         err[0] = '\0';
     }
-    cbm_ws_manifest_t m;
-    if (!cbm_workspace_manifest_read(project_root, &m)) {
+    lsm_ws_manifest_t m;
+    if (!lsm_workspace_manifest_read(project_root, &m)) {
         if (err) {
             snprintf(err, err_sz,
                      "%s is malformed (control characters, an over-long entry, or "
                      "more than %d entries)",
-                     CBM_WS_MANIFEST_NAME, CBM_WS_MANIFEST_MAX_ENTRIES);
+                     LSM_WS_MANIFEST_NAME, LSM_WS_MANIFEST_MAX_ENTRIES);
         }
         return false;
     }
     if (!m.present) {
         if (err) {
-            snprintf(err, err_sz, "no %s in %s", CBM_WS_MANIFEST_NAME,
+            snprintf(err, err_sz, "no %s in %s", LSM_WS_MANIFEST_NAME,
                      project_root ? project_root : "(none)");
         }
         return false;
@@ -729,11 +729,11 @@ bool cbm_workspace_manifest_approve(const char *cache_dir, const char *home_dir,
     /* Approving a manifest must not become a way around the breadth policy: every
      * requested entry has to stand on its own as an indexing root. */
     for (int i = 0; i < m.count; i++) {
-        cbm_ws_verdict_t v = cbm_workspace_classify_root(m.entries[i], home_dir, cache_dir);
-        if (v != CBM_WS_ALLOW) {
+        lsm_ws_verdict_t v = lsm_workspace_classify_root(m.entries[i], home_dir, cache_dir);
+        if (v != LSM_WS_ALLOW) {
             if (err) {
                 snprintf(err, err_sz, "requested path %s: %s", m.entries[i],
-                         cbm_workspace_verdict_reason(v));
+                         lsm_workspace_verdict_reason(v));
             }
             return false;
         }
@@ -746,10 +746,10 @@ bool cbm_workspace_manifest_approve(const char *cache_dir, const char *home_dir,
         }
         return false;
     }
-    if (cbm_workspace_manifest_is_approved(cache_dir, project_root, &m)) {
+    if (lsm_workspace_manifest_is_approved(cache_dir, project_root, &m)) {
         return true;
     }
-    FILE *f = cbm_fopen(store, "a");
+    FILE *f = lsm_fopen(store, "a");
     if (!f) {
         if (err) {
             snprintf(err, err_sz, "cannot write %s", store);
@@ -764,25 +764,25 @@ bool cbm_workspace_manifest_approve(const char *cache_dir, const char *home_dir,
     return ok;
 }
 
-bool cbm_workspace_manifest_allows(const char *cache_dir, const char *home_dir,
+bool lsm_workspace_manifest_allows(const char *cache_dir, const char *home_dir,
                                    const char *project_root, const char *candidate) {
     if (!candidate || !candidate[0]) {
         return false;
     }
-    cbm_ws_manifest_t m;
-    if (!cbm_workspace_manifest_read(project_root, &m) || !m.present) {
+    lsm_ws_manifest_t m;
+    if (!lsm_workspace_manifest_read(project_root, &m) || !m.present) {
         return false;
     }
-    if (!cbm_workspace_manifest_is_approved(cache_dir, project_root, &m)) {
+    if (!lsm_workspace_manifest_is_approved(cache_dir, project_root, &m)) {
         return false;
     }
     for (int i = 0; i < m.count; i++) {
         /* Re-classify at use time as well as at approval time: the credential list
          * may have grown since, and a stored approval must not outrank it. */
-        if (cbm_workspace_classify_root(m.entries[i], home_dir, cache_dir) != CBM_WS_ALLOW) {
+        if (lsm_workspace_classify_root(m.entries[i], home_dir, cache_dir) != LSM_WS_ALLOW) {
             continue;
         }
-        if (cbm_path_within_root(m.entries[i], candidate)) {
+        if (lsm_path_within_root(m.entries[i], candidate)) {
             return true;
         }
     }

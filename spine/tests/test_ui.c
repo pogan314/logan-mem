@@ -27,27 +27,27 @@
 
 TEST(config_load_defaults) {
     /* Loading with no config file should give defaults */
-    cbm_ui_config_t cfg;
+    lsm_ui_config_t cfg;
     cfg.ui_enabled = true; /* set non-default to verify load overwrites */
     cfg.ui_port = 1234;
 
     /* Use a temp HOME to avoid touching real config */
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
     char *old_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
-    cbm_setenv("HOME", td, 1);
+    lsm_setenv("HOME", td, 1);
 
-    cbm_ui_config_load(&cfg);
+    lsm_ui_config_load(&cfg);
 
     ASSERT_FALSE(cfg.ui_enabled);
     ASSERT_EQ(cfg.ui_port, 9749);
 
     /* Restore HOME */
     if (old_home) {
-        cbm_setenv("HOME", old_home, 1);
+        lsm_setenv("HOME", old_home, 1);
         free(old_home);
     }
 
@@ -56,26 +56,26 @@ TEST(config_load_defaults) {
 
 TEST(config_save_and_reload) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
     char *old_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
-    cbm_setenv("HOME", td, 1);
+    lsm_setenv("HOME", td, 1);
 
     /* Save */
-    cbm_ui_config_t cfg = {.ui_enabled = true, .ui_port = 8080};
-    ASSERT_TRUE(cbm_ui_config_save(&cfg));
+    lsm_ui_config_t cfg = {.ui_enabled = true, .ui_port = 8080};
+    ASSERT_TRUE(lsm_ui_config_save(&cfg));
 
     /* Reload */
-    cbm_ui_config_t loaded;
-    cbm_ui_config_load(&loaded);
+    lsm_ui_config_t loaded;
+    lsm_ui_config_load(&loaded);
 
     ASSERT_TRUE(loaded.ui_enabled);
     ASSERT_EQ(loaded.ui_port, 8080);
 
     if (old_home) {
-        cbm_setenv("HOME", old_home, 1);
+        lsm_setenv("HOME", old_home, 1);
         free(old_home);
     }
 
@@ -84,23 +84,23 @@ TEST(config_save_and_reload) {
 
 TEST(config_save_atomically_replaces_a_complete_generation) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_atomic_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_atomic_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
-    char *old_cache = getenv("CBM_CACHE_DIR") ? strdup(getenv("CBM_CACHE_DIR")) : NULL;
-    ASSERT_EQ(cbm_setenv("CBM_CACHE_DIR", td, 1), 0);
+    char *old_cache = getenv("LSM_CACHE_DIR") ? strdup(getenv("LSM_CACHE_DIR")) : NULL;
+    ASSERT_EQ(lsm_setenv("LSM_CACHE_DIR", td, 1), 0);
 
-    cbm_ui_config_t old_generation = {
+    lsm_ui_config_t old_generation = {
         .ui_enabled = false,
         .ui_port = 11111,
     };
-    ASSERT_TRUE(cbm_ui_config_save(&old_generation));
+    ASSERT_TRUE(lsm_ui_config_save(&old_generation));
 
     char path[1024];
-    cbm_ui_config_path(path, (int)sizeof(path));
+    lsm_ui_config_path(path, (int)sizeof(path));
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     ASSERT_NOT_NULL(wide_path);
     HANDLE old_handle =
         CreateFileW(wide_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -108,18 +108,18 @@ TEST(config_save_atomically_replaces_a_complete_generation) {
     free(wide_path);
     ASSERT_TRUE(old_handle != INVALID_HANDLE_VALUE);
 #else
-    FILE *old_handle = cbm_fopen(path, "rb");
+    FILE *old_handle = lsm_fopen(path, "rb");
     ASSERT_NOT_NULL(old_handle);
 #endif
 
-    cbm_ui_config_t new_generation = {
+    lsm_ui_config_t new_generation = {
         .ui_enabled = true,
         .ui_port = 22222,
     };
     /* Capture everything, clean up, and only then assert: an assert firing
-     * before the env restore leaks CBM_CACHE_DIR into every later test in the
+     * before the env restore leaks LSM_CACHE_DIR into every later test in the
      * process, turning one regression into a cascade. */
-    bool saved = cbm_ui_config_save(&new_generation);
+    bool saved = lsm_ui_config_save(&new_generation);
 
     char old_bytes[512] = {0};
 #ifdef _WIN32
@@ -134,13 +134,13 @@ TEST(config_save_atomically_replaces_a_complete_generation) {
     bool old_closed = fclose(old_handle) == 0;
 #endif
 
-    cbm_ui_config_t loaded = {0};
-    cbm_ui_config_load(&loaded);
+    lsm_ui_config_t loaded = {0};
+    lsm_ui_config_load(&loaded);
 
     if (old_cache) {
-        (void)cbm_setenv("CBM_CACHE_DIR", old_cache, 1);
+        (void)lsm_setenv("LSM_CACHE_DIR", old_cache, 1);
     } else {
-        (void)cbm_unsetenv("CBM_CACHE_DIR");
+        (void)lsm_unsetenv("LSM_CACHE_DIR");
     }
     free(old_cache);
     (void)th_rmtree(td);
@@ -159,28 +159,28 @@ TEST(config_save_atomically_replaces_a_complete_generation) {
 
 TEST(config_overwrite) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
     char *old_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
-    cbm_setenv("HOME", td, 1);
+    lsm_setenv("HOME", td, 1);
 
     /* Save with ui_enabled=true */
-    cbm_ui_config_t cfg1 = {.ui_enabled = true, .ui_port = 9749};
-    ASSERT_TRUE(cbm_ui_config_save(&cfg1));
+    lsm_ui_config_t cfg1 = {.ui_enabled = true, .ui_port = 9749};
+    ASSERT_TRUE(lsm_ui_config_save(&cfg1));
 
     /* Overwrite with ui_enabled=false */
-    cbm_ui_config_t cfg2 = {.ui_enabled = false, .ui_port = 9749};
-    ASSERT_TRUE(cbm_ui_config_save(&cfg2));
+    lsm_ui_config_t cfg2 = {.ui_enabled = false, .ui_port = 9749};
+    ASSERT_TRUE(lsm_ui_config_save(&cfg2));
 
     /* Reload should show false */
-    cbm_ui_config_t loaded;
-    cbm_ui_config_load(&loaded);
+    lsm_ui_config_t loaded;
+    lsm_ui_config_load(&loaded);
     ASSERT_FALSE(loaded.ui_enabled);
 
     if (old_home) {
-        cbm_setenv("HOME", old_home, 1);
+        lsm_setenv("HOME", old_home, 1);
         free(old_home);
     }
 
@@ -189,21 +189,21 @@ TEST(config_overwrite) {
 
 TEST(config_corrupt_file) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
     char *old_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
-    cbm_setenv("HOME", td, 1);
+    lsm_setenv("HOME", td, 1);
 
     /* Write garbage to config path */
     char path[1024];
-    cbm_ui_config_path(path, (int)sizeof(path));
+    lsm_ui_config_path(path, (int)sizeof(path));
 
     /* Ensure directory exists (portable — no system("mkdir -p")) */
     char dir[1024];
-    snprintf(dir, sizeof(dir), "%s/.cache/codebase-memory-mcp", td);
-    cbm_mkdir_p(dir, 0755);
+    snprintf(dir, sizeof(dir), "%s/.cache/logan-spine-mcp", td);
+    lsm_mkdir_p(dir, 0755);
 
     FILE *f = fopen(path, "w");
     ASSERT_NOT_NULL(f);
@@ -211,13 +211,13 @@ TEST(config_corrupt_file) {
     fclose(f);
 
     /* Should load defaults, not crash */
-    cbm_ui_config_t cfg;
-    cbm_ui_config_load(&cfg);
+    lsm_ui_config_t cfg;
+    lsm_ui_config_load(&cfg);
     ASSERT_FALSE(cfg.ui_enabled);
     ASSERT_EQ(cfg.ui_port, 9749);
 
     if (old_home) {
-        cbm_setenv("HOME", old_home, 1);
+        lsm_setenv("HOME", old_home, 1);
         free(old_home);
     }
 
@@ -226,33 +226,33 @@ TEST(config_corrupt_file) {
 
 TEST(config_missing_fields) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_test_config_XXXXXX");
-    char *td = cbm_mkdtemp(tmpdir);
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_test_config_XXXXXX");
+    char *td = lsm_mkdtemp(tmpdir);
     ASSERT_NOT_NULL(td);
 
     char *old_home = getenv("HOME") ? strdup(getenv("HOME")) : NULL;
-    cbm_setenv("HOME", td, 1);
+    lsm_setenv("HOME", td, 1);
 
     /* Write JSON with only ui_port */
     char path[1024];
-    cbm_ui_config_path(path, (int)sizeof(path));
+    lsm_ui_config_path(path, (int)sizeof(path));
 
     char dir[1024];
-    snprintf(dir, sizeof(dir), "%s/.cache/codebase-memory-mcp", td);
-    cbm_mkdir_p(dir, 0755);
+    snprintf(dir, sizeof(dir), "%s/.cache/logan-spine-mcp", td);
+    lsm_mkdir_p(dir, 0755);
 
     FILE *f = fopen(path, "w");
     ASSERT_NOT_NULL(f);
     fprintf(f, "{\"ui_port\": 5555}");
     fclose(f);
 
-    cbm_ui_config_t cfg;
-    cbm_ui_config_load(&cfg);
+    lsm_ui_config_t cfg;
+    lsm_ui_config_load(&cfg);
     ASSERT_FALSE(cfg.ui_enabled); /* defaults for missing field */
     ASSERT_EQ(cfg.ui_port, 5555); /* present field loaded */
 
     if (old_home) {
-        cbm_setenv("HOME", old_home, 1);
+        lsm_setenv("HOME", old_home, 1);
         free(old_home);
     }
 
@@ -263,41 +263,41 @@ TEST(config_missing_fields) {
 
 TEST(embedded_lookup_not_found) {
     /* With stub, everything should return NULL */
-    const cbm_embedded_file_t *f = cbm_embedded_lookup("/nonexistent");
+    const lsm_embedded_file_t *f = lsm_embedded_lookup("/nonexistent");
     ASSERT_NULL(f);
     PASS();
 }
 
 TEST(embedded_stub_count) {
     /* Stub should have 0 files */
-    ASSERT_EQ(CBM_EMBEDDED_FILE_COUNT, 0);
+    ASSERT_EQ(LSM_EMBEDDED_FILE_COUNT, 0);
     PASS();
 }
 
 /* ── Layout tests ─────────────────────────────────────────────── */
 
 TEST(layout_empty_graph) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
     /* No nodes in store → empty result */
-    cbm_layout_result_t *r =
-        cbm_layout_compute(store, "test-project", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r =
+        lsm_layout_compute(store, "test-project", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r);
     ASSERT_EQ(r->node_count, 0);
     ASSERT_EQ(r->edge_count, 0);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_single_node) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
-    cbm_node_t node = {
+    lsm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_node_t node = {
         .project = "test",
         .label = "Function",
         .name = "main",
@@ -306,47 +306,47 @@ TEST(layout_single_node) {
         .start_line = 1,
         .end_line = 10,
     };
-    int64_t id = cbm_store_upsert_node(store, &node);
+    int64_t id = lsm_store_upsert_node(store, &node);
     ASSERT_GT(id, 0);
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r);
     ASSERT_EQ(r->node_count, 1);
     ASSERT_STR_EQ(r->nodes[0].name, "main");
     ASSERT_EQ(r->total_nodes, 1);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_two_connected) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "foo",
                      .qualified_name = "test::foo",
                      .file_path = "a.c",
                      .start_line = 1,
                      .end_line = 5};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "bar",
                      .qualified_name = "test::bar",
                      .file_path = "b.c",
                      .start_line = 1,
                      .end_line = 5};
-    int64_t id1 = cbm_store_upsert_node(store, &n1);
-    int64_t id2 = cbm_store_upsert_node(store, &n2);
+    int64_t id1 = lsm_store_upsert_node(store, &n1);
+    int64_t id2 = lsm_store_upsert_node(store, &n2);
 
-    cbm_edge_t edge = {.project = "test", .source_id = id1, .target_id = id2, .type = "CALLS"};
-    cbm_store_insert_edge(store, &edge);
+    lsm_edge_t edge = {.project = "test", .source_id = id1, .target_id = id2, .type = "CALLS"};
+    lsm_store_insert_edge(store, &edge);
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r);
     ASSERT_EQ(r->node_count, 2);
 
@@ -359,79 +359,79 @@ TEST(layout_two_connected) {
 
     ASSERT_EQ(r->edge_count, 1);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_respects_max_nodes) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
     /* Insert 20 nodes */
     for (int i = 0; i < 20; i++) {
         char name[32], qn[64];
         snprintf(name, sizeof(name), "fn%d", i);
         snprintf(qn, sizeof(qn), "test::fn%d", i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "a.c",
                         .start_line = i,
                         .end_line = i + 1};
-        cbm_store_upsert_node(store, &n);
+        lsm_store_upsert_node(store, &n);
     }
 
     /* max_nodes=5 should return at most 5 */
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 5);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 5);
     ASSERT_NOT_NULL(r);
     ASSERT_LTE(r->node_count, 5);
     ASSERT_EQ(r->total_nodes, 20);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_clamps_render_cap_from_env) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    const char *old_raw = getenv("CBM_UI_MAX_RENDER_NODES");
+    const char *old_raw = getenv("LSM_UI_MAX_RENDER_NODES");
     char *old_cap = old_raw ? strdup(old_raw) : NULL;
-    cbm_setenv("CBM_UI_MAX_RENDER_NODES", "25", 1);
+    lsm_setenv("LSM_UI_MAX_RENDER_NODES", "25", 1);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
     for (int i = 0; i < 40; i++) {
         char name[32], qn[64];
         snprintf(name, sizeof(name), "fn%d", i);
         snprintf(qn, sizeof(qn), "test::fn%d", i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "a.c",
                         .start_line = i,
                         .end_line = i + 1};
-        cbm_store_upsert_node(store, &n);
+        lsm_store_upsert_node(store, &n);
     }
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 50000);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 50000);
     ASSERT_NOT_NULL(r);
     ASSERT_LTE(r->node_count, 25);
     ASSERT_EQ(r->total_nodes, 40);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     if (old_cap) {
-        cbm_setenv("CBM_UI_MAX_RENDER_NODES", old_cap, 1);
+        lsm_setenv("LSM_UI_MAX_RENDER_NODES", old_cap, 1);
         free(old_cap);
     } else {
-        cbm_unsetenv("CBM_UI_MAX_RENDER_NODES");
+        lsm_unsetenv("LSM_UI_MAX_RENDER_NODES");
     }
     PASS();
 }
@@ -439,71 +439,71 @@ TEST(layout_clamps_render_cap_from_env) {
 /* A caller-requested budget above the default must be honored (up to the hard
  * ceiling) when no env cap is set — the default is a default, not a ceiling. */
 TEST(layout_honors_budget_above_default) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    const char *old_raw = getenv("CBM_UI_MAX_RENDER_NODES");
+    const char *old_raw = getenv("LSM_UI_MAX_RENDER_NODES");
     char *old_cap = old_raw ? strdup(old_raw) : NULL;
-    cbm_unsetenv("CBM_UI_MAX_RENDER_NODES");
+    lsm_unsetenv("LSM_UI_MAX_RENDER_NODES");
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
     enum { BUDGET_NODES = 5100 };
     for (int i = 0; i < BUDGET_NODES; i++) {
         char name[32], qn[64];
         snprintf(name, sizeof(name), "fn%d", i);
         snprintf(qn, sizeof(qn), "test::fn%d", i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "a.c",
                         .start_line = i,
                         .end_line = i + 1};
-        cbm_store_upsert_node(store, &n);
+        lsm_store_upsert_node(store, &n);
     }
 
-    cbm_layout_result_t *r =
-        cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, BUDGET_NODES);
+    lsm_layout_result_t *r =
+        lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, BUDGET_NODES);
     ASSERT_NOT_NULL(r);
     ASSERT_EQ(r->node_count, BUDGET_NODES);
     ASSERT_EQ(r->total_nodes, BUDGET_NODES);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     if (old_cap) {
-        cbm_setenv("CBM_UI_MAX_RENDER_NODES", old_cap, 1);
+        lsm_setenv("LSM_UI_MAX_RENDER_NODES", old_cap, 1);
         free(old_cap);
     }
     PASS();
 }
 
 TEST(layout_deterministic) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "alpha",
                      .qualified_name = "test::alpha",
                      .file_path = "a.c",
                      .start_line = 1,
                      .end_line = 5};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "beta",
                      .qualified_name = "test::beta",
                      .file_path = "b.c",
                      .start_line = 1,
                      .end_line = 5};
-    cbm_store_upsert_node(store, &n1);
-    cbm_store_upsert_node(store, &n2);
+    lsm_store_upsert_node(store, &n1);
+    lsm_store_upsert_node(store, &n2);
 
     /* Run twice, check positions match */
-    cbm_layout_result_t *r1 = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
-    cbm_layout_result_t *r2 = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r1 = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r2 = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r1);
     ASSERT_NOT_NULL(r2);
     ASSERT_EQ(r1->node_count, r2->node_count);
@@ -514,31 +514,31 @@ TEST(layout_deterministic) {
         ASSERT_FLOAT_EQ(r1->nodes[i].z, r2->nodes[i].z, 0.001);
     }
 
-    cbm_layout_free(r1);
-    cbm_layout_free(r2);
-    cbm_store_close(store);
+    lsm_layout_free(r1);
+    lsm_layout_free(r2);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_to_json) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
 
-    cbm_store_upsert_project(store, "test", "/tmp/test");
+    lsm_store_upsert_project(store, "test", "/tmp/test");
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "hello",
                     .qualified_name = "test::hello",
                     .file_path = "a.c",
                     .start_line = 1,
                     .end_line = 5};
-    cbm_store_upsert_node(store, &n);
+    lsm_store_upsert_node(store, &n);
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r);
 
-    char *json = cbm_layout_to_json(r);
+    char *json = lsm_layout_to_json(r);
     ASSERT_NOT_NULL(json);
 
     /* Should contain key fields */
@@ -549,35 +549,35 @@ TEST(layout_to_json) {
     ASSERT(strstr(json, "\"Function\"") != NULL);
 
     free(json);
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(layout_null_inputs) {
     /* NULL store → NULL result */
-    cbm_layout_result_t *r = cbm_layout_compute(NULL, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(NULL, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NULL(r);
 
     /* NULL project → NULL result */
-    cbm_store_t *store = cbm_store_open_memory();
-    r = cbm_layout_compute(store, NULL, CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_store_t *store = lsm_store_open_memory();
+    r = lsm_layout_compute(store, NULL, LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NULL(r);
 
-    /* cbm_layout_free(NULL) should not crash */
-    cbm_layout_free(NULL);
+    /* lsm_layout_free(NULL) should not crash */
+    lsm_layout_free(NULL);
 
-    /* cbm_layout_to_json(NULL) should return NULL */
-    char *json = cbm_layout_to_json(NULL);
+    /* lsm_layout_to_json(NULL) should return NULL */
+    char *json = lsm_layout_to_json(NULL);
     ASSERT_NULL(json);
 
-    cbm_store_close(store);
+    lsm_store_close(store);
     PASS();
 }
 
 /* ── Dead-code classification (distilled from PR #789) ────────── */
 
-static const cbm_layout_node_t *find_layout_node(const cbm_layout_result_t *r, const char *name) {
+static const lsm_layout_node_t *find_layout_node(const lsm_layout_result_t *r, const char *name) {
     for (int i = 0; i < r->node_count; i++) {
         if (r->nodes[i].name && strcmp(r->nodes[i].name, name) == 0) {
             return &r->nodes[i];
@@ -591,93 +591,93 @@ static const cbm_layout_node_t *find_layout_node(const cbm_layout_result_t *r, c
  * callers; a called function reports its true full-graph incoming CALLS degree
  * ("single" at 1, "normal" at >=2). Non-Function labels are "structural". */
 TEST(layout_dead_code_classification) {
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     ASSERT_NOT_NULL(store);
-    ASSERT_EQ(cbm_store_upsert_project(store, "dc", "/tmp/dc"), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(store, "dc", "/tmp/dc"), LSM_STORE_OK);
 
     /* Candidates (Function, non-test path unless noted). */
-    cbm_node_t dead = {.project = "dc",
+    lsm_node_t dead = {.project = "dc",
                        .label = "Function",
                        .name = "deadfn",
                        .qualified_name = "dc::deadfn",
                        .file_path = "src/a.c",
                        .properties_json = "{\"is_entry_point\":false,\"is_test\":false,"
                                           "\"is_exported\":false}"};
-    cbm_node_t entry = {.project = "dc",
+    lsm_node_t entry = {.project = "dc",
                         .label = "Function",
                         .name = "entryfn",
                         .qualified_name = "dc::entryfn",
                         .file_path = "src/b.c",
                         .properties_json = "{\"is_entry_point\":true}"};
-    cbm_node_t tst = {.project = "dc",
+    lsm_node_t tst = {.project = "dc",
                       .label = "Function",
                       .name = "testfn",
                       .qualified_name = "dc::testfn",
                       .file_path = "src/c.c",
                       .properties_json = "{\"is_test\":true}"};
-    cbm_node_t tstpath = {.project = "dc",
+    lsm_node_t tstpath = {.project = "dc",
                           .label = "Function",
                           .name = "bypathfn",
                           .qualified_name = "dc::bypathfn",
                           .file_path = "tests/mod_helpers.c",
                           .properties_json = "{}"};
-    cbm_node_t exp = {.project = "dc",
+    lsm_node_t exp = {.project = "dc",
                       .label = "Function",
                       .name = "exportedfn",
                       .qualified_name = "dc::exportedfn",
                       .file_path = "src/d.c",
                       .properties_json = "{\"is_exported\":true}"};
-    cbm_node_t single = {.project = "dc",
+    lsm_node_t single = {.project = "dc",
                          .label = "Function",
                          .name = "calledonce",
                          .qualified_name = "dc::calledonce",
                          .file_path = "src/e.c",
                          .properties_json = "{}"};
-    cbm_node_t norm = {.project = "dc",
+    lsm_node_t norm = {.project = "dc",
                        .label = "Function",
                        .name = "callednormal",
                        .qualified_name = "dc::callednormal",
                        .file_path = "src/f.c",
                        .properties_json = "{}"};
-    cbm_node_t caller = {.project = "dc",
+    lsm_node_t caller = {.project = "dc",
                          .label = "Function",
                          .name = "caller",
                          .qualified_name = "dc::caller",
                          .file_path = "src/g.c",
                          .properties_json = "{}"};
     /* A structural (non-Function) node is never a dead-code candidate. */
-    cbm_node_t cls = {.project = "dc",
+    lsm_node_t cls = {.project = "dc",
                       .label = "Class",
                       .name = "SomeClass",
                       .qualified_name = "dc::SomeClass",
                       .file_path = "src/h.c",
                       .properties_json = "{}"};
 
-    int64_t id_dead = cbm_store_upsert_node(store, &dead);
-    cbm_store_upsert_node(store, &entry);
-    cbm_store_upsert_node(store, &tst);
-    cbm_store_upsert_node(store, &tstpath);
-    cbm_store_upsert_node(store, &exp);
-    int64_t id_single = cbm_store_upsert_node(store, &single);
-    int64_t id_norm = cbm_store_upsert_node(store, &norm);
-    int64_t id_caller = cbm_store_upsert_node(store, &caller);
-    cbm_store_upsert_node(store, &cls);
+    int64_t id_dead = lsm_store_upsert_node(store, &dead);
+    lsm_store_upsert_node(store, &entry);
+    lsm_store_upsert_node(store, &tst);
+    lsm_store_upsert_node(store, &tstpath);
+    lsm_store_upsert_node(store, &exp);
+    int64_t id_single = lsm_store_upsert_node(store, &single);
+    int64_t id_norm = lsm_store_upsert_node(store, &norm);
+    int64_t id_caller = lsm_store_upsert_node(store, &caller);
+    lsm_store_upsert_node(store, &cls);
     ASSERT_GT(id_dead, 0);
 
     /* calledonce ← 1 CALLS; callednormal ← 2 CALLS (full-graph inbound). */
-    cbm_edge_t e1 = {
+    lsm_edge_t e1 = {
         .project = "dc", .source_id = id_caller, .target_id = id_single, .type = "CALLS"};
-    cbm_edge_t e2 = {
+    lsm_edge_t e2 = {
         .project = "dc", .source_id = id_caller, .target_id = id_norm, .type = "CALLS"};
-    cbm_edge_t e3 = {.project = "dc", .source_id = id_dead, .target_id = id_norm, .type = "CALLS"};
-    cbm_store_insert_edge(store, &e1);
-    cbm_store_insert_edge(store, &e2);
-    cbm_store_insert_edge(store, &e3);
+    lsm_edge_t e3 = {.project = "dc", .source_id = id_dead, .target_id = id_norm, .type = "CALLS"};
+    lsm_store_insert_edge(store, &e1);
+    lsm_store_insert_edge(store, &e2);
+    lsm_store_insert_edge(store, &e3);
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "dc", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "dc", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     ASSERT_NOT_NULL(r);
 
-    const cbm_layout_node_t *ln;
+    const lsm_layout_node_t *ln;
 
     ln = find_layout_node(r, "deadfn");
     ASSERT_NOT_NULL(ln);
@@ -715,14 +715,14 @@ TEST(layout_dead_code_classification) {
     ASSERT_STR_EQ(ln->status, "structural");
 
     /* The classification must survive JSON serialization. */
-    char *json = cbm_layout_to_json(r);
+    char *json = lsm_layout_to_json(r);
     ASSERT_NOT_NULL(json);
     ASSERT(strstr(json, "\"status\":\"dead\"") != NULL);
     ASSERT(strstr(json, "\"in_calls\":2") != NULL);
     free(json);
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     PASS();
 }
 
@@ -760,10 +760,10 @@ TEST(layout_dead_code_classification) {
  * 5 fixture no longer coincident, 6 non-finite coordinate. Never returns. */
 static void layout_octree_guard_child(void) {
     alarm(5); /* post-fix the whole child runs in milliseconds */
-    cbm_store_t *store = cbm_store_open_memory();
+    lsm_store_t *store = lsm_store_open_memory();
     if (!store)
         _exit(2);
-    if (cbm_store_upsert_project(store, "test", "/tmp/test") != CBM_STORE_OK)
+    if (lsm_store_upsert_project(store, "test", "/tmp/test") != LSM_STORE_OK)
         _exit(2);
 
     /* Distinct QNs, one fnv1a hash — coincident after anchor + jitter. */
@@ -772,14 +772,14 @@ static void layout_octree_guard_child(void) {
     for (int i = 0; i < 3; i++) {
         char name[32];
         snprintf(name, sizeof(name), "co%d", i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = cqn[i],
                         .file_path = "pkg/sub/mod/a.c",
                         .start_line = i + 1,
                         .end_line = i + 2};
-        if (cbm_store_upsert_node(store, &n) <= 0)
+        if (lsm_store_upsert_node(store, &n) <= 0)
             _exit(2);
     }
     /* A few normally-spread nodes so the octree root box has realistic
@@ -789,18 +789,18 @@ static void layout_octree_guard_child(void) {
         snprintf(name, sizeof(name), "fn%d", i);
         snprintf(qn, sizeof(qn), "test::spread_fn%d", i);
         snprintf(fp, sizeof(fp), "dir%d/f%d.c", i, i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = fp,
                         .start_line = 1,
                         .end_line = 2};
-        if (cbm_store_upsert_node(store, &n) <= 0)
+        if (lsm_store_upsert_node(store, &n) <= 0)
             _exit(2);
     }
 
-    cbm_layout_result_t *r = cbm_layout_compute(store, "test", CBM_LAYOUT_OVERVIEW, NULL, 0, 100);
+    lsm_layout_result_t *r = lsm_layout_compute(store, "test", LSM_LAYOUT_OVERVIEW, NULL, 0, 100);
     if (!r)
         _exit(3);
     if (r->node_count != 6)
@@ -829,8 +829,8 @@ static void layout_octree_guard_child(void) {
             _exit(6);
     }
 
-    cbm_layout_free(r);
-    cbm_store_close(store);
+    lsm_layout_free(r);
+    lsm_store_close(store);
     _exit(0);
 }
 #endif

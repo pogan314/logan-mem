@@ -11,15 +11,15 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BINARY="$PROJECT_ROOT/build/c/codebase-memory-mcp"
+BINARY="$PROJECT_ROOT/build/c/logan-spine-mcp"
 FAKE_PROJECT="nonexistent_smoke_test_xyz"
-CACHE_DIR="${HOME}/.cache/codebase-memory-mcp"
+CACHE_DIR="${HOME}/.cache/logan-spine-mcp"
 GHOST_FILE="$CACHE_DIR/${FAKE_PROJECT}.db"
 FAILURES=0
 
 # ── Step 1: Build ─────────────────────────────────────────────────
 echo "[smoke_guard] Building project..."
-make -f "$PROJECT_ROOT/Makefile.cbm" cbm -C "$PROJECT_ROOT" --quiet 2>&1
+make -f "$PROJECT_ROOT/Makefile.lsm" lsm -C "$PROJECT_ROOT" --quiet 2>&1
 if [ ! -x "$BINARY" ]; then
     echo "[smoke_guard] FAIL: binary not found at $BINARY after build" >&2
     exit 1
@@ -45,7 +45,7 @@ check_handler() {
     fi
     echo "[smoke_guard] Response: $response"
 
-    # For a missing .db file, cbm_store_open_path_query returns NULL so
+    # For a missing .db file, lsm_store_open_path_query returns NULL so
     # REQUIRE_STORE fires ("no project loaded"). For an empty .db,
     # verify_project_indexed fires ("project not indexed"). Both are valid.
     if ! echo "$response" | grep -qE "no project loaded|not indexed"; then

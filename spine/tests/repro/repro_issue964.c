@@ -6,7 +6,7 @@
  * zero-inbound query returns 194 of 214 files on a PlatformIO project).
  *
  * Root cause (deeper than the report guesses):
- *   cbm_pipeline_fqn_compute (src/pipeline/fqn.c) strips the file extension,
+ *   lsm_pipeline_fqn_compute (src/pipeline/fqn.c) strips the file extension,
  *   so a header and its same-stem source collide on BOTH derived QNs:
  *     NodeController.h   -> module "proj.NodeController",
  *                           file   "proj.NodeController.__file__"
@@ -46,17 +46,17 @@
 #include <stdio.h>
 
 /* True if a File-labelled node with exactly `name` exists. */
-static int r964_file_node_exists(cbm_store_t *store, const char *project, const char *name) {
-    cbm_node_t *nodes = NULL;
+static int r964_file_node_exists(lsm_store_t *store, const char *project, const char *name) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, "File", &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, "File", &nodes, &count) != LSM_STORE_OK)
         return 0;
     int found = 0;
     for (int i = 0; i < count; i++) {
         if (nodes[i].name && strcmp(nodes[i].name, name) == 0)
             found = 1;
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return found;
 }
 
@@ -67,24 +67,24 @@ static int r964_file_node_exists(cbm_store_t *store, const char *project, const 
  * now has its own File node AND is connected (CONTAINS_FILE from its folder,
  * plus DEFINES of the class it declares); `#include` itself resolves to the
  * declared Class node via #983, not to the header File. */
-static int r964_file_inbound(cbm_store_t *store, const char *project, const char *name) {
+static int r964_file_inbound(lsm_store_t *store, const char *project, const char *name) {
     static const char *const types[] = {"IMPORTS", "CALLS", "CONTAINS_FILE",
                                          "DEFINES", "USAGE",  NULL};
     int total = 0;
     for (int t = 0; types[t]; t++) {
-        cbm_edge_t *edges = NULL;
+        lsm_edge_t *edges = NULL;
         int n = 0;
-        if (cbm_store_find_edges_by_type(store, project, types[t], &edges, &n) != CBM_STORE_OK)
+        if (lsm_store_find_edges_by_type(store, project, types[t], &edges, &n) != LSM_STORE_OK)
             continue;
         for (int i = 0; i < n; i++) {
-            cbm_node_t tgt;
-            if (cbm_store_find_node_by_id(store, edges[i].target_id, &tgt) != CBM_STORE_OK)
+            lsm_node_t tgt;
+            if (lsm_store_find_node_by_id(store, edges[i].target_id, &tgt) != LSM_STORE_OK)
                 continue;
             if (tgt.name && strcmp(tgt.name, name) == 0)
                 total++;
-            cbm_node_free_fields(&tgt);
+            lsm_node_free_fields(&tgt);
         }
-        cbm_store_free_edges(edges, n);
+        lsm_store_free_edges(edges, n);
     }
     return total;
 }
@@ -108,7 +108,7 @@ TEST(repro_issue964_header_has_node_and_is_connected) {
                      "}\n"}};
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 3);
+    lsm_store_t *store = rh_index_files(&lp, files, 3);
     ASSERT_NOT_NULL(store);
 
     int header_node = r964_file_node_exists(store, lp.project, "NodeController.h");

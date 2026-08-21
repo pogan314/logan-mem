@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/cbm-vendored-integrity.XXXXXX")"
+FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/lsm-vendored-integrity.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 fail() {
@@ -32,9 +32,9 @@ fi
 
 grammar="$FIXTURE/grammar"
 make_fixture "$grammar"
-mkdir -p "$grammar/internal/cbm/vendored/grammars/example"
+mkdir -p "$grammar/internal/lsm/vendored/grammars/example"
 printf '%s\n' 'int tree_sitter_example(void) { return 1; }' \
-  > "$grammar/internal/cbm/vendored/grammars/example/parser.c"
+  > "$grammar/internal/lsm/vendored/grammars/example/parser.c"
 if (cd "$grammar" && bash scripts/security-vendored.sh >/dev/null 2>&1); then
   fail "vendored integrity gate accepted an unmanifested generated grammar source"
 fi

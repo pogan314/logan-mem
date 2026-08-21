@@ -15,8 +15,8 @@
  * Source: https://huggingface.co/nomic-ai/nomic-embed-code
  * License: Apache 2.0
  */
-#ifndef CBM_NOMIC_VECTORS_H
-#define CBM_NOMIC_VECTORS_H
+#ifndef LSM_NOMIC_VECTORS_H
+#define LSM_NOMIC_VECTORS_H
 
 #include <stdint.h>
 
@@ -36,4 +36,4 @@ static inline const int8_t *pretrained_vec_at(int i) {
 /* Token strings (separate header to keep this file clean). */
 #include "code_tokens.h"
 
-#endif /* CBM_NOMIC_VECTORS_H */
+#endif /* LSM_NOMIC_VECTORS_H */

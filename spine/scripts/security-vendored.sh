@@ -5,7 +5,7 @@ set -euo pipefail
 # checked-in checksums. Detects supply-chain tampering of source, generated
 # parsers, assembly loaders, opaque data blobs, notices, and licenses.
 #
-# Scope: every regular file under vendored/ and internal/cbm/vendored/.
+# Scope: every regular file under vendored/ and internal/lsm/vendored/.
 #
 # Usage: scripts/security-vendored.sh [--update]
 
@@ -18,7 +18,7 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 CHECKSUMS="$ROOT/scripts/vendored-checksums.txt"
 VENDORED_ROOT="$ROOT/vendored"
-INTERNAL_VENDORED_ROOT="$ROOT/internal/cbm/vendored"
+INTERNAL_VENDORED_ROOT="$ROOT/internal/lsm/vendored"
 VENDORED_ROOTS=("$VENDORED_ROOT")
 
 if [[ ! -f "$CHECKSUMS" || -L "$CHECKSUMS" ]]; then
@@ -51,16 +51,16 @@ else
     exit 1
 fi
 
-MANIFEST_PATHS="$(mktemp "${TMPDIR:-/tmp}/cbm-vendored-paths.XXXXXX")" || {
+MANIFEST_PATHS="$(mktemp "${TMPDIR:-/tmp}/lsm-vendored-paths.XXXXXX")" || {
     echo "BLOCKED: cannot create checksum verification workspace"
     exit 1
 }
-VENDORED_FILES="$(mktemp "${TMPDIR:-/tmp}/cbm-vendored-files.XXXXXX")" || {
+VENDORED_FILES="$(mktemp "${TMPDIR:-/tmp}/lsm-vendored-files.XXXXXX")" || {
     rm -f "$MANIFEST_PATHS"
     echo "BLOCKED: cannot create vendored inventory workspace"
     exit 1
 }
-VENDORED_SYMLINKS="$(mktemp "${TMPDIR:-/tmp}/cbm-vendored-links.XXXXXX")" || {
+VENDORED_SYMLINKS="$(mktemp "${TMPDIR:-/tmp}/lsm-vendored-links.XXXXXX")" || {
     rm -f "$MANIFEST_PATHS" "$VENDORED_FILES"
     echo "BLOCKED: cannot create vendored link workspace"
     exit 1
@@ -83,7 +83,7 @@ DISCOVERED=0
 
 valid_vendored_path() {
     local path="$1"
-    [[ "$path" == vendored/* || "$path" == internal/cbm/vendored/* ]] || return 1
+    [[ "$path" == vendored/* || "$path" == internal/lsm/vendored/* ]] || return 1
     [[ "$path" != *'\\'* ]] || return 1
     [[ "$path" != *'//'* ]] || return 1
     [[ "$path" != *'/./'* && "$path" != */. ]] || return 1
@@ -286,12 +286,12 @@ while IFS= read -r -d '' libdir; do
     fi
 done < <(find "$VENDORED_ROOT" -mindepth 1 -maxdepth 1 -type d -print0)
 
-# Also scan tree-sitter grammars (internal/cbm/vendored/) — 650MB, 20M lines.
+# Also scan tree-sitter grammars (internal/lsm/vendored/) — 650MB, 20M lines.
 # Use fixed-string grep for each pattern to avoid slow regex on the large tree.
-if [[ -d "$ROOT/internal/cbm/vendored" ]]; then
+if [[ -d "$ROOT/internal/lsm/vendored" ]]; then
     GRAMMAR_FAIL=false
     for pattern in 'system(' 'popen(' 'execl(' 'execv(' 'fork(' 'connect(' 'socket(' 'sendto(' 'dlopen(' 'LoadLibrary('; do
-        HITS="$(grep -rl -F "$pattern" "$ROOT/internal/cbm/vendored/" --include='*.c' --include='*.h' 2>/dev/null | head -3 || true)"
+        HITS="$(grep -rl -F "$pattern" "$ROOT/internal/lsm/vendored/" --include='*.c' --include='*.h' 2>/dev/null | head -3 || true)"
         if [[ -n "$HITS" ]]; then
             echo "BLOCKED: '$pattern' found in vendored grammars:"
             echo "$HITS" | sed 's|.*/vendored/|  vendored/|'

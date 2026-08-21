@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # smoke-invariants.sh — "the shipped PROD binary does not fail" invariant battery.
 #
-# A comprehensive, fast, portable smoke battery for the codebase-memory-mcp
+# A comprehensive, fast, portable smoke battery for the logan-spine-mcp
 # binary. Every invariant prints `PASS: <name>` or `FAIL: <name>: <reason>` and
 # accumulates failures. Exit 0 iff ALL invariants pass, 1 if ANY fails.
 #
@@ -13,7 +13,7 @@
 # Designed to run IDENTICALLY on Linux / macOS / Windows(msys2 CLANG64).
 #
 # Usage:
-#   scripts/smoke-invariants.sh <binary>        # e.g. build/c/codebase-memory-mcp(.exe)
+#   scripts/smoke-invariants.sh <binary>        # e.g. build/c/logan-spine-mcp(.exe)
 #
 # Portability notes:
 #   * set -u (NOT -e): we want every invariant to run even if one fails.
@@ -85,7 +85,7 @@ native_path() {
 }
 
 # Per-run scratch root; everything created lives under here for clean teardown.
-SCRATCH="$(mktemp -d 2>/dev/null || mktemp -d -t cbmsmoke)"
+SCRATCH="$(mktemp -d 2>/dev/null || mktemp -d -t lsmsmoke)"
 cleanup() {
     # Best-effort: kill any lingering server, close fds, remove scratch.
     if [ -n "${SERVER_PID:-}" ]; then
@@ -219,7 +219,7 @@ inv_help() {
         fail "help" "--help exited $RB_RC (want 0)"
         return
     fi
-    if printf '%s' "$RB_OUT" | grep -qiE 'usage|codebase-memory-mcp'; then
+    if printf '%s' "$RB_OUT" | grep -qiE 'usage|logan-spine-mcp'; then
         pass "help"
     else
         fail "help" "no usage text in --help output"
@@ -306,7 +306,7 @@ GOEOF
     git -C "$TEST_REPO" -c user.email=smoke@test -c user.name=smoke commit -q -m init 2>/dev/null || true
 
     TEST_REPO_NATIVE="$(native_path "$TEST_REPO")"
-    # Project name derivation mirrors cbm_project_name_from_path: every char not
+    # Project name derivation mirrors lsm_project_name_from_path: every char not
     # in [A-Za-z0-9._-] → '-', collapse repeats, trim leading/trailing '-'/'.'.
     PROJ_NAME="$("$PY" - "$TEST_REPO_NATIVE" <<'PYEOF'
 import sys, re
@@ -374,7 +374,7 @@ inv_index_status_cli() {
 # the REAL binary.
 inv_second_index_inprocess() {
     local base
-    base=$(mktemp -d "${TMPDIR:-/tmp}/cbm_inv773.XXXXXX")
+    base=$(mktemp -d "${TMPDIR:-/tmp}/lsm_inv773.XXXXXX")
     mkdir -p "$base/dirA" "$base/dirB"
     local i
     for i in 1 2 3 4 5; do
@@ -393,7 +393,7 @@ inv_second_index_inprocess() {
     # Re-open stdin from the file INSIDE the child: run_bounded's no-timeout
     # fallback backgrounds the command, and background jobs get /dev/null
     # stdin (POSIX), which would EOF the server before it answers.
-    run_bounded 120 env CBM_INDEX_SUPERVISOR=0 sh -c 'exec "$1" < "$2"' _ "$BINARY" "$infile"
+    run_bounded 120 env LSM_INDEX_SUPERVISOR=0 sh -c 'exec "$1" < "$2"' _ "$BINARY" "$infile"
     local rc="$RB_RC"
     local out="$RB_OUT"
     rm -rf "$base"
@@ -711,7 +711,7 @@ inv_malformed_input() {
         'not json at all'
         '{ "jsonrpc": "2.0", broken'
         '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_graph"}}'   # missing required args
-        '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"index_repository","arguments":{"repo_path":"/cbm/does/not/exist/xyz"}}}'
+        '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"index_repository","arguments":{"repo_path":"/lsm/does/not/exist/xyz"}}}'
         '{"jsonrpc":"2.0","id":1,"method":"no_such_method","params":{}}'
         "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"query_graph\",\"arguments\":{\"project\":\"$PROJ_NAME\",\"query\":\"$long_line\"}}}"
     )
@@ -751,7 +751,7 @@ inv_malformed_input() {
 
 # Index a non-existent repo via CLI → graceful (no crash), as a standalone check.
 inv_nonexistent_repo_cli() {
-    cli_call 30 --json index_repository '{"repo_path":"/cbm/definitely/not/here/zzz"}'
+    cli_call 30 --json index_repository '{"repo_path":"/lsm/definitely/not/here/zzz"}'
     if [ "$CLI_RC" -eq 124 ]; then
         fail "nonexistent-repo-cli" "hung on non-existent repo path"
     elif [ "$CLI_RC" -gt 128 ]; then
@@ -808,7 +808,7 @@ inv_garbage_files_cli() {
 # worker single-threaded, pins the exact crasher via a per-file marker, adds it to
 # a quarantine list, and re-spawns until a clean run indexes the GOOD files while
 # reporting the crasher as a phase="crash" skip. Uses the test-only fault injector
-# (CBM_TEST_CRASH_ON) so the guard is honest: with the supervisor OFF the crash
+# (LSM_TEST_CRASH_ON) so the guard is honest: with the supervisor OFF the crash
 # must genuinely escape as a signal (rc>=128, vacuity guard); with it ON (default)
 # the run must be contained (rc<128), report status="indexed" + the crasher as
 # phase="crash", index the good file (nodes>0), and NOT skip the good file.
@@ -821,17 +821,17 @@ inv_crasher_skipped_cli() {
     local cn; cn="$(native_path "$crepo")"
 
     # Honesty baseline: supervisor OFF → the injected fault must escape as a signal.
-    export CBM_TEST_CRASH_ON=crash_me
-    export CBM_INDEX_SUPERVISOR=0
+    export LSM_TEST_CRASH_ON=crash_me
+    export LSM_INDEX_SUPERVISOR=0
     cli_call 60 index_repository "{\"repo_path\":\"$cn\"}"
     local base_rc="$CLI_RC"
-    unset CBM_INDEX_SUPERVISOR
+    unset LSM_INDEX_SUPERVISOR
 
     # Supervisor ON (default) → the crash must be contained AND skipped-and-continued.
     cli_call 90 index_repository "{\"repo_path\":\"$cn\"}"
     local sup_rc="$CLI_RC"
     local sup_out="$CLI_OUT"
-    unset CBM_TEST_CRASH_ON
+    unset LSM_TEST_CRASH_ON
 
     # Strip JSON escaping so the assertions are robust to the text-result wrapping.
     local flat
@@ -866,14 +866,14 @@ print(max((int(x) for x in m), default=0))' 2>/dev/null)"
 
 # ── Invariant: a HANG on one file is SKIPPED and the rest is indexed ─────────
 # The hang twin of inv_crasher_skipped_cli. A file that makes the indexer make NO
-# progress (external-scanner infinite loop, modelled by CBM_TEST_HANG_ON's busy-
+# progress (external-scanner infinite loop, modelled by LSM_TEST_HANG_ON's busy-
 # spin) must be QUARANTINED: the supervisor's quiet-timeout kills the worker,
 # classifies it as a HANG, pins the exact file via the marker, quarantines it as
 # phase="hang", and re-spawns until a clean run indexes the GOOD files while
 # reporting the hanger as a phase="hang" skip. Honest guard: with the supervisor
 # OFF the injected hang must genuinely NOT complete within a bound (rc=124, the
 # vacuity guard — proving the injector really hangs); with it ON + a SHORT
-# CBM_INDEX_WORKER_TIMEOUT_S the run must COMPLETE (rc<128, not 124), report
+# LSM_INDEX_WORKER_TIMEOUT_S the run must COMPLETE (rc<128, not 124), report
 # status="indexed" + the hanger as phase="hang", index the good file (nodes>0),
 # and NOT skip the good file.
 inv_hanger_skipped_cli() {
@@ -886,22 +886,22 @@ inv_hanger_skipped_cli() {
 
     # Honesty baseline: supervisor OFF → the injected hang must NOT complete within
     # the bound. The bounded runner fires (rc=124), proving the injector hangs.
-    export CBM_TEST_HANG_ON=hang_me
-    export CBM_INDEX_SUPERVISOR=0
+    export LSM_TEST_HANG_ON=hang_me
+    export LSM_INDEX_SUPERVISOR=0
     cli_call 12 index_repository "{\"repo_path\":\"$hn\"}"
     local base_rc="$CLI_RC"
-    unset CBM_INDEX_SUPERVISOR
+    unset LSM_INDEX_SUPERVISOR
 
     # Supervisor ON (default) + a SHORT no-progress timeout → the hang must be
     # detected fast, contained, and skipped-and-continued. Recovery spends two
     # ~5s timeouts (first parallel run, then the single-threaded recovery run) so
     # this invariant legitimately takes ~10-15s; it MUST still complete.
-    export CBM_INDEX_WORKER_TIMEOUT_S=5
+    export LSM_INDEX_WORKER_TIMEOUT_S=5
     cli_call 90 index_repository "{\"repo_path\":\"$hn\"}"
     local sup_rc="$CLI_RC"
     local sup_out="$CLI_OUT"
-    unset CBM_INDEX_WORKER_TIMEOUT_S
-    unset CBM_TEST_HANG_ON
+    unset LSM_INDEX_WORKER_TIMEOUT_S
+    unset LSM_TEST_HANG_ON
 
     # Strip JSON escaping so the assertions are robust to the text-result wrapping.
     local flat

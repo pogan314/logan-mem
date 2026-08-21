@@ -55,10 +55,10 @@ static inline int th_write_file(const char *path, const char *content) {
 #endif
     if (last_slash) {
         *last_slash = '\0';
-        cbm_mkdir_p(dir, 0755);
+        lsm_mkdir_p(dir, 0755);
     }
 
-    FILE *f = cbm_fopen(path, "wb");
+    FILE *f = lsm_fopen(path, "wb");
     if (!f) {
         return -1;
     }
@@ -71,7 +71,7 @@ static inline int th_write_file(const char *path, const char *content) {
 
 /* Append content to a file. */
 static inline int th_append_file(const char *path, const char *content) {
-    FILE *f = cbm_fopen(path, "ab");
+    FILE *f = lsm_fopen(path, "ab");
     if (!f) {
         return -1;
     }
@@ -86,22 +86,22 @@ static inline int th_append_file(const char *path, const char *content) {
 
 /* Create a directory and all parents. Returns 0 on success. */
 static inline int th_mkdir_p(const char *path) {
-    return cbm_mkdir_p(path, 0755) ? 0 : -1;
+    return lsm_mkdir_p(path, 0755) ? 0 : -1;
 }
 
 /* ── Recursive directory removal ──────────────────────────────── */
 
 /* Git for Windows marks loose objects read-only. Match rm -rf semantics in
- * test cleanup without broadening production cbm_unlink behavior. */
+ * test cleanup without broadening production lsm_unlink behavior. */
 static inline int th_unlink_force(const char *path) {
-    int result = cbm_unlink(path);
+    int result = lsm_unlink(path);
 #ifdef _WIN32
     if (result != 0) {
-        wchar_t *wide = cbm_path_to_wide(path);
+        wchar_t *wide = lsm_path_to_wide(path);
         DWORD attributes = wide ? GetFileAttributesW(wide) : INVALID_FILE_ATTRIBUTES;
         if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_READONLY) != 0U &&
             SetFileAttributesW(wide, attributes & ~((DWORD)FILE_ATTRIBUTE_READONLY))) {
-            result = cbm_unlink(path);
+            result = lsm_unlink(path);
         }
         free(wide);
     }
@@ -114,23 +114,23 @@ static inline int th_rmtree(const char *path) {
     /* The platform wrappers preserve UTF-8 and add the extended-length prefix
      * on Windows; narrow CRT stat() silently treats paths beyond MAX_PATH as
      * absent and leaves their parents nonempty. */
-    if (!cbm_file_exists(path)) {
+    if (!lsm_file_exists(path)) {
         return 0; /* doesn't exist — success */
     }
 
-    if (!cbm_is_dir(path)) {
+    if (!lsm_is_dir(path)) {
         return th_unlink_force(path);
     }
 
     /* Directory — recurse into children */
-    cbm_dir_t *d = cbm_opendir(path);
+    lsm_dir_t *d = lsm_opendir(path);
     if (!d) {
         return -1;
     }
 
-    cbm_dirent_t *entry;
+    lsm_dirent_t *entry;
     int rc = 0;
-    while ((entry = cbm_readdir(d)) != NULL) {
+    while ((entry = lsm_readdir(d)) != NULL) {
         if (strcmp(entry->name, ".") == 0 || strcmp(entry->name, "..") == 0) {
             continue;
         }
@@ -146,8 +146,8 @@ static inline int th_rmtree(const char *path) {
             }
         }
     }
-    cbm_closedir(d);
-    if (cbm_rmdir(path) != 0) {
+    lsm_closedir(d);
+    if (lsm_rmdir(path) != 0) {
         rc = -1;
     }
     return rc;
@@ -169,7 +169,7 @@ static inline char *th_mktempdir(const char *prefix) {
 #else
     snprintf(buf, sizeof(buf), "/tmp/%s_XXXXXX", prefix);
 #endif
-    if (!cbm_mkdtemp(buf)) {
+    if (!lsm_mkdtemp(buf)) {
         return NULL;
     }
     return buf;
@@ -177,7 +177,7 @@ static inline char *th_mktempdir(const char *prefix) {
 
 /* Runtime IPC validates the complete Windows directory ancestry, so an MSYS2
  * TEMP rooted under C:/msys64/tmp is intentionally unsuitable even when the
- * leaf made by cbm_mkdtemp() has a private DACL. Keep these security-sensitive
+ * leaf made by lsm_mkdtemp() has a private DACL. Keep these security-sensitive
  * fixtures under LocalAppData on Windows; preserve the ordinary temporary-root
  * behavior on POSIX. */
 static inline bool th_secure_runtime_parent_new(char *out, size_t out_cap, const char *tag) {
@@ -185,20 +185,20 @@ static inline bool th_secure_runtime_parent_new(char *out, size_t out_cap, const
         return false;
     }
 #ifdef _WIN32
-    const char *base = cbm_app_local_dir();
+    const char *base = lsm_app_local_dir();
 #else
-    const char *base = cbm_tmpdir();
+    const char *base = lsm_tmpdir();
 #endif
     if (!base || !base[0]) {
         out[0] = '\0';
         return false;
     }
-    int written = snprintf(out, out_cap, "%s/cbm-runtime-%s-XXXXXX", base, tag);
+    int written = snprintf(out, out_cap, "%s/lsm-runtime-%s-XXXXXX", base, tag);
     if (written <= 0 || (size_t)written >= out_cap) {
         out[0] = '\0';
         return false;
     }
-    return cbm_mkdtemp(out) != NULL;
+    return lsm_mkdtemp(out) != NULL;
 }
 
 /* ── File permissions (no-op on Windows) ──────────────────────── */

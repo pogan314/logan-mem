@@ -1,17 +1,17 @@
-# codebase-memory-mcp
+# logan-spine-mcp
 
-mcp-name: io.github.DeusData/codebase-memory-mcp
+mcp-name: io.github.DeusData/logan-spine-mcp
 
 **Fast code intelligence engine for AI coding agents.** Indexes an average repository in milliseconds, the Linux kernel (28M LOC) in 3 minutes. Answers structural queries in under 1ms.
 
-This Python wrapper downloads the selected `codebase-memory-mcp` runtime set from [GitHub Releases](https://github.com/DeusData/codebase-memory-mcp/releases) on first run and verifies it before publishing it in your OS cache directory. The set contains the native executable and authenticated integration asset, with the graph UI always embedded.
+This Python wrapper downloads the selected `logan-spine-mcp` runtime set from [GitHub Releases](https://github.com/DeusData/logan-spine-mcp/releases) on first run and verifies it before publishing it in your OS cache directory. The set contains the native executable and authenticated integration asset, with the graph UI always embedded.
 
 ## Installation
 
 ```bash
-pip install codebase-memory-mcp
+pip install logan-spine-mcp
 # or
-pipx install codebase-memory-mcp
+pipx install logan-spine-mcp
 ```
 
 There is one composition per platform: the graph UI ships in every build, so no variant selection is needed.
@@ -19,8 +19,8 @@ There is one composition per platform: the graph UI ships in every build, so no 
 ## Usage
 
 ```bash
-codebase-memory-mcp install   # configure your coding agents
-codebase-memory-mcp --help
+logan-spine-mcp install   # configure your coding agents
+logan-spine-mcp --help
 ```
 
 ## Supported platforms
@@ -33,4 +33,4 @@ codebase-memory-mcp --help
 
 ## Full documentation
 
-See [github.com/DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp)
+See [github.com/DeusData/logan-spine-mcp](https://github.com/DeusData/logan-spine-mcp)

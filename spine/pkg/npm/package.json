@@ -1,16 +1,16 @@
 {
-  "name": "codebase-memory-mcp",
+  "name": "logan-spine-mcp",
   "version": "0.8.1",
   "description": "Fast code intelligence for AI coding agents — installs a verified native runtime set",
-  "mcpName": "io.github.DeusData/codebase-memory-mcp",
+  "mcpName": "io.github.DeusData/logan-spine-mcp",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DeusData/codebase-memory-mcp.git"
+    "url": "git+https://github.com/DeusData/logan-spine-mcp.git"
   },
-  "homepage": "https://github.com/DeusData/codebase-memory-mcp",
+  "homepage": "https://github.com/DeusData/logan-spine-mcp",
   "bugs": {
-    "url": "https://github.com/DeusData/codebase-memory-mcp/issues"
+    "url": "https://github.com/DeusData/logan-spine-mcp/issues"
   },
   "keywords": [
     "mcp",
@@ -23,7 +23,7 @@
     "tree-sitter"
   ],
   "bin": {
-    "codebase-memory-mcp": "./bin.js"
+    "logan-spine-mcp": "./bin.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FIX="$(mktemp -d "${TMPDIR:-/tmp}/cbm-extract-contract.XXXXXX")"
+FIX="$(mktemp -d "${TMPDIR:-/tmp}/lsm-extract-contract.XXXXXX")"
 trap 'rm -rf "$FIX"' EXIT
 
 # "$BASH" by explicit argv: BASH is a shell variable, NOT exported, so reading
@@ -37,9 +37,9 @@ UNIX = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64",
 WINDOWS = ("windows-amd64", "windows-arm64")
 MCPB = ("darwin-amd64", "darwin-arm64", "linux-amd64-portable",
         "linux-arm64-portable", "windows-amd64", "windows-arm64")
-ARCHIVES = tuple(f"codebase-memory-mcp-{t}.tar.gz" for t in UNIX) + \
-           tuple(f"codebase-memory-mcp-{t}.zip" for t in WINDOWS) + \
-           tuple(f"codebase-memory-mcp-{t}.mcpb" for t in MCPB)
+ARCHIVES = tuple(f"logan-spine-mcp-{t}.tar.gz" for t in UNIX) + \
+           tuple(f"logan-spine-mcp-{t}.zip" for t in WINDOWS) + \
+           tuple(f"logan-spine-mcp-{t}.mcpb" for t in MCPB)
 
 # Deliberately byte-IDENTICAL across every archive: the extractor must collapse
 # them to one scan object each, or the gate pays to scan the same bytes 8 times
@@ -62,7 +62,7 @@ def target_of(archive):
 
 def make_manifest(entry_point):
     return (
-        '{"manifest_version": "0.3", "name": "codebase-memory-mcp",'
+        '{"manifest_version": "0.3", "name": "logan-spine-mcp",'
         ' "version": "0.0.0-test", "server": {"type": "binary",'
         f' "entry_point": "{entry_point}",'
         ' "mcp_config": {"command": "${__dirname}/' + entry_point + '", "args": []}}}'
@@ -76,14 +76,14 @@ def members(archive):
     # assertion below depends on that.
     binary_bytes = b"binary bytes of " + target_of(archive).encode()
     if archive.endswith(".mcpb"):
-        binary = "server/codebase-memory-mcp.exe" if windows else "server/codebase-memory-mcp"
+        binary = "server/logan-spine-mcp.exe" if windows else "server/logan-spine-mcp"
         return {
             "manifest.json": make_manifest(binary),
             binary: binary_bytes,
             "server/LICENSE": SHARED_LICENSE,
             "server/THIRD_PARTY_NOTICES.md": SHARED_NOTICES,
         }
-    binary = "codebase-memory-mcp.exe" if windows else "codebase-memory-mcp"
+    binary = "logan-spine-mcp.exe" if windows else "logan-spine-mcp"
     installer = "install.ps1" if windows else "install.sh"
     return {
         binary: binary_bytes,
@@ -157,8 +157,8 @@ else:
         fail(f"scan bundle must publish exactly objects/ plus its two manifests: {published}")
 
     assoc_meta, assoc = read_manifest(out / "associations.tsv",
-                                      "cbm-release-scan-associations-v3")
-    set_meta, scan_set = read_manifest(out / "scan-set.tsv", "cbm-release-scan-set-v2")
+                                      "lsm-release-scan-associations-v3")
+    set_meta, scan_set = read_manifest(out / "scan-set.tsv", "lsm-release-scan-set-v2")
 
     # Every member of every archive is covered — 14 containers x 4 members.
     if len(assoc) != 56:
@@ -222,7 +222,7 @@ if result.returncode == 0:
     fail("extractor accepted a 1-archive matrix under --expect-archives=14")
 
 # ── 3. MCPB manifest contract — a structurally broken bundle must not ship ──
-BROKEN_MCPB = "codebase-memory-mcp-darwin-arm64.mcpb"
+BROKEN_MCPB = "logan-spine-mcp-darwin-arm64.mcpb"
 
 
 def rewrite_mcpb(directory, manifest_bytes):
@@ -240,14 +240,14 @@ def rewrite_mcpb(directory, manifest_bytes):
 for label, slug, manifest_bytes, expect in (
     ("unparseable manifest.json", "m1", b"{not json", "not valid JSON"),
     ("manifest without a version", "m2",
-     make_manifest("server/codebase-memory-mcp").replace(b'"version": "0.0.0-test", ', b""),
+     make_manifest("server/logan-spine-mcp").replace(b'"version": "0.0.0-test", ', b""),
      "lacks a version"),
     ("manifest entry_point outside the bundle", "m3",
      make_manifest("server/other-binary"),
      "not a member"),
     ("manifest command not targeting the entry_point", "m4",
-     make_manifest("server/codebase-memory-mcp").replace(
-         b'${__dirname}/server/codebase-memory-mcp', b"/usr/bin/env"),
+     make_manifest("server/logan-spine-mcp").replace(
+         b'${__dirname}/server/logan-spine-mcp', b"/usr/bin/env"),
      "does not target the entry_point"),
 ):
     case = fixtures / slug

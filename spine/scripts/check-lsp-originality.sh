@@ -2,7 +2,7 @@
 # check-lsp-originality.sh — Provenance guard for the hybrid LSP implementations.
 #
 # WHY THIS EXISTS
-#   The LSP layer (internal/cbm/lsp/) is an original C implementation whose
+#   The LSP layer (internal/lsm/lsp/) is an original C implementation whose
 #   behavior is "structurally inspired by and compatible with" the reference
 #   language servers (pyright, gopls, tsserver, Roslyn, clangd, rust-analyzer,
 #   …). We claim it contains NO source copied from those projects. This script
@@ -39,7 +39,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="[lsp-orig]"
-LSP_DIR="$ROOT/internal/cbm/lsp"
+LSP_DIR="$ROOT/internal/lsm/lsp"
 REFS_DIR="${LSP_REFS_DIR:-$ROOT/.lsp-refs}"
 
 # Tunables (override via env).
@@ -210,7 +210,7 @@ echo ""
 if [ "$total_hits" -gt 0 ] || [ "$structural_hits" -gt 0 ]; then
   if [ "$total_hits" -gt 0 ]; then
     echo "$TAG REVIEW NEEDED: $total_hits reference file(s) share a verbatim string/comment"
-    echo "$TAG with internal/cbm/lsp/. A hit is NOT proof of copying (common phrases collide)"
+    echo "$TAG with internal/lsm/lsp/. A hit is NOT proof of copying (common phrases collide)"
     echo "$TAG — inspect each, confirm independent wording, reword genuinely-copied text."
   fi
   if [ "$structural_hits" -gt 0 ]; then

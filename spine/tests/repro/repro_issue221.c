@@ -7,7 +7,7 @@
  *   find_in_path (src/cli/cli.c) probed only the bare executable name
  *   "opencode" for each PATH entry.  On Windows, CLI tools installed via
  *   mise/npm/scoop ship as extension-bearing shims (.cmd, .ps1, .exe), so
- *   the bare-name probe never matched and cbm_find_cli("opencode", ...) always
+ *   the bare-name probe never matched and lsm_find_cli("opencode", ...) always
  *   returned an empty string.  The installer therefore concluded opencode was
  *   absent and skipped wiring it even when it was present on PATH.
  *
@@ -26,7 +26,7 @@
  * CROSS-PLATFORM STRATEGY:
  *   On POSIX: create a plain executable named "opencode" (no extension).
  *             Bare-name lookup has always worked here, so the test confirms
- *             cbm_find_cli("opencode", ...) resolves correctly -- the baseline.
+ *             lsm_find_cli("opencode", ...) resolves correctly -- the baseline.
  *   On Windows: create "opencode.cmd" (the most common shim format).
  *             Before the fix, find_in_path returned "" for this case; after
  *             the fix it returns the .cmd path -- the regression guard proper.
@@ -61,15 +61,15 @@ static int repro221_write_file(const char *path, const char *content) {
 /*
  * repro_issue221_opencode_pathext_lookup
  *
- * Verify that cbm_find_cli("opencode", ...) resolves the opencode executable
+ * Verify that lsm_find_cli("opencode", ...) resolves the opencode executable
  * (or its Windows .cmd shim) when the containing directory is on PATH.
  *
  * CORRECT BEHAVIOUR (post-fix):
- *   cbm_find_cli returns a non-empty string whose basename starts with
+ *   lsm_find_cli returns a non-empty string whose basename starts with
  *   "opencode" -- meaning find_in_path found the file.
  *
  * BUGGY BEHAVIOUR (pre-fix, Windows only):
- *   cbm_find_cli returns "" because find_in_path only probed the bare name
+ *   lsm_find_cli returns "" because find_in_path only probed the bare name
  *   "opencode" and never tried "opencode.cmd" / "opencode.exe" / etc.
  *
  * GREEN on current main (fix present): ASSERT fires with a non-empty result.
@@ -79,8 +79,8 @@ TEST(repro_issue221_opencode_pathext_lookup) {
     /* Create an isolated temp directory to act as a fake PATH entry. */
     char tmpdir[256];
     snprintf(tmpdir, sizeof(tmpdir), "/tmp/repro221-XXXXXX");
-    if (!cbm_mkdtemp(tmpdir))
-        FAIL("cbm_mkdtemp failed");
+    if (!lsm_mkdtemp(tmpdir))
+        FAIL("lsm_mkdtemp failed");
 
     /*
      * Choose the fixture filename to match the platform convention:
@@ -111,32 +111,32 @@ TEST(repro_issue221_opencode_pathext_lookup) {
     /* Swap PATH so only tmpdir is searched, isolating the lookup. */
     const char *raw_path = getenv("PATH");
     char *old_path = raw_path ? strdup(raw_path) : NULL;
-    cbm_setenv("PATH", tmpdir, 1);
+    lsm_setenv("PATH", tmpdir, 1);
 
     /*
-     * The function under test: cbm_find_cli is the public API that calls
+     * The function under test: lsm_find_cli is the public API that calls
      * find_in_path internally.  We pass a non-existent home_dir so fallback
      * paths (~/.local/bin etc.) are never tried -- the only possible match
      * is the fixture file created above.
      *
      * Pre-fix (Windows): find_in_path probed "<tmpdir>/opencode" (absent)
-     *   and returned false.  cbm_find_cli returned "".
+     *   and returned false.  lsm_find_cli returned "".
      * Post-fix (Windows): find_in_path also probes "<tmpdir>/opencode.cmd"
-     *   (present), finds it, and cbm_find_cli returns the full path.
+     *   (present), finds it, and lsm_find_cli returns the full path.
      * POSIX (before and after): bare-name probe succeeds immediately.
      */
-    const char *result = cbm_find_cli("opencode", "/nonexistent-home-dir");
+    const char *result = lsm_find_cli("opencode", "/nonexistent-home-dir");
 
     /* Restore PATH before any assertion so cleanup is always reached. */
     if (old_path) {
-        cbm_setenv("PATH", old_path, 1);
+        lsm_setenv("PATH", old_path, 1);
         free(old_path);
     }
 
     /*
      * PRIMARY ASSERTION -- regression guard for #221.
      *
-     * cbm_find_cli MUST return a non-empty path that contains "opencode".
+     * lsm_find_cli MUST return a non-empty path that contains "opencode".
      *
      * GREEN (current main, fix present): result points to the fixture file.
      * RED (if regressed to bare-name-only on Windows): result is "".

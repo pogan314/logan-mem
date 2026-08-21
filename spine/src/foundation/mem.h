@@ -5,78 +5,78 @@
  * Uses mi_process_info() as the single source of truth for memory pressure.
  * Replaces the old vmem.h budget-tracked virtual memory allocator.
  */
-#ifndef CBM_MEM_H
-#define CBM_MEM_H
+#ifndef LSM_MEM_H
+#define LSM_MEM_H
 
 #include <stdbool.h>
 #include <stddef.h>
 
 /* Tiered default fraction for MCP startup: 25% on <=16GB, 35% on <=32GB, else 50%. */
-double cbm_mem_ram_fraction_for_total(size_t total_ram_bytes);
+double lsm_mem_ram_fraction_for_total(size_t total_ram_bytes);
 
 /* Initialize memory budget = ram_fraction * total_physical_ram.
- * The CBM_MEM_BUDGET_MB env var, when set to a positive integer, overrides
+ * The LSM_MEM_BUDGET_MB env var, when set to a positive integer, overrides
  * this with an explicit budget in MiB (clamped to physical/cgroup RAM).
  * Thread-safe: only the first call takes effect.
  * Configures mimalloc options for reduced upfront memory. */
-void cbm_mem_init(double ram_fraction);
+void lsm_mem_init(double ram_fraction);
 
 /* Worker-only initialization cap carried on the build-bound internal argv.
  * The existing user override is still resolved first; a lower explicit
- * CBM_MEM_BUDGET_MB wins, while a larger/default budget is capped. */
-void cbm_mem_init_with_cap(double ram_fraction, size_t hard_cap_bytes);
+ * LSM_MEM_BUDGET_MB wins, while a larger/default budget is capped. */
+void lsm_mem_init_with_cap(double ram_fraction, size_t hard_cap_bytes);
 
-/* Result of cbm_mem_resolve_budget: the resolved budget plus the metadata
- * cbm_mem_init logs — so the parse/clamp logic lives in exactly ONE place and
+/* Result of lsm_mem_resolve_budget: the resolved budget plus the metadata
+ * lsm_mem_init logs — so the parse/clamp logic lives in exactly ONE place and
  * the caller never re-parses the env string. */
 typedef struct {
     size_t budget;      /* resolved budget in bytes */
-    const char *source; /* log token: "ram_fraction" | "CBM_MEM_BUDGET_MB" */
+    const char *source; /* log token: "ram_fraction" | "LSM_MEM_BUDGET_MB" */
     bool clamped;       /* override was valid but exceeded total_ram → clamped down */
     bool invalid;       /* override was present but unparseable / out-of-range / ≤0 */
     bool hard_capped;   /* internal worker hard cap reduced the resolved budget */
-} cbm_mem_budget_t;
+} lsm_mem_budget_t;
 
-/* Pure budget resolver shared by cbm_mem_init (exposed for testing).
+/* Pure budget resolver shared by lsm_mem_init (exposed for testing).
  * Returns ram_fraction * total_ram, unless `budget_mb` is a STRICTLY valid
- * positive integer string (the CBM_MEM_BUDGET_MB override) — then it returns
+ * positive integer string (the LSM_MEM_BUDGET_MB override) — then it returns
  * that many MiB, clamped to total_ram when total_ram > 0. Trailing garbage,
  * overflow (ERANGE), and non-positive values are rejected (invalid=true) and
  * fall back to the fraction-derived value. Reads no globals/env. */
-cbm_mem_budget_t cbm_mem_resolve_budget(size_t total_ram, double ram_fraction,
+lsm_mem_budget_t lsm_mem_resolve_budget(size_t total_ram, double ram_fraction,
                                         const char *budget_mb);
 
 /* Pure capped variant used by supervised workers and deterministic tests. */
-cbm_mem_budget_t cbm_mem_resolve_budget_capped(size_t total_ram, double ram_fraction,
+lsm_mem_budget_t lsm_mem_resolve_budget_capped(size_t total_ram, double ram_fraction,
                                                const char *budget_mb, size_t hard_cap_bytes);
 
 /* Current RSS in bytes via mi_process_info().
  * Falls back to OS-specific queries when MI_OVERRIDE=0 (ASan builds). */
-size_t cbm_mem_rss(void);
+size_t lsm_mem_rss(void);
 
 /* Peak RSS in bytes. */
-size_t cbm_mem_peak_rss(void);
+size_t lsm_mem_peak_rss(void);
 
 /* Total budget in bytes. */
-size_t cbm_mem_budget(void);
+size_t lsm_mem_budget(void);
 
-/* TEST HOOK: overwrite the budget directly, bypassing cbm_mem_init's
+/* TEST HOOK: overwrite the budget directly, bypassing lsm_mem_init's
  * init-once guard (a setenv+re-init dance in tests is a silent no-op once
  * some earlier init won the guard — the poisoned budget then leaks into
  * every later budget consumer in the process). Does NOT flip the init
- * guard: a later cbm_mem_init still initializes normally. Callers must
- * save cbm_mem_budget() first and restore it before their assertions.
+ * guard: a later lsm_mem_init still initializes normally. Callers must
+ * save lsm_mem_budget() first and restore it before their assertions.
  * Never call from production code. */
-void cbm_mem_set_budget_for_tests(size_t bytes);
+void lsm_mem_set_budget_for_tests(size_t bytes);
 
 /* Returns true if current RSS exceeds the budget. */
-bool cbm_mem_over_budget(void);
+bool lsm_mem_over_budget(void);
 
 /* Per-worker budget hint: budget / num_workers. */
-size_t cbm_mem_worker_budget(int num_workers);
+size_t lsm_mem_worker_budget(int num_workers);
 
 /* Return unused pages to the OS. Call between files to bound per-file peak. */
-void cbm_mem_collect(void);
+void lsm_mem_collect(void);
 
 /* ── Memory map: where does the process's memory actually live? ──────
  *
@@ -101,11 +101,11 @@ void cbm_mem_collect(void);
  * ("thousands of 384-byte blocks appeared") identifies the allocation without
  * per-callsite instrumentation.
  */
-enum { CBM_MEM_MAP_BUCKETS = 8 };
+enum { LSM_MEM_MAP_BUCKETS = 8 };
 
 typedef struct {
     /* Is plain malloc actually served by the configured allocator on this
-     * build? If false, every allocator tuning in cbm_mem_init (immediate
+     * build? If false, every allocator tuning in lsm_mem_init (immediate
      * purge, page reclaim, arena policy) is inert for ordinary allocations,
      * the walk below sees nothing, and freed pages stay committed until the
      * platform's own heap decides otherwise. Checked FIRST when reading a
@@ -119,19 +119,19 @@ typedef struct {
     size_t area_committed_bytes;
     size_t area_reserved_bytes;
     /* Live bytes by size class: <=64, <=256, <=1K, <=4K, <=16K, <=64K, <=1M, rest */
-    size_t bucket_bytes[CBM_MEM_MAP_BUCKETS];
-    size_t bucket_blocks[CBM_MEM_MAP_BUCKETS];
-} cbm_mem_map_t;
+    size_t bucket_bytes[LSM_MEM_MAP_BUCKETS];
+    size_t bucket_blocks[LSM_MEM_MAP_BUCKETS];
+} lsm_mem_map_t;
 
 /* Inclusive upper bound of each size class; the last bucket is open-ended and
  * reports 0. */
-size_t cbm_mem_map_bucket_limit(int bucket);
+size_t lsm_mem_map_bucket_limit(int bucket);
 
 /* Snapshot the current memory map. Returns false only when out is NULL. If the
  * allocator declines the walk, the OS totals are still filled and live_bytes
  * stays 0, so the residual carries the whole process and the caller can SEE
  * that the walk contributed nothing rather than reading 0 as "no leak". */
-bool cbm_mem_map_collect(cbm_mem_map_t *out);
+bool lsm_mem_map_collect(lsm_mem_map_t *out);
 
 /* OS totals only: fills os_rss_bytes / os_committed_bytes and leaves the
  * allocator walk out entirely, so live_bytes stays 0 and the residual carries
@@ -143,7 +143,7 @@ bool cbm_mem_map_collect(cbm_mem_map_t *out);
  * _mi_theap_default_set; TSan reports that pairing directly. The walk is only
  * safe where no other thread can be exiting -- tests and explicitly requested
  * diagnostics -- so the periodic snapshot uses this instead. */
-bool cbm_mem_map_collect_os(cbm_mem_map_t *out);
+bool lsm_mem_map_collect_os(lsm_mem_map_t *out);
 
 /* ── Allocator ownership audit ───────────────────────────────────────
  *
@@ -157,20 +157,20 @@ bool cbm_mem_map_collect_os(cbm_mem_map_t *out);
  * Verified at startup and assertable in tests, so an unowned class is a loud
  * failure instead of a slow ratchet nobody attributes for months (#581).
  */
-enum { CBM_MEM_OWNERSHIP_CLASSES = 6 };
+enum { LSM_MEM_OWNERSHIP_CLASSES = 6 };
 
 typedef struct {
-    size_t probe_bytes[CBM_MEM_OWNERSHIP_CLASSES]; /* size probed per class */
-    bool owned[CBM_MEM_OWNERSHIP_CLASSES];         /* predicate said "ours" */
-    bool allocated[CBM_MEM_OWNERSHIP_CLASSES];     /* the probe itself worked */
+    size_t probe_bytes[LSM_MEM_OWNERSHIP_CLASSES]; /* size probed per class */
+    bool owned[LSM_MEM_OWNERSHIP_CLASSES];         /* predicate said "ours" */
+    bool allocated[LSM_MEM_OWNERSHIP_CLASSES];     /* the probe itself worked */
     int owned_count;
     int probed_count;
     bool all_owned; /* every successfully probed class came back owned */
-} cbm_mem_ownership_audit_t;
+} lsm_mem_ownership_audit_t;
 
 /* Allocate one block per size class, ask the routing predicate whether the
  * allocator owns it, then free it. Pure measurement: mutates no globals. */
-void cbm_mem_audit_ownership(cbm_mem_ownership_audit_t *out);
+void lsm_mem_audit_ownership(lsm_mem_ownership_audit_t *out);
 
 /* Foreign-pointer accounting from the allocation interposer: how many pointers
  * reaching our deallocators were classified as NOT allocator-owned. On a
@@ -179,11 +179,11 @@ void cbm_mem_audit_ownership(cbm_mem_ownership_audit_t *out);
  * Windows interposer — a predicate misclassifying real allocator blocks.
  * Either way it is a defect signal, which is why soak/smoke can gate on it.
  * Both read zero on platforms with no interposer. */
-size_t cbm_mem_foreign_pointer_count(void);
-size_t cbm_mem_owned_pointer_count(void);
+size_t lsm_mem_foreign_pointer_count(void);
+size_t lsm_mem_owned_pointer_count(void);
 
 /* Interposer hook: classify one pointer arriving at a deallocator. */
-void cbm_mem_record_pointer_ownership(bool owned);
+void lsm_mem_record_pointer_ownership(bool owned);
 
 /* ── Phase map: WHICH code path does the memory stay in? ─────────────
  *
@@ -201,16 +201,16 @@ void cbm_mem_record_pointer_ownership(bool owned);
  *     passes, never from a single delta.
  *   - Marks must bracket the WHOLE path with no unlabelled gaps, or the leak
  *     hides in the gap. Label the tail explicitly.
- *   - Off unless CBM_MEM_PHASES=1, so the hot path pays one atomic load.
+ *   - Off unless LSM_MEM_PHASES=1, so the hot path pays one atomic load.
  */
-void cbm_mem_phase_mark(const char *label);
+void lsm_mem_phase_mark(const char *label);
 
 /* Drop all accumulated phase totals (call once at the start of a measurement). */
-void cbm_mem_phase_reset(void);
+void lsm_mem_phase_reset(void);
 
 /* Write the phase table as a JSON array of {label, bytes, hits}, biggest total
  * first. Returns bytes written (0 when disabled or empty). */
-int cbm_mem_phase_report_json(char *out, size_t size);
+int lsm_mem_phase_report_json(char *out, size_t size);
 
 /* ── Windows region census: which POOL holds the memory? ─────────────
  *
@@ -235,7 +235,7 @@ int cbm_mem_phase_report_json(char *out, size_t size);
  * Windows-only; returns false everywhere else so callers must handle absence
  * rather than silently reading zeros as "nothing there".
  */
-enum { CBM_MEM_TRACKED_REGIONS = 6 };
+enum { LSM_MEM_TRACKED_REGIONS = 6 };
 
 typedef struct {
     size_t committed_total;    /* all MEM_COMMIT regions */
@@ -263,8 +263,8 @@ typedef struct {
     /* Identity, not just size: base and extent of the largest private regions,
      * so they can be matched against the allocator's arena addresses instead of
      * guessed at by toggling options one at a time. */
-    void *large_base[CBM_MEM_TRACKED_REGIONS];
-    size_t large_size[CBM_MEM_TRACKED_REGIONS];
+    void *large_base[LSM_MEM_TRACKED_REGIONS];
+    size_t large_size[LSM_MEM_TRACKED_REGIONS];
     unsigned large_tracked;
     size_t largest_private_region;
     unsigned private_regions_1mb;
@@ -273,18 +273,18 @@ typedef struct {
      * arena addresses to name the owner. */
     void *largest_private_base;
     bool heap_walk_ok; /* false → crt_* are unknown, not zero */
-} cbm_mem_win_census_t;
+} lsm_mem_win_census_t;
 
 /* Snapshot the OS-level region census. Returns false when unavailable
  * (non-Windows, or out is NULL). */
-bool cbm_mem_win_census(cbm_mem_win_census_t *out);
+bool lsm_mem_win_census(lsm_mem_win_census_t *out);
 
 /* Emit one census line tagged with the call site, so a growth series can be
- * read straight out of the daemon log. No-op unless CBM_MEM_CENSUS=1. */
-void cbm_mem_census_log(const char *tag);
+ * read straight out of the daemon log. No-op unless LSM_MEM_CENSUS=1. */
+void lsm_mem_census_log(const char *tag);
 
-/* Census logging gate: CBM_MEM_CENSUS=1. Off by default — HeapWalk locks each
+/* Census logging gate: LSM_MEM_CENSUS=1. Off by default — HeapWalk locks each
  * CRT heap, so this is a diagnostic, never a hot-path metric. */
-bool cbm_mem_census_enabled(void);
+bool lsm_mem_census_enabled(void);
 
-#endif /* CBM_MEM_H */
+#endif /* LSM_MEM_H */

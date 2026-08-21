@@ -18,5 +18,5 @@ IMAGE="${GLIBC_TEST_IMAGE:-debian:bullseye-slim}"
 BIN_ABS="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
 
 echo "==> running $(basename "$BIN") --version inside ${IMAGE} (glibc 2.31)"
-docker run --rm -v "${BIN_ABS}:/cbm:ro" "${IMAGE}" /cbm --version
+docker run --rm -v "${BIN_ABS}:/lsm:ro" "${IMAGE}" /lsm --version
 echo "PASS: binary starts on old glibc (${IMAGE})"

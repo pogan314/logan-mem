@@ -1,8 +1,8 @@
 /*
  * config_toml_edit.h — Conservative TOML configuration editing helpers.
  */
-#ifndef CBM_CONFIG_TOML_EDIT_H
-#define CBM_CONFIG_TOML_EDIT_H
+#ifndef LSM_CONFIG_TOML_EDIT_H
+#define LSM_CONFIG_TOML_EDIT_H
 
 #include <stddef.h>
 
@@ -13,7 +13,7 @@ extern "C" {
 /* Escape input for the contents of a TOML basic string. The surrounding
  * double quotes are not written. Returns 0 on success and -1 on invalid input
  * or insufficient output space. */
-int cbm_toml_escape_basic_string(const char *input, char *out, size_t out_size);
+int lsm_toml_escape_basic_string(const char *input, char *out, size_t out_size);
 
 /* Editors only rewrite missing paths or regular, single-link config files.
  * POSIX symlinks and Windows reparse points fail closed. Existing POSIX
@@ -25,27 +25,27 @@ int cbm_toml_escape_basic_string(const char *input, char *out, size_t out_size);
  * Insert or replace one managed, line-delimited block. block is the body
  * between the two marker lines. Duplicate or unbalanced markers are rejected
  * without changing the file. */
-int cbm_toml_upsert_managed_block(const char *file_path, const char *begin_marker,
+int lsm_toml_upsert_managed_block(const char *file_path, const char *begin_marker,
                                   const char *end_marker, const char *block);
-int cbm_toml_remove_managed_block(const char *file_path, const char *begin_marker,
+int lsm_toml_remove_managed_block(const char *file_path, const char *begin_marker,
                                   const char *end_marker);
 
-/* Remove one pre-marker codebase-memory-mcp table only when it has the known
+/* Remove one pre-marker logan-spine-mcp table only when it has the known
  * historical schema: one owned command basename, optional empty args, and no
  * unknown assignments or descendant tables. Returns 1 for a syntactically
  * valid same-name foreign table and leaves it byte-identical, 0 for removed or
  * absent owned state, and -1 for malformed input or I/O failure. A supplied
  * managed-marker pair makes this a successful no-op. */
-int cbm_toml_remove_legacy_table(const char *file_path, const char *table_name,
+int lsm_toml_remove_legacy_table(const char *file_path, const char *table_name,
                                  const char *begin_marker, const char *end_marker);
 
 /* Insert, replace, or remove the array table whose identity assignment equals
  * identity_value. table_name and identity_key must be TOML bare identifiers.
  * table_body excludes the [[table_name]] header. */
-int cbm_toml_upsert_named_array_table(const char *file_path, const char *table_name,
+int lsm_toml_upsert_named_array_table(const char *file_path, const char *table_name,
                                       const char *identity_key, const char *identity_value,
                                       const char *table_body);
-int cbm_toml_remove_named_array_table(const char *file_path, const char *table_name,
+int lsm_toml_remove_named_array_table(const char *file_path, const char *table_name,
                                       const char *identity_key, const char *identity_value);
 
 /* Ownership-aware variants for installer-managed array tables. canonical_body
@@ -56,56 +56,56 @@ int cbm_toml_remove_named_array_table(const char *file_path, const char *table_n
  * reported distinctly from malformed input, unsafe filesystem state, I/O, or
  * concurrency failures. */
 enum {
-    CBM_TOML_OWNED_EDIT_ERROR = -1,
-    CBM_TOML_OWNED_EDIT_OK = 0,
-    CBM_TOML_OWNED_EDIT_FOREIGN = 1
+    LSM_TOML_OWNED_EDIT_ERROR = -1,
+    LSM_TOML_OWNED_EDIT_OK = 0,
+    LSM_TOML_OWNED_EDIT_FOREIGN = 1
 };
-int cbm_toml_upsert_owned_named_array_table(const char *file_path, const char *table_name,
+int lsm_toml_upsert_owned_named_array_table(const char *file_path, const char *table_name,
                                             const char *identity_key, const char *identity_value,
                                             const char *canonical_body);
-int cbm_toml_remove_owned_named_array_table(const char *file_path, const char *table_name,
+int lsm_toml_remove_owned_named_array_table(const char *file_path, const char *table_name,
                                             const char *identity_key, const char *identity_value,
                                             const char *canonical_body);
 typedef enum {
-    CBM_TOML_CODEX_HOOK_UPSERT = 0,
-    CBM_TOML_CODEX_HOOK_REMOVE = 1
-} cbm_toml_codex_hook_action_t;
+    LSM_TOML_CODEX_HOOK_UPSERT = 0,
+    LSM_TOML_CODEX_HOOK_REMOVE = 1
+} lsm_toml_codex_hook_action_t;
 typedef enum {
-    CBM_TOML_CODEX_HOOK_FAILURE_NONE = 0,
-    CBM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT,
-    CBM_TOML_CODEX_HOOK_FAILURE_COMMAND_RENDER,
-    CBM_TOML_CODEX_HOOK_FAILURE_CONFIG_READ,
-    CBM_TOML_CODEX_HOOK_FAILURE_UNSAFE_CONTENT,
-    CBM_TOML_CODEX_HOOK_FAILURE_MALFORMED_CONFIG,
-    CBM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP,
-    CBM_TOML_CODEX_HOOK_FAILURE_CONFLICTING_HOOKS,
-    CBM_TOML_CODEX_HOOK_FAILURE_EDIT_BUILD,
-    CBM_TOML_CODEX_HOOK_FAILURE_CONFIG_WRITE
-} cbm_toml_codex_hook_failure_t;
+    LSM_TOML_CODEX_HOOK_FAILURE_NONE = 0,
+    LSM_TOML_CODEX_HOOK_FAILURE_INVALID_ARGUMENT,
+    LSM_TOML_CODEX_HOOK_FAILURE_COMMAND_RENDER,
+    LSM_TOML_CODEX_HOOK_FAILURE_CONFIG_READ,
+    LSM_TOML_CODEX_HOOK_FAILURE_UNSAFE_CONTENT,
+    LSM_TOML_CODEX_HOOK_FAILURE_MALFORMED_CONFIG,
+    LSM_TOML_CODEX_HOOK_FAILURE_AMBIGUOUS_OWNERSHIP,
+    LSM_TOML_CODEX_HOOK_FAILURE_CONFLICTING_HOOKS,
+    LSM_TOML_CODEX_HOOK_FAILURE_EDIT_BUILD,
+    LSM_TOML_CODEX_HOOK_FAILURE_CONFIG_WRITE
+} lsm_toml_codex_hook_failure_t;
 /* Returns a stable, content-free diagnostic name for a failure category. */
-const char *cbm_toml_codex_hook_failure_name(cbm_toml_codex_hook_failure_t failure);
+const char *lsm_toml_codex_hook_failure_name(lsm_toml_codex_hook_failure_t failure);
 /* `failure` may be NULL. When non-NULL, it is reset to NONE on entry and remains
  * NONE on success; failure categories never contain configuration content. */
-int cbm_toml_reconcile_codex_hooks_detailed(const char *file_path, const char *begin_marker,
+int lsm_toml_reconcile_codex_hooks_detailed(const char *file_path, const char *begin_marker,
                                             const char *end_marker, const char *command,
                                             const char *command_windows,
-                                            cbm_toml_codex_hook_action_t action, int check_only,
-                                            cbm_toml_codex_hook_failure_t *failure);
-int cbm_toml_reconcile_codex_hooks(const char *file_path, const char *begin_marker,
+                                            lsm_toml_codex_hook_action_t action, int check_only,
+                                            lsm_toml_codex_hook_failure_t *failure);
+int lsm_toml_reconcile_codex_hooks(const char *file_path, const char *begin_marker,
                                    const char *end_marker, const char *command,
-                                   const char *command_windows, cbm_toml_codex_hook_action_t action,
+                                   const char *command_windows, lsm_toml_codex_hook_action_t action,
                                    int check_only);
 
-#ifdef CBM_TOML_EDIT_ENABLE_TEST_API
-typedef void (*cbm_toml_precommit_test_hook_t)(const char *file_path, void *context);
-void cbm_toml_set_precommit_hook_for_testing(cbm_toml_precommit_test_hook_t hook, void *context);
+#ifdef LSM_TOML_EDIT_ENABLE_TEST_API
+typedef void (*lsm_toml_precommit_test_hook_t)(const char *file_path, void *context);
+void lsm_toml_set_precommit_hook_for_testing(lsm_toml_precommit_test_hook_t hook, void *context);
 /* Runs after the first stale-snapshot check and before final destination and
  * temporary-file identity revalidation. */
-void cbm_toml_set_prepublish_hook_for_testing(cbm_toml_precommit_test_hook_t hook, void *context);
+void lsm_toml_set_prepublish_hook_for_testing(lsm_toml_precommit_test_hook_t hook, void *context);
 #endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* CBM_CONFIG_TOML_EDIT_H */
+#endif /* LSM_CONFIG_TOML_EDIT_H */

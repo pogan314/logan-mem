@@ -44,13 +44,13 @@
  * EXPECTED GREEN vs RED reasoning:
  *
  * AREA A — CONFIGURES:
- *   Go os.Getenv: GREEN — pass_calls.c CBM_SVC_CONFIG fires on callee_name
+ *   Go os.Getenv: GREEN — pass_calls.c LSM_SVC_CONFIG fires on callee_name
  *     matching "getenv" / "os.Getenv" pattern.  Same-file resolution works.
  *   Python os.environ: UNCERTAIN/RED — os.environ is not a function call;
  *     it is an attribute access (dict subscript).  The extractor may not
- *     emit a CBMCall for it.  We probe with os.getenv() (function call form).
+ *     emit a LSMCall for it.  We probe with os.getenv() (function call form).
  *   TS process.env: RED — process.env[] is a subscript access, not a call.
- *     process.env.KEY is a member-access chain, not caught by CBM_SVC_CONFIG
+ *     process.env.KEY is a member-access chain, not caught by LSM_SVC_CONFIG
  *     which pattern-matches callee_name strings.  We probe with a wrapper
  *     whose name contains "getenv" to distinguish the wrapper path from the
  *     raw process.env pattern (which likely emits 0 CONFIGURES).
@@ -61,7 +61,7 @@
  *     the callee chain.  May not fire.
  *
  * AREA B — READS/WRITES (sequential via pass_usages.c):
- *   Sequential path: pass_usages.c cbm_resolve_file_read_writes runs for
+ *   Sequential path: pass_usages.c lsm_resolve_file_read_writes runs for
  *     each file.  It resolves var reads/writes to registered Variable nodes.
  *   Python: UNCERTAIN — Variable nodes are only created when Variable is a
  *     recognized label.  If the pipeline doesn't emit "Variable" label nodes
@@ -96,10 +96,10 @@
  *     Rust .await: UNCERTAIN/RED — "await" is a postfix operator, not a
  *       function call; the extractor's rust_call_types may not include it.
  *     Kotlin suspend: UNCERTAIN — suspend functions appear as Function nodes
- *       but coroutine calls may not be extracted as CBMCalls.
+ *       but coroutine calls may not be extracted as LSMCalls.
  *   D4 operator overloads:
  *     Python __add__: RED — operator calls (a + b) are not extracted as
- *       CBMCalls in the Python extractor; only explicit method calls are.
+ *       LSMCalls in the Python extractor; only explicit method calls are.
  *     Rust Add trait impl: RED — `a + b` with impl Add is a desugared method
  *       call, but the extractor sees a binary_expression, not a call_expression.
  *     C++ operator+: RED — same desugaring issue; call_expression captures
@@ -162,7 +162,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -183,7 +183,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } CP_Proj;
 
 typedef struct {
@@ -197,29 +197,29 @@ static void cp_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *cp_open_indexed(CP_Proj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *cp_open_indexed(CP_Proj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *cp_index_files(CP_Proj *lp, const CP_File *files, int nfiles) {
+static lsm_store_t *cp_index_files(CP_Proj *lp, const CP_File *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_cp_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_cp_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     cp_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -227,7 +227,7 @@ static cbm_store_t *cp_index_files(CP_Proj *lp, const CP_File *files, int nfiles
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -238,9 +238,9 @@ static cbm_store_t *cp_index_files(CP_Proj *lp, const CP_File *files, int nfiles
     return cp_open_indexed(lp);
 }
 
-static void cp_cleanup(CP_Proj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void cp_cleanup(CP_Proj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project); lp->project = NULL;
     th_rmtree(lp->tmpdir);
     unlink(lp->dbpath);
@@ -251,24 +251,24 @@ static void cp_cleanup(CP_Proj *lp, cbm_store_t *store) {
 }
 
 /* Count edges of `edge_type`; -1 on DB error. */
-static int cp_edges(cbm_store_t *store, const char *project, const char *edge_type) {
+static int cp_edges(lsm_store_t *store, const char *project, const char *edge_type) {
     if (!store) return -1;
-    return cbm_store_count_edges_by_type(store, project, edge_type);
+    return lsm_store_count_edges_by_type(store, project, edge_type);
 }
 
 /* Count nodes with a given label. */
-static int cp_count_label(cbm_store_t *store, const char *project, const char *label) {
+static int cp_count_label(lsm_store_t *store, const char *project, const char *label) {
     if (!store) return -1;
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Sum callable nodes (Function + Method). */
-static int cp_callables(cbm_store_t *store, const char *project) {
+static int cp_callables(lsm_store_t *store, const char *project) {
     int fn = cp_count_label(store, project, "Function");
     int mt = cp_count_label(store, project, "Method");
     return (fn < 0 ? 0 : fn) + (mt < 0 ? 0 : mt);
@@ -306,11 +306,11 @@ static const char *CP_ALL_EDGE_TYPES[] = {"CALLS",
                                           "WRITES",
                                           NULL};
 
-static void cp_diag(cbm_store_t *store, const char *project, const char *label) {
+static void cp_diag(lsm_store_t *store, const char *project, const char *label) {
     if (!store) { fprintf(stderr, "  [CP] %s: no graph DB\n", label); return; }
     char line[640] = {0};
     for (int i = 0; CP_ALL_EDGE_TYPES[i]; i++) {
-        int c = cbm_store_count_edges_by_type(store, project, CP_ALL_EDGE_TYPES[i]);
+        int c = lsm_store_count_edges_by_type(store, project, CP_ALL_EDGE_TYPES[i]);
         if (c > 0 && strlen(line) < sizeof(line) - 48) {
             char one[56];
             snprintf(one, sizeof(one), "%s=%d ", CP_ALL_EDGE_TYPES[i], c);
@@ -324,7 +324,7 @@ static void cp_diag(cbm_store_t *store, const char *project, const char *label) 
  * the parallel pipeline path (MIN_FILES_FOR_PARALLEL = 50). */
 enum { CP_PARALLEL_PAD = 52, CP_PAD_MAX = 80 };
 
-static cbm_store_t *cp_index_parallel(CP_Proj *lp, const CP_File *meaningful, int n_mean) {
+static lsm_store_t *cp_index_parallel(CP_Proj *lp, const CP_File *meaningful, int n_mean) {
     static char pad_name[CP_PARALLEL_PAD][48];
     static char pad_body[CP_PARALLEL_PAD][64];
     CP_File files[CP_PAD_MAX] = {{0}};
@@ -344,14 +344,14 @@ static cbm_store_t *cp_index_parallel(CP_Proj *lp, const CP_File *meaningful, in
  * AREA A — CONFIGURES edges
  *
  * Sequential path: pass_calls.c emits CONFIGURES when the resolved
- * callee QN is classified as CBM_SVC_CONFIG (callee_name matches
+ * callee QN is classified as LSM_SVC_CONFIG (callee_name matches
  * service-pattern for env-var accessors like getenv / os.Getenv /
  * GetEnvironmentVariable / env::var).
  * ══════════════════════════════════════════════════════════════════ */
 
 /* A1 — Go os.Getenv produces CONFIGURES.
  * EXPECTED GREEN: Go lsp_cross resolves os.Getenv; callee_name
- * "os.Getenv" / "getenv" matches CBM_SVC_CONFIG pattern. */
+ * "os.Getenv" / "getenv" matches LSM_SVC_CONFIG pattern. */
 TEST(cp_configures_go_getenv) {
     static const CP_File f[] = {
         {"config/env.go",
@@ -359,11 +359,11 @@ TEST(cp_configures_go_getenv) {
          "func DatabaseURL() string {\n    return os.Getenv(\"DATABASE_URL\")\n}\n\n"
          "func Port() string {\n    return os.Getenv(\"PORT\")\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int cfg = cp_edges(store, lp.project, "CONFIGURES");
     if (cfg < 1) cp_diag(store, lp.project, "configures/go_getenv");
     cp_cleanup(&lp, store);
-    /* REAL BUG: internal/cbm/extract_env_accesses.c extracts os.Getenv into
+    /* REAL BUG: internal/lsm/extract_env_accesses.c extracts os.Getenv into
      * result->env_accesses, but NO pipeline pass under src/pipeline ever consumes
      * env_accesses to emit CONFIGURES.  The only CONFIGURES paths are (a) the
      * service-pattern call resolver (pass_calls.c emit_classified_edge), which
@@ -377,7 +377,7 @@ TEST(cp_configures_go_getenv) {
 
 /* A2 — Python os.getenv() produces CONFIGURES.
  * EXPECTED GREEN: os.getenv is a function call; callee_name "getenv"
- * or "os.getenv" should match CBM_SVC_CONFIG. */
+ * or "os.getenv" should match LSM_SVC_CONFIG. */
 TEST(cp_configures_python_os_getenv) {
     static const CP_File f[] = {
         {"settings.py",
@@ -385,21 +385,21 @@ TEST(cp_configures_python_os_getenv) {
          "def get_db_url():\n    return os.getenv(\"DATABASE_URL\", \"sqlite:///db.sqlite3\")\n\n\n"
          "def get_secret_key():\n    return os.getenv(\"SECRET_KEY\", \"dev-key\")\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int cfg = cp_edges(store, lp.project, "CONFIGURES");
     if (cfg < 1) cp_diag(store, lp.project, "configures/python_os_getenv");
     cp_cleanup(&lp, store);
     /* REAL BUG: os.getenv extracted into env_accesses but never consumed; stdlib
      * callee never resolves to an in-graph node → 0 CONFIGURES.
-     * Root cause: src/pipeline has no consumer of CBMFileResult.env_accesses
-     * (internal/cbm/extract_env_accesses.c). [KNOWN class 14] */
+     * Root cause: src/pipeline has no consumer of LSMFileResult.env_accesses
+     * (internal/lsm/extract_env_accesses.c). [KNOWN class 14] */
     ASSERT_TRUE(cfg >= 1);
     PASS();
 }
 
 /* A3 — TypeScript/Node.js process.env wrapper.
  * EXPECTED UNCERTAIN/RED: `process.env.KEY` is a member-access chain,
- * not a call expression; CBM_SVC_CONFIG pattern-matches callee_name
+ * not a call expression; LSM_SVC_CONFIG pattern-matches callee_name
  * strings from call expressions only.  We use a named wrapper
  * getenv() whose callee name matches the pattern to test the
  * GREEN path separately from raw process.env access.
@@ -408,7 +408,7 @@ TEST(cp_configures_python_os_getenv) {
  * Sub-case A3b: raw process.env.KEY member access — EXPECTED 0 CONFIGURES
  *               (not a call; pipeline cannot see it). */
 TEST(cp_configures_ts_getenv_wrapper) {
-    /* A3a: wrapper whose name triggers CBM_SVC_CONFIG */
+    /* A3a: wrapper whose name triggers LSM_SVC_CONFIG */
     static const CP_File f[] = {
         {"env.ts",
          "function getenv(key: string, fallback: string = ''): string {\n"
@@ -416,19 +416,19 @@ TEST(cp_configures_ts_getenv_wrapper) {
          "function dbUrl(): string { return getenv('DATABASE_URL'); }\n"
          "function port(): string { return getenv('PORT', '3000'); }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int cfg = cp_edges(store, lp.project, "CONFIGURES");
     if (cfg < 1) cp_diag(store, lp.project, "configures/ts_getenv_wrapper");
     cp_cleanup(&lp, store);
     /* getenv() is a locally-defined function; the resolver finds it and
-     * its name matches CBM_SVC_CONFIG → CONFIGURES should fire. */
+     * its name matches LSM_SVC_CONFIG → CONFIGURES should fire. */
     ASSERT_TRUE(cfg >= 1);
     PASS();
 }
 
 /* A4 — C# Environment.GetEnvironmentVariable produces CONFIGURES.
  * EXPECTED GREEN: callee_name "GetEnvironmentVariable" or the qualified
- * form matches the CBM_SVC_CONFIG pattern. */
+ * form matches the LSM_SVC_CONFIG pattern. */
 TEST(cp_configures_csharp_getenv) {
     static const CP_File f[] = {
         {"Config.cs",
@@ -441,21 +441,21 @@ TEST(cp_configures_csharp_getenv) {
          "            return p != null ? int.Parse(p) : 8080;\n"
          "        }\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int cfg = cp_edges(store, lp.project, "CONFIGURES");
     if (cfg < 1) cp_diag(store, lp.project, "configures/csharp_getenv");
     cp_cleanup(&lp, store);
     /* REAL BUG: Environment.GetEnvironmentVariable extracted into env_accesses but
      * never consumed; stdlib callee never resolves to an in-graph node →
      * 0 CONFIGURES.  Root cause: no pipeline consumer of env_accesses
-     * (internal/cbm/extract_env_accesses.c). [KNOWN class 14] */
+     * (internal/lsm/extract_env_accesses.c). [KNOWN class 14] */
     ASSERT_TRUE(cfg >= 1);
     PASS();
 }
 
 /* A5 — Rust std::env::var produces CONFIGURES.
  * EXPECTED UNCERTAIN/RED: The callee_name extracted for `std::env::var("KEY")`
- * may be just "var" (too generic to match CBM_SVC_CONFIG) or the full path
+ * may be just "var" (too generic to match LSM_SVC_CONFIG) or the full path
  * "env::var".  The service pattern likely needs the "env" prefix to classify
  * it.  We assert the CORRECT behavior (cfg >= 1); fail = new bug class. */
 TEST(cp_configures_rust_env_var) {
@@ -466,14 +466,14 @@ TEST(cp_configures_rust_env_var) {
          "fn port() -> u16 {\n"
          "    std::env::var(\"PORT\").ok().and_then(|p| p.parse().ok()).unwrap_or(8080)\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int cfg = cp_edges(store, lp.project, "CONFIGURES");
     if (cfg < 1) cp_diag(store, lp.project, "configures/rust_env_var");
     cp_cleanup(&lp, store);
     /* REAL BUG: std::env::var extracted into env_accesses but never consumed;
      * stdlib callee never resolves to an in-graph node → 0 CONFIGURES.  (Rust
      * also has no cross-LSP, compounding the miss.)  Root cause: no pipeline
-     * consumer of env_accesses (internal/cbm/extract_env_accesses.c).
+     * consumer of env_accesses (internal/lsm/extract_env_accesses.c).
      * [KNOWN class 14] */
     ASSERT_TRUE(cfg >= 1);
     PASS();
@@ -482,7 +482,7 @@ TEST(cp_configures_rust_env_var) {
 /* ══════════════════════════════════════════════════════════════════
  * AREA B — READS / WRITES (sequential path via pass_usages.c)
  *
- * pass_usages.c cbm_resolve_file_read_writes() runs on every file
+ * pass_usages.c lsm_resolve_file_read_writes() runs on every file
  * in both sequential and parallel paths.  It emits READS/WRITES
  * edges from a Function/Method to a Variable node — but only when
  * (a) a Variable node exists in the graph for that symbol, AND
@@ -504,14 +504,14 @@ TEST(cp_reads_writes_python_global) {
          "def get():\n    return count\n\n\n"
          "def reset():\n    global count\n    count = 0\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int reads  = cp_edges(store, lp.project, "READS");
     int writes = cp_edges(store, lp.project, "WRITES");
     if (reads < 1 && writes < 1)
         cp_diag(store, lp.project, "reads_writes/python_global");
     cp_cleanup(&lp, store);
     /* REAL BUG: src/pipeline/pass_definitions.c process_def calls
-     * cbm_registry_add ONLY for Function/Method/Class/Interface labels — never
+     * lsm_registry_add ONLY for Function/Method/Class/Interface labels — never
      * for "Variable".  So Variable nodes are created in the graph but never
      * registered; pass_usages.c resolve_rw_edges then can't resolve the var_name
      * to a Variable QN, and READS/WRITES edges are never emitted for any
@@ -530,13 +530,13 @@ TEST(cp_reads_writes_go_global) {
          "func Set(key, val string) { cache[key] = val }\n\n"
          "func Get(key string) string { return cache[key] }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int reads  = cp_edges(store, lp.project, "READS");
     int writes = cp_edges(store, lp.project, "WRITES");
     if (reads < 1 && writes < 1)
         cp_diag(store, lp.project, "reads_writes/go_global");
     cp_cleanup(&lp, store);
-    /* REAL BUG: Variable nodes never cbm_registry_add'd (pass_definitions.c
+    /* REAL BUG: Variable nodes never lsm_registry_add'd (pass_definitions.c
      * process_def registers only Function/Method/Class/Interface), so
      * pass_usages.c cannot resolve the Go package-var to a Variable QN →
      * 0 READS/WRITES. [KNOWN class 7] */
@@ -555,13 +555,13 @@ TEST(cp_reads_writes_java_static_field) {
          "    public static int value() { return count; }\n\n"
          "    public static void reset() { count = 0; }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int reads  = cp_edges(store, lp.project, "READS");
     int writes = cp_edges(store, lp.project, "WRITES");
     if (reads < 1 && writes < 1)
         cp_diag(store, lp.project, "reads_writes/java_static_field");
     cp_cleanup(&lp, store);
-    /* REAL BUG: Variable/Field nodes never cbm_registry_add'd (pass_definitions.c
+    /* REAL BUG: Variable/Field nodes never lsm_registry_add'd (pass_definitions.c
      * process_def registers only Function/Method/Class/Interface), so
      * pass_usages.c cannot resolve the Java static field to a Variable QN →
      * 0 READS/WRITES. [KNOWN class 7] */
@@ -580,13 +580,13 @@ TEST(cp_reads_writes_cs_static_field) {
          "        public static void Register() { _count++; }\n\n"
          "        public static int Count() { return _count; }\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int reads  = cp_edges(store, lp.project, "READS");
     int writes = cp_edges(store, lp.project, "WRITES");
     if (reads < 1 && writes < 1)
         cp_diag(store, lp.project, "reads_writes/cs_static_field");
     cp_cleanup(&lp, store);
-    /* REAL BUG: Variable/Field nodes never cbm_registry_add'd (pass_definitions.c
+    /* REAL BUG: Variable/Field nodes never lsm_registry_add'd (pass_definitions.c
      * process_def registers only Function/Method/Class/Interface), so
      * pass_usages.c cannot resolve the C# static field to a Variable QN →
      * 0 READS/WRITES. [KNOWN class 7] */
@@ -628,7 +628,7 @@ TEST(cp_grpc_calls_go_user_service) {
          "\tclient.GetUser(context.Background(), &pb.GetUserRequest{Id: \"u1\"})\n}\n\n"
          "func main() { FetchUser(nil) }\n"}};
     CP_Proj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         cp_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
     int grpc = cp_edges(store, lp.project, "GRPC_CALLS");
     if (grpc < 1) cp_diag(store, lp.project, "grpc_calls/go_user_service");
@@ -639,7 +639,7 @@ TEST(cp_grpc_calls_go_user_service) {
 
 /* C2 — TS tRPC: different procedure wrapper name.
  * EXPECTED GREEN: callee QN must contain "trpc" substring to trigger
- * CBM_SVC_TRPC.  We use a module path "trpc/client.ts" so the QN carries
+ * LSM_SVC_TRPC.  We use a module path "trpc/client.ts" so the QN carries
  * the "trpc" segment. */
 TEST(cp_trpc_calls_ts_procedure) {
     static const CP_File meaningful[] = {
@@ -654,7 +654,7 @@ TEST(cp_trpc_calls_ts_procedure) {
          "export function getUser(id: string): string {\n"
          "  return trpcCall('user.getById');\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         cp_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
     int trpc = cp_edges(store, lp.project, "TRPC_CALLS");
     if (trpc < 1) cp_diag(store, lp.project, "trpc_calls/ts_procedure");
@@ -665,7 +665,7 @@ TEST(cp_trpc_calls_ts_procedure) {
 
 /* C3 — Python GraphQL: graphql-core execute() call.
  * EXPECTED GREEN: callee QN must contain "gql" or "graphql" to trigger
- * CBM_SVC_GRAPHQL.  We place the wrapper in a module "graphql/client.py". */
+ * LSM_SVC_GRAPHQL.  We place the wrapper in a module "graphql/client.py". */
 TEST(cp_graphql_calls_python_execute) {
     static const CP_File meaningful[] = {
         {"graphql/client.py",
@@ -680,7 +680,7 @@ TEST(cp_graphql_calls_python_execute) {
          "    q = gql('query ListUsers { users { id name } }')\n"
          "    return execute(q)\n"}};
     CP_Proj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         cp_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
     int graphql = cp_edges(store, lp.project, "GRAPHQL_CALLS");
     if (graphql < 1) cp_diag(store, lp.project, "graphql_calls/python_execute");
@@ -705,7 +705,7 @@ TEST(cp_closure_go_outer_call) {
          "func Make(base int) func(int) int {\n"
          "    return func(x int) int { return double(base + x) }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "closure/go_outer_call");
     cp_cleanup(&lp, store);
@@ -722,7 +722,7 @@ TEST(cp_closure_python_lambda) {
          "def apply(items):\n    transform = lambda x: helper(x)\n"
          "    return list(map(transform, items))\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "closure/python_lambda");
     cp_cleanup(&lp, store);
@@ -741,7 +741,7 @@ TEST(cp_closure_ts_arrow) {
          "export function mapAll(xs: number[]): string[] {\n"
          "    return xs.map(x => format(x));\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 2);
+    lsm_store_t *store = cp_index_files(&lp, f, 2);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "closure/ts_arrow");
     cp_cleanup(&lp, store);
@@ -766,7 +766,7 @@ TEST(cp_recursive_go) {
          "    if n <= 1 { return n }\n    return Fib(n-1) + Fib(n-2)\n}\n\n"
          "func Run() int { return Fib(10) }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "recursive/go");
     cp_cleanup(&lp, store);
@@ -786,7 +786,7 @@ TEST(cp_recursive_python) {
          "    return n * factorial(n - 1)\n\n\n"
          "def run():\n    return factorial(5)\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "recursive/python");
     cp_cleanup(&lp, store);
@@ -806,7 +806,7 @@ TEST(cp_recursive_rust) {
          "    if n == 0 { return 0; }\n    n + sum(n - 1)\n}\n\n"
          "pub fn run() -> u64 { sum(5) }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "recursive/rust");
     cp_cleanup(&lp, store);
@@ -826,7 +826,7 @@ TEST(cp_recursive_java) {
          "        if (n <= 1) return n;\n        return fib(n-1) + fib(n-2);\n    }\n\n"
          "    static long run() { return fib(10); }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "recursive/java");
     cp_cleanup(&lp, store);
@@ -846,7 +846,7 @@ TEST(cp_async_python_await) {
          "async def process(url):\n    data = await fetch_data(url)\n    return data\n\n\n"
          "async def run():\n    result = await process(\"http://example.com\")\n    return result\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int fn_count = cp_count_label(store, lp.project, "Function");
     if (calls < 1) cp_diag(store, lp.project, "async/python_await");
@@ -868,7 +868,7 @@ TEST(cp_async_ts_await) {
          "export async function getUser(id: string): Promise<any> {\n"
          "    const user = await fetchUser(id);\n    return user;\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 2);
+    lsm_store_t *store = cp_index_files(&lp, f, 2);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "async/ts_await");
     cp_cleanup(&lp, store);
@@ -888,7 +888,7 @@ TEST(cp_async_csharp_task) {
          "        async Task<string> RunAsync(string url) {\n"
          "            return await FetchAsync(url);\n        }\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "async/csharp_task");
     cp_cleanup(&lp, store);
@@ -907,7 +907,7 @@ TEST(cp_async_rust_await) {
          "async fn fetch(url: &str) -> String { url.to_string() }\n\n"
          "async fn run(url: &str) -> String {\n    fetch(url).await\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int fn_count = cp_count_label(store, lp.project, "Function");
     if (calls < 1) cp_diag(store, lp.project, "async/rust_await");
@@ -928,7 +928,7 @@ TEST(cp_async_kotlin_suspend) {
          "suspend fun process(url: String): String {\n"
          "    val data = fetchData(url)\n    return data.uppercase()\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "async/kotlin_suspend");
     cp_cleanup(&lp, store);
@@ -950,7 +950,7 @@ TEST(cp_operator_python_add) {
          "    def __repr__(self):\n        return f'Vec({self.x},{self.y})'\n\n\n"
          "def combine(a, b):\n    return a + b\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int methods = cp_count_label(store, lp.project, "Method");
     if (calls < 1) cp_diag(store, lp.project, "operator/python_add");
@@ -976,7 +976,7 @@ TEST(cp_operator_rust_add) {
          "        Point { x: self.x + other.x, y: self.y + other.y }\n    }\n}\n\n"
          "pub fn combine(a: Point, b: Point) -> Point { a + b }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "operator/rust_add");
     cp_cleanup(&lp, store);
@@ -999,7 +999,7 @@ TEST(cp_operator_kotlin_plus) {
          "    operator fun minus(other: Vec): Vec = Vec(x - other.x, y - other.y)\n}\n\n"
          "fun combine(a: Vec, b: Vec): Vec = a + b\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int methods = cp_count_label(store, lp.project, "Method");
     if (calls < 1) cp_diag(store, lp.project, "operator/kotlin_plus");
@@ -1025,7 +1025,7 @@ TEST(cp_interface_dispatch_go) {
          "func Describe(s Shape) float64 { return s.Area() + s.Perimeter() }\n\n"
          "func Run() float64 {\n    c := Circle{R: 5}\n    return Describe(c)\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "interface_dispatch/go");
     cp_cleanup(&lp, store);
@@ -1034,7 +1034,7 @@ TEST(cp_interface_dispatch_go) {
 }
 
 /* D5b — Rust dyn Trait dispatch.
- * EXPECTED UNCERTAIN: Rust lsp_cross is not wired (cbm_pxc_has_cross_lsp
+ * EXPECTED UNCERTAIN: Rust lsp_cross is not wired (lsm_pxc_has_cross_lsp
  * returns false for Rust); dyn Trait erases the concrete type; the name-
  * based resolver may find the method by name if unique. */
 TEST(cp_interface_dispatch_rust_dyn) {
@@ -1048,7 +1048,7 @@ TEST(cp_interface_dispatch_rust_dyn) {
          "pub fn describe(s: &dyn Shape) -> f64 { s.area() + s.perimeter() }\n\n"
          "pub fn run() -> f64 {\n    let c = Circle { r: 5.0 };\n    describe(&c)\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "interface_dispatch/rust_dyn");
     cp_cleanup(&lp, store);
@@ -1072,7 +1072,7 @@ TEST(cp_interface_dispatch_java) {
          "class Util {\n    static double describe(Shape s) {\n"
          "        return s.area() + s.perimeter();\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "interface_dispatch/java");
     cp_cleanup(&lp, store);
@@ -1097,7 +1097,7 @@ TEST(cp_enum_variant_kotlin_sealed) {
          "    is Result.Ok -> r.display()\n"
          "    is Result.Err -> r.display()\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     if (calls < 1) cp_diag(store, lp.project, "enum_variant/kotlin_sealed");
     cp_cleanup(&lp, store);
@@ -1126,14 +1126,14 @@ TEST(cp_enum_variant_rust_impl) {
          "pub fn describe(d: Direction) -> String {\n"
          "    format!(\"{} (opp: {})\", d.label(), d.opposite().label())\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int methods = cp_count_label(store, lp.project, "Method");
     if (calls < 1) cp_diag(store, lp.project, "enum_variant/rust_impl");
     cp_cleanup(&lp, store);
     ASSERT_TRUE(methods >= 1);  /* label + opposite must be Method nodes */
     /* REAL BUG: `d.label()` is a method call on a receiver typed as the enum
-     * Direction.  Rust is NOT in cbm_pxc_has_cross_lsp (src/pipeline/
+     * Direction.  Rust is NOT in lsm_pxc_has_cross_lsp (src/pipeline/
      * pass_lsp_cross.c — only Go/C/CPP/CUDA/Python/JS/TS/TSX/PHP), so there is
      * no type-aware resolver to map the receiver to Direction::label, and the
      * name-based registry resolver does not resolve `recv.method()` method calls
@@ -1156,7 +1156,7 @@ TEST(cp_enum_method_java) {
          "    static String describe(Day d) {\n"
          "        return d.label() + (d.isWeekend() ? \"(rest)\" : \"(work)\");\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls   = cp_edges(store, lp.project, "CALLS");
     int types   = cp_count_label(store, lp.project, "Enum");
     if (calls < 1) cp_diag(store, lp.project, "enum_method/java");
@@ -1182,7 +1182,7 @@ TEST(cp_interface_method_no_dup_function) {
          "    static String run(Greeter g) {\n"
          "        return g.greet(\"world\");\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int calls = cp_edges(store, lp.project, "CALLS");
     int fns   = cp_count_label(store, lp.project, "Function");
     if (calls < 1) cp_diag(store, lp.project, "interface_dedup/java_1234");
@@ -1212,7 +1212,7 @@ TEST(cp_nested_class_python) {
          "    def insert(self, val):\n        self.root = self.Node(val)\n\n"
          "    def height(self):\n        return 0\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int fn_types = cp_count_label(store, lp.project, "Function")
                    + cp_count_label(store, lp.project, "Method")
                    + cp_count_label(store, lp.project, "Class");
@@ -1236,7 +1236,7 @@ TEST(cp_nested_class_java) {
          "    Graph(int v) { this.vertices = v; }\n\n"
          "    int run() {\n        return new Edge(0,1,5).cost();\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes = cp_count_label(store, lp.project, "Class");
     if (classes < 1) cp_diag(store, lp.project, "nested_class/java");
     cp_cleanup(&lp, store);
@@ -1256,7 +1256,7 @@ TEST(cp_nested_class_csharp) {
          "        public int Run() {\n            var i = new Inner();\n"
          "            return i.Value();\n        }\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes = cp_count_label(store, lp.project, "Class");
     if (classes < 1) cp_diag(store, lp.project, "nested_class/csharp");
     cp_cleanup(&lp, store);
@@ -1286,7 +1286,7 @@ TEST(cp_anon_class_java) {
          "        Greeter g = makeGreeter(\"Hello, \");\n"
          "        return g.greet(\"World\");\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes = cp_count_label(store, lp.project, "Class");
     int ifaces  = cp_count_label(store, lp.project, "Interface");
     if (classes < 1 && ifaces < 1) cp_diag(store, lp.project, "anon_class/java");
@@ -1307,7 +1307,7 @@ TEST(cp_anon_object_kotlin) {
          "    override fun transform(x: Int): Int = x * 2\n}\n\n"
          "fun run(x: Int): Int = makeDoubler().transform(x)\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int callables = cp_callables(store, lp.project);
     int calls     = cp_edges(store, lp.project, "CALLS");
     if (callables < 1) cp_diag(store, lp.project, "anon_object/kotlin");
@@ -1331,8 +1331,8 @@ TEST(cp_constant_go_const) {
          "    MaxRetries = 3\n    DefaultTimeout = 30\n    BaseURL = \"https://api.example.com\"\n)\n\n"
          "func Retry(n int) bool { return n < MaxRetries }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
-    int total = store ? cbm_store_count_nodes(store, lp.project) : -1;
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
+    int total = store ? lsm_store_count_nodes(store, lp.project) : -1;
     if (total < 1) cp_diag(store, lp.project, "constant/go_const");
     cp_cleanup(&lp, store);
     ASSERT_TRUE(total >= 1);  /* at least Module + Function nodes */
@@ -1350,9 +1350,9 @@ TEST(cp_constant_rust_const_static) {
          "std::sync::atomic::AtomicU32::new(0);\n\n"
          "pub fn should_retry(n: u32) -> bool { n < MAX_RETRIES }\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int fn_count = cp_count_label(store, lp.project, "Function");
-    int total    = store ? cbm_store_count_nodes(store, lp.project) : -1;
+    int total    = store ? lsm_store_count_nodes(store, lp.project) : -1;
     if (fn_count < 1) cp_diag(store, lp.project, "constant/rust_const_static");
     cp_cleanup(&lp, store);
     ASSERT_TRUE(fn_count >= 1);  /* should_retry must be a Function node */
@@ -1373,7 +1373,7 @@ TEST(cp_constant_java_static_final) {
          "    static boolean isValidUrl(String url) {\n"
          "        return url != null && url.startsWith(BASE_URL);\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes  = cp_count_label(store, lp.project, "Class");
     int methods  = cp_count_label(store, lp.project, "Method");
     if (classes < 1) cp_diag(store, lp.project, "constant/java_static_final");
@@ -1396,9 +1396,9 @@ TEST(cp_macro_rust_macro_rules) {
          "macro_rules! log_error {\n    ($msg:expr) => { eprintln!(\"ERROR: {}\", $msg); };\n}\n\n"
          "pub fn run(x: i32) -> i32 {\n    add_two!(x)\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int fn_count = cp_count_label(store, lp.project, "Function");
-    int total    = store ? cbm_store_count_nodes(store, lp.project) : -1;
+    int total    = store ? lsm_store_count_nodes(store, lp.project) : -1;
     if (fn_count < 1) cp_diag(store, lp.project, "macro/rust_macro_rules");
     cp_cleanup(&lp, store);
     ASSERT_TRUE(fn_count >= 1);  /* run() must be a Function node */
@@ -1420,9 +1420,9 @@ TEST(cp_macro_c_define) {
          "#define CLAMP(v, lo, hi) MAX(lo, MIN(v, hi))\n\n"
          "int run(int x) {\n    return SQUARE(x) + MAX(x, 0);\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int fn_count = cp_count_label(store, lp.project, "Function");
-    int total    = store ? cbm_store_count_nodes(store, lp.project) : -1;
+    int total    = store ? lsm_store_count_nodes(store, lp.project) : -1;
     if (fn_count < 1) cp_diag(store, lp.project, "macro/c_define");
     cp_cleanup(&lp, store);
     ASSERT_TRUE(fn_count >= 1);  /* run() must be a Function node */
@@ -1448,7 +1448,7 @@ TEST(cp_property_python) {
          "    @property\n    def area(self):\n        return 3.14159 * self._radius ** 2\n\n\n"
          "def make(r):\n    c = Circle(r)\n    return c.area\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int methods  = cp_count_label(store, lp.project, "Method");
     int classes  = cp_count_label(store, lp.project, "Class");
     if (methods < 1 && classes < 1) cp_diag(store, lp.project, "property/python");
@@ -1474,7 +1474,7 @@ TEST(cp_property_csharp) {
          "        }\n\n"
          "        public string Describe() { return $\"{_name}, age {_age}\"; }\n    }\n}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes = cp_count_label(store, lp.project, "Class");
     int methods = cp_count_label(store, lp.project, "Method");
     if (classes < 1) cp_diag(store, lp.project, "property/csharp");
@@ -1497,7 +1497,7 @@ TEST(cp_property_kotlin_custom_getter) {
          "    fun describe(): String = \"${width}x${height} area=${area}\"\n}\n\n"
          "fun makeRect(w: Double, h: Double): Rect = Rect(w, h)\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes   = cp_count_label(store, lp.project, "Class");
     int callables = cp_callables(store, lp.project);
     if (callables < 1) cp_diag(store, lp.project, "property/kotlin_custom_getter");
@@ -1524,7 +1524,7 @@ TEST(cp_property_ts_accessor) {
          "    add(other: Vector): Vector { return new Vector(this._x + other._x, this._y + other._y); }\n"
          "}\n"}};
     CP_Proj lp;
-    cbm_store_t *store = cp_index_files(&lp, f, 1);
+    lsm_store_t *store = cp_index_files(&lp, f, 1);
     int classes = cp_count_label(store, lp.project, "Class");
     int methods = cp_count_label(store, lp.project, "Method");
     if (classes < 1) cp_diag(store, lp.project, "property/ts_accessor");

@@ -6,7 +6,7 @@
  * so cross-file repro files don't each re-derive it. Header-only (static inline)
  * — each TU gets its own copy; no link conflicts. Include AFTER test_framework.h.
  *
- * Single-file extraction bugs do NOT need this — use cbm_extract_file directly
+ * Single-file extraction bugs do NOT need this — use lsm_extract_file directly
  * (see repro_extraction.c). Use this when the bug only appears once a fixture is
  * indexed through the full production pipeline (CALLS/IMPORTS/HTTP_CALLS edges,
  * cross-file/cross-package resolution, Route minting, dedup/upsert, etc.).
@@ -16,10 +16,10 @@
 
 #include <foundation/compat.h>
 #include "test_helpers.h" /* th_rmtree */
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
-#include <pipeline/pipeline.h> /* cbm_project_name_from_path */
+#include <pipeline/pipeline.h> /* lsm_project_name_from_path */
 
 #include <string.h>
 #include <stdlib.h>
@@ -34,7 +34,7 @@ typedef struct {
     char cachedir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } RProj;
 
 typedef struct {
@@ -51,53 +51,53 @@ static inline void rh_to_fwd_slashes(char *p) {
 
 /* Index lp->tmpdir (already populated) via the production index_repository flow
  * and open the resulting graph DB (NULL on failure). */
-static inline cbm_store_t *rh_open_indexed(RProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static inline lsm_store_t *rh_open_indexed(RProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project)
         return NULL;
     if (!lp->cachedir[0]) {
-        snprintf(lp->cachedir, sizeof(lp->cachedir), "/tmp/cbm_repro_cache_XXXXXX");
-        if (!cbm_mkdtemp(lp->cachedir))
+        snprintf(lp->cachedir, sizeof(lp->cachedir), "/tmp/lsm_repro_cache_XXXXXX");
+        if (!lsm_mkdtemp(lp->cachedir))
             return NULL;
         rh_to_fwd_slashes(lp->cachedir);
     }
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", lp->cachedir, lp->project);
     unlink(lp->dbpath);
 
-    const char *prior_cache_dir = getenv("CBM_CACHE_DIR");
-    char *saved_cache_dir = prior_cache_dir ? cbm_strdup(prior_cache_dir) : NULL;
-    cbm_setenv("CBM_CACHE_DIR", lp->cachedir, 1);
+    const char *prior_cache_dir = getenv("LSM_CACHE_DIR");
+    char *saved_cache_dir = prior_cache_dir ? lsm_strdup(prior_cache_dir) : NULL;
+    lsm_setenv("LSM_CACHE_DIR", lp->cachedir, 1);
 
-    cbm_store_t *store = NULL;
-    lp->srv = cbm_mcp_server_new(NULL);
+    lsm_store_t *store = NULL;
+    lp->srv = lsm_mcp_server_new(NULL);
     if (lp->srv) {
         char args[700];
         snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-        char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+        char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
         if (resp)
             free(resp);
         /* Repro consumers only inspect the graph. Keep this connection query-only
          * so the harness does not mutate the publisher's sealed journal mode. */
-        store = cbm_store_open_path_query(lp->dbpath);
+        store = lsm_store_open_path_query(lp->dbpath);
     }
 
     if (saved_cache_dir) {
-        cbm_setenv("CBM_CACHE_DIR", saved_cache_dir, 1);
+        lsm_setenv("LSM_CACHE_DIR", saved_cache_dir, 1);
         free(saved_cache_dir);
     } else {
-        cbm_unsetenv("CBM_CACHE_DIR");
+        lsm_unsetenv("LSM_CACHE_DIR");
     }
     return store;
 }
 
-static inline void rh_cleanup(RProj *lp, cbm_store_t *store);
+static inline void rh_cleanup(RProj *lp, lsm_store_t *store);
 
 /* Write each fixture file into a fresh temp project, index it via the MCP
  * production flow, and open the resulting graph DB. Returns store (NULL on fail). */
-static inline cbm_store_t *rh_index_files(RProj *lp, const RFile *files, int nfiles) {
+static inline lsm_store_t *rh_index_files(RProj *lp, const RFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_repro_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir))
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_repro_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir))
         return NULL;
     rh_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
@@ -106,7 +106,7 @@ static inline cbm_store_t *rh_index_files(RProj *lp, const RFile *files, int nfi
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb"); /* binary: keep "\n" exact */
@@ -117,23 +117,23 @@ static inline cbm_store_t *rh_index_files(RProj *lp, const RFile *files, int nfi
         fputs(files[i].content, f);
         fclose(f);
     }
-    cbm_store_t *store = rh_open_indexed(lp);
+    lsm_store_t *store = rh_open_indexed(lp);
     if (!store) {
         rh_cleanup(lp, NULL);
     }
     return store;
 }
 
-static inline cbm_store_t *rh_index(RProj *lp, const char *filename, const char *content) {
+static inline lsm_store_t *rh_index(RProj *lp, const char *filename, const char *content) {
     RFile f = {filename, content};
     return rh_index_files(lp, &f, 1);
 }
 
-static inline void rh_cleanup(RProj *lp, cbm_store_t *store) {
+static inline void rh_cleanup(RProj *lp, lsm_store_t *store) {
     if (store)
-        cbm_store_close(store);
+        lsm_store_close(store);
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -151,28 +151,28 @@ static inline void rh_cleanup(RProj *lp, cbm_store_t *store) {
 }
 
 /* Count edges of a given type in the project graph. Returns -1 on query error. */
-static inline int rh_count_edges(cbm_store_t *store, const char *project, const char *edge) {
-    return store ? cbm_store_count_edges_by_type(store, project, edge) : -1;
+static inline int rh_count_edges(lsm_store_t *store, const char *project, const char *edge) {
+    return store ? lsm_store_count_edges_by_type(store, project, edge) : -1;
 }
 
 /* Count nodes carrying `label`. Returns -1 on query error. */
-static inline int rh_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static inline int rh_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
-/* TIER B: returns true if cbm_extract_file CRASHES (signal) on `content`.
+/* TIER B: returns true if lsm_extract_file CRASHES (signal) on `content`.
  * Runs in a forked child so the crash doesn't take down the repro runner. */
-static inline bool rh_extract_crashes(const char *content, CBMLanguage lang, const char *relpath) {
+static inline bool rh_extract_crashes(const char *content, LSMLanguage lang, const char *relpath) {
 #if defined(_WIN32)
-    CBMFileResult *r =
-        cbm_extract_file(content, (int)strlen(content), lang, "repro", relpath, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(content, (int)strlen(content), lang, "repro", relpath, 0, NULL, NULL);
     if (r)
-        cbm_free_result(r);
+        lsm_free_result(r);
     return false;
 #else
     fflush(NULL);
@@ -180,10 +180,10 @@ static inline bool rh_extract_crashes(const char *content, CBMLanguage lang, con
     if (pid < 0)
         return false;
     if (pid == 0) {
-        CBMFileResult *r =
-            cbm_extract_file(content, (int)strlen(content), lang, "repro", relpath, 0, NULL, NULL);
+        LSMFileResult *r =
+            lsm_extract_file(content, (int)strlen(content), lang, "repro", relpath, 0, NULL, NULL);
         if (r)
-            cbm_free_result(r);
+            lsm_free_result(r);
         _exit(0);
     }
     int status = 0;

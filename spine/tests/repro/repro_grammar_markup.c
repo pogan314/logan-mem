@@ -10,36 +10,36 @@
  * battery including pipeline callable-sourcing. The dimensions applied per
  * language are documented in each per-TEST comment.
  *
- * Languages covered (18) and the CBM_LANG_* enum each uses. All enums verified
- * present in internal/cbm/cbm.h (line numbers as of HEAD): MARKDOWN(62),
+ * Languages covered (18) and the LSM_LANG_* enum each uses. All enums verified
+ * present in internal/lsm/lsm.h (line numbers as of HEAD): MARKDOWN(62),
  * RST(150), TYPST(79), BIBTEX(128), MERMAID(152), PO(154), DIFF(118),
  * REGEX(148), CAPNP(125), SMITHY(159), WIT(160), QML(170), LIQUID(113),
  * JINJA2(114), BLADE(109), PURESCRIPT(97), SOQL(165), SOSL(166).
- * None missing; none skipped. (Note: the enum is CBM_LANG_JINJA2, not
- * CBM_LANG_JINJA.)
+ * None missing; none skipped. (Note: the enum is LSM_LANG_JINJA2, not
+ * LSM_LANG_JINJA.)
  *
- *   MARKDOWN   -> CBM_LANG_MARKDOWN
- *   RST        -> CBM_LANG_RST
- *   TYPST      -> CBM_LANG_TYPST
- *   BIBTEX     -> CBM_LANG_BIBTEX
- *   MERMAID    -> CBM_LANG_MERMAID
- *   PO         -> CBM_LANG_PO
- *   DIFF       -> CBM_LANG_DIFF
- *   REGEX      -> CBM_LANG_REGEX
- *   CAPNP      -> CBM_LANG_CAPNP
- *   SMITHY     -> CBM_LANG_SMITHY
- *   WIT        -> CBM_LANG_WIT
- *   QML        -> CBM_LANG_QML
- *   LIQUID     -> CBM_LANG_LIQUID
- *   JINJA2     -> CBM_LANG_JINJA2
- *   BLADE      -> CBM_LANG_BLADE
- *   PURESCRIPT -> CBM_LANG_PURESCRIPT
- *   SOQL       -> CBM_LANG_SOQL
- *   SOSL       -> CBM_LANG_SOSL
+ *   MARKDOWN   -> LSM_LANG_MARKDOWN
+ *   RST        -> LSM_LANG_RST
+ *   TYPST      -> LSM_LANG_TYPST
+ *   BIBTEX     -> LSM_LANG_BIBTEX
+ *   MERMAID    -> LSM_LANG_MERMAID
+ *   PO         -> LSM_LANG_PO
+ *   DIFF       -> LSM_LANG_DIFF
+ *   REGEX      -> LSM_LANG_REGEX
+ *   CAPNP      -> LSM_LANG_CAPNP
+ *   SMITHY     -> LSM_LANG_SMITHY
+ *   WIT        -> LSM_LANG_WIT
+ *   QML        -> LSM_LANG_QML
+ *   LIQUID     -> LSM_LANG_LIQUID
+ *   JINJA2     -> LSM_LANG_JINJA2
+ *   BLADE      -> LSM_LANG_BLADE
+ *   PURESCRIPT -> LSM_LANG_PURESCRIPT
+ *   SOQL       -> LSM_LANG_SOQL
+ *   SOSL       -> LSM_LANG_SOSL
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error).
  *   2. labels-valid    : inv_count_bad_labels(r) == 0
@@ -62,7 +62,7 @@
  *                        intentionally have no call metadata because their
  *                        `command` nodes are document records, not applications.
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call).
  *                          Asserted only where both func_types AND call_types are
  *                          non-empty so a Function node can anchor the call
@@ -72,7 +72,7 @@
  *
  * ROBUSTNESS (every language):
  *   R. extract-on-malformed : a deliberately truncated/broken fixture passed
- *      through cbm_extract_file must RETURN non-NULL (has_error may be set). A
+ *      through lsm_extract_file must RETURN non-NULL (has_error may be set). A
  *      NULL return means the extractor crashed/aborted on bad input -- a RED
  *      robustness bug. Implemented via the markup_robustness() helper.
  *
@@ -157,7 +157,7 @@
  * BIBTEX, LIQUID, JINJA2, BLADE, SOQL, SOSL). Returns 0 on PASS, 1 on FAIL.
  */
 static int markup_base_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file) {
+                               LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
@@ -168,7 +168,7 @@ static int markup_base_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -201,7 +201,7 @@ static int markup_base_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -212,7 +212,7 @@ static int markup_base_battery(const char *lang_tag, const char *src,
  * label type is needed. Returns 0 on PASS, 1 on FAIL.
  */
 static int markup_struct_battery(const char *lang_tag, const char *src,
-                                 CBMLanguage lang, const char *file,
+                                 LSMLanguage lang, const char *file,
                                  const char *expect_label,
                                  const char *expect_label2) {
     const char *RED = tf_red();
@@ -225,7 +225,7 @@ static int markup_struct_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -272,7 +272,7 @@ static int markup_struct_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -283,7 +283,7 @@ static int markup_struct_battery(const char *lang_tag, const char *src,
  * Pass NULL for expect_label to skip dim 5. Returns 0 on PASS, 1 on FAIL.
  */
 static int markup_callable_battery(const char *lang_tag, const char *src,
-                                   CBMLanguage lang, const char *file,
+                                   LSMLanguage lang, const char *file,
                                    const char *expect_label,
                                    const char *callee) {
     const char *RED = tf_red();
@@ -296,7 +296,7 @@ static int markup_callable_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -343,7 +343,7 @@ static int markup_callable_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -374,7 +374,7 @@ static int markup_pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -414,24 +414,24 @@ static int markup_pipeline_battery(const char *lang_tag, const char *filename,
 
 /* -- Robustness helper: assert call RETURNS on malformed input --------------
  *
- * A truncated version of the fixture is passed through cbm_extract_file.
+ * A truncated version of the fixture is passed through lsm_extract_file.
  * has_error may be set (1) but the call must return non-NULL. If it returns NULL
  * the extractor crashed or aborted on bad input -- that is a RED robustness bug.
  * Returns 0 on PASS, 1 on FAIL.
  */
 static int markup_robustness(const char *lang_tag, const char *bad_src,
-                             CBMLanguage lang, const char *file) {
+                             LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
-    CBMFileResult *r = cbm_extract_file(bad_src, (int)strlen(bad_src),
+    LSMFileResult *r = lsm_extract_file(bad_src, (int)strlen(bad_src),
                                         lang, "t", file, 0, NULL, NULL);
     if (!r) {
         printf("  %sFAIL%s  [%s] robustness: extractor returned NULL on malformed input\n",
                RED, RST, lang_tag);
         return 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 
@@ -450,13 +450,13 @@ static int markup_robustness(const char *lang_tag, const char *bad_src,
  */
 TEST(repro_grammar_markup_markdown) {
     static const char src[] =
-        "# Codebase Memory\n"
+        "# Logan Spine\n"
         "\n"
         "Intro paragraph with **bold** and a [link](https://example.com).\n"
         "\n"
         "## Installation\n"
         "\n"
-        "    pip install cbm\n"
+        "    pip install lsm\n"
         "\n"
         "Section Title\n"
         "=============\n"
@@ -467,10 +467,10 @@ TEST(repro_grammar_markup_markdown) {
     /* A heading is a "Section" (a valid label), NOT a "Class" — production
      * correctly mints "Section"; assert the accurate label rather than degrade
      * the graph to "Class". */
-    if (markup_struct_battery("Markdown", src, CBM_LANG_MARKDOWN, "README.md",
+    if (markup_struct_battery("Markdown", src, LSM_LANG_MARKDOWN, "README.md",
                               "Section", NULL) != 0)
         return 1;
-    return markup_robustness("Markdown", bad, CBM_LANG_MARKDOWN, "README.md");
+    return markup_robustness("Markdown", bad, LSM_LANG_MARKDOWN, "README.md");
 }
 
 /* -- RST ---------------------------------------------------------------------
@@ -488,7 +488,7 @@ TEST(repro_grammar_markup_markdown) {
 TEST(repro_grammar_markup_rst) {
     static const char src[] =
         "=================\n"
-        "Codebase Memory\n"
+        "Logan Spine\n"
         "=================\n"
         "\n"
         "Introduction\n"
@@ -504,9 +504,9 @@ TEST(repro_grammar_markup_rst) {
         "* bullet one\n"
         "* bullet two\n";
     static const char bad[] = "Title\n=====\n\n.. directive::\n   :broken";
-    if (markup_base_battery("RST", src, CBM_LANG_RST, "index.rst") != 0)
+    if (markup_base_battery("RST", src, LSM_LANG_RST, "index.rst") != 0)
         return 1;
-    return markup_robustness("RST", bad, CBM_LANG_RST, "index.rst");
+    return markup_robustness("RST", bad, LSM_LANG_RST, "index.rst");
 }
 
 /* -- TYPST -------------------------------------------------------------------
@@ -522,7 +522,7 @@ TEST(repro_grammar_markup_rst) {
  * Dim 8 expected GREEN: no dangling CALLS endpoints.
  */
 TEST(repro_grammar_markup_typst) {
-    static const char src[] = "#let title = \"Codebase Memory\"\n"
+    static const char src[] = "#let title = \"Logan Spine\"\n"
                               "#let greet(name) = [Hello, #name!]\n"
                               "#let render() = greet(\"world\")\n"
                               "\n"
@@ -530,10 +530,10 @@ TEST(repro_grammar_markup_typst) {
                               "\n"
                               "Some body text with a #strong[bold] run.\n";
     static const char bad[] = "#let greet(name) = [Hello, #name";
-    if (markup_callable_battery("Typst", src, CBM_LANG_TYPST, "doc.typ",
+    if (markup_callable_battery("Typst", src, LSM_LANG_TYPST, "doc.typ",
                                 "Function", "greet") != 0)
         return 1;
-    if (markup_robustness("Typst", bad, CBM_LANG_TYPST, "doc.typ") != 0)
+    if (markup_robustness("Typst", bad, LSM_LANG_TYPST, "doc.typ") != 0)
         return 1;
     return markup_pipeline_battery("Typst", "doc.typ", src);
 }
@@ -567,9 +567,9 @@ TEST(repro_grammar_markup_bibtex) {
         "  year      = {1986},\n"
         "}\n";
     static const char bad[] = "@article{knuth1984,\n  author = {Donald";
-    if (markup_base_battery("BibTeX", src, CBM_LANG_BIBTEX, "refs.bib") != 0)
+    if (markup_base_battery("BibTeX", src, LSM_LANG_BIBTEX, "refs.bib") != 0)
         return 1;
-    return markup_robustness("BibTeX", bad, CBM_LANG_BIBTEX, "refs.bib");
+    return markup_robustness("BibTeX", bad, LSM_LANG_BIBTEX, "refs.bib");
 }
 
 /* -- MERMAID -----------------------------------------------------------------
@@ -591,9 +591,9 @@ TEST(repro_grammar_markup_mermaid) {
         "    C --> E[End]\n"
         "    D --> E\n";
     static const char bad[] = "flowchart TD\n    A[Start] --> ";
-    if (markup_base_battery("Mermaid", src, CBM_LANG_MERMAID, "diagram.mmd") != 0)
+    if (markup_base_battery("Mermaid", src, LSM_LANG_MERMAID, "diagram.mmd") != 0)
         return 1;
-    return markup_robustness("Mermaid", bad, CBM_LANG_MERMAID, "diagram.mmd");
+    return markup_robustness("Mermaid", bad, LSM_LANG_MERMAID, "diagram.mmd");
 }
 
 /* -- PO ----------------------------------------------------------------------
@@ -620,9 +620,9 @@ TEST(repro_grammar_markup_po) {
         "msgid \"Goodbye\"\n"
         "msgstr \"Auf Wiedersehen\"\n";
     static const char bad[] = "msgid \"Hello\"\nmsgstr ";
-    if (markup_base_battery("PO", src, CBM_LANG_PO, "de.po") != 0)
+    if (markup_base_battery("PO", src, LSM_LANG_PO, "de.po") != 0)
         return 1;
-    return markup_robustness("PO", bad, CBM_LANG_PO, "de.po");
+    return markup_robustness("PO", bad, LSM_LANG_PO, "de.po");
 }
 
 /* -- DIFF --------------------------------------------------------------------
@@ -650,9 +650,9 @@ TEST(repro_grammar_markup_diff) {
         "+func new() {}\n"
         " // trailing\n";
     static const char bad[] = "diff --git a/x b/x\n@@ -1,4 +1,";
-    if (markup_base_battery("Diff", src, CBM_LANG_DIFF, "change.diff") != 0)
+    if (markup_base_battery("Diff", src, LSM_LANG_DIFF, "change.diff") != 0)
         return 1;
-    return markup_robustness("Diff", bad, CBM_LANG_DIFF, "change.diff");
+    return markup_robustness("Diff", bad, LSM_LANG_DIFF, "change.diff");
 }
 
 /* -- REGEX -------------------------------------------------------------------
@@ -670,9 +670,9 @@ TEST(repro_grammar_markup_regex) {
         "^(?P<year>\\d{4})-(?P<month>\\d{2})-(?P<day>\\d{2})"
         "([Tt]\\d{2}:\\d{2}(:\\d{2})?)?$";
     static const char bad[] = "^(?P<year>\\d{4}-(?P<month";
-    if (markup_base_battery("Regex", src, CBM_LANG_REGEX, "date.re") != 0)
+    if (markup_base_battery("Regex", src, LSM_LANG_REGEX, "date.re") != 0)
         return 1;
-    return markup_robustness("Regex", bad, CBM_LANG_REGEX, "date.re");
+    return markup_robustness("Regex", bad, LSM_LANG_REGEX, "date.re");
 }
 
 /* -- CAPNP -------------------------------------------------------------------
@@ -701,10 +701,10 @@ TEST(repro_grammar_markup_capnp) {
         "  getUser @0 (id :UInt64) -> (user :User);\n"
         "}\n";
     static const char bad[] = "struct User {\n  id @0 :UInt64";
-    if (markup_struct_battery("CapnP", src, CBM_LANG_CAPNP, "user.capnp",
+    if (markup_struct_battery("CapnP", src, LSM_LANG_CAPNP, "user.capnp",
                               "Class", "Function") != 0)
         return 1;
-    return markup_robustness("CapnP", bad, CBM_LANG_CAPNP, "user.capnp");
+    return markup_robustness("CapnP", bad, LSM_LANG_CAPNP, "user.capnp");
 }
 
 /* -- SMITHY ------------------------------------------------------------------
@@ -739,10 +739,10 @@ TEST(repro_grammar_markup_smithy) {
         "  output: User\n"
         "}\n";
     static const char bad[] = "structure User {\n  id: String\n  name";
-    if (markup_struct_battery("Smithy", src, CBM_LANG_SMITHY, "model.smithy",
+    if (markup_struct_battery("Smithy", src, LSM_LANG_SMITHY, "model.smithy",
                               "Class", "Function") != 0)
         return 1;
-    return markup_robustness("Smithy", bad, CBM_LANG_SMITHY, "model.smithy");
+    return markup_robustness("Smithy", bad, LSM_LANG_SMITHY, "model.smithy");
 }
 
 /* -- WIT ---------------------------------------------------------------------
@@ -773,10 +773,10 @@ TEST(repro_grammar_markup_wit) {
         "  export types;\n"
         "}\n";
     static const char bad[] = "interface types {\n  record user {\n    id: u64";
-    if (markup_struct_battery("WIT", src, CBM_LANG_WIT, "users.wit",
+    if (markup_struct_battery("WIT", src, LSM_LANG_WIT, "users.wit",
                               "Class", "Function") != 0)
         return 1;
-    return markup_robustness("WIT", bad, CBM_LANG_WIT, "users.wit");
+    return markup_robustness("WIT", bad, LSM_LANG_WIT, "users.wit");
 }
 
 /* -- QML ---------------------------------------------------------------------
@@ -818,10 +818,10 @@ TEST(repro_grammar_markup_qml) {
         "    height: 50\n"
         "}\n";
     static const char bad[] = "Rectangle {\n    function doubleWidth(w) {\n        return";
-    if (markup_callable_battery("QML", src, CBM_LANG_QML, "Widget.qml",
+    if (markup_callable_battery("QML", src, LSM_LANG_QML, "Widget.qml",
                                 "Function", "max") != 0)
         return 1;
-    if (markup_robustness("QML", bad, CBM_LANG_QML, "Widget.qml") != 0)
+    if (markup_robustness("QML", bad, LSM_LANG_QML, "Widget.qml") != 0)
         return 1;
     return markup_pipeline_battery("QML", "Widget.qml", src);
 }
@@ -851,9 +851,9 @@ TEST(repro_grammar_markup_liquid) {
         "\n"
         "{% include 'footer.liquid' %}\n";
     static const char bad[] = "{% if user %}\n  <p>{{ user.name";
-    if (markup_base_battery("Liquid", src, CBM_LANG_LIQUID, "page.liquid") != 0)
+    if (markup_base_battery("Liquid", src, LSM_LANG_LIQUID, "page.liquid") != 0)
         return 1;
-    return markup_robustness("Liquid", bad, CBM_LANG_LIQUID, "page.liquid");
+    return markup_robustness("Liquid", bad, LSM_LANG_LIQUID, "page.liquid");
 }
 
 /* -- JINJA2 ------------------------------------------------------------------
@@ -865,7 +865,7 @@ TEST(repro_grammar_markup_liquid) {
  * Dims 5-8 SKIPPED: no def/call types in spec.
  * Expected GREEN: dims 1-4. extract-clean RED would indicate the Jinja2 grammar
  * misparses standard {% %} statements and {{ }} expressions.
- * (Enum is CBM_LANG_JINJA2, verified at cbm.h:114.)
+ * (Enum is LSM_LANG_JINJA2, verified at lsm.h:114.)
  */
 TEST(repro_grammar_markup_jinja2) {
     static const char src[] =
@@ -879,9 +879,9 @@ TEST(repro_grammar_markup_jinja2) {
         "  </ul>\n"
         "{% endblock %}\n";
     static const char bad[] = "{% block content %}\n  {% for item in";
-    if (markup_base_battery("Jinja2", src, CBM_LANG_JINJA2, "page.j2") != 0)
+    if (markup_base_battery("Jinja2", src, LSM_LANG_JINJA2, "page.j2") != 0)
         return 1;
-    return markup_robustness("Jinja2", bad, CBM_LANG_JINJA2, "page.j2");
+    return markup_robustness("Jinja2", bad, LSM_LANG_JINJA2, "page.j2");
 }
 
 /* -- BLADE -------------------------------------------------------------------
@@ -906,9 +906,9 @@ TEST(repro_grammar_markup_blade) {
         "  </ul>\n"
         "@endsection\n";
     static const char bad[] = "@section('content')\n  @foreach ($items as";
-    if (markup_base_battery("Blade", src, CBM_LANG_BLADE, "page.blade.php") != 0)
+    if (markup_base_battery("Blade", src, LSM_LANG_BLADE, "page.blade.php") != 0)
         return 1;
-    return markup_robustness("Blade", bad, CBM_LANG_BLADE, "page.blade.php");
+    return markup_robustness("Blade", bad, LSM_LANG_BLADE, "page.blade.php");
 }
 
 /* -- PURESCRIPT --------------------------------------------------------------
@@ -941,10 +941,10 @@ TEST(repro_grammar_markup_purescript) {
         "main :: Effect Unit\n"
         "main = log (greet \"world\")\n";
     static const char bad[] = "module Main where\n\ngreet name = \"Hello, \" <>";
-    if (markup_callable_battery("PureScript", src, CBM_LANG_PURESCRIPT, "Main.purs",
+    if (markup_callable_battery("PureScript", src, LSM_LANG_PURESCRIPT, "Main.purs",
                                 "Function", "greet") != 0)
         return 1;
-    if (markup_robustness("PureScript", bad, CBM_LANG_PURESCRIPT, "Main.purs") != 0)
+    if (markup_robustness("PureScript", bad, LSM_LANG_PURESCRIPT, "Main.purs") != 0)
         return 1;
     return markup_pipeline_battery("PureScript", "Main.purs", src);
 }
@@ -969,9 +969,9 @@ TEST(repro_grammar_markup_soql) {
         "ORDER BY Name ASC\n"
         "LIMIT 100\n";
     static const char bad[] = "SELECT Id, Name FROM Contact WHERE";
-    if (markup_base_battery("SOQL", src, CBM_LANG_SOQL, "query.soql") != 0)
+    if (markup_base_battery("SOQL", src, LSM_LANG_SOQL, "query.soql") != 0)
         return 1;
-    return markup_robustness("SOQL", bad, CBM_LANG_SOQL, "query.soql");
+    return markup_robustness("SOQL", bad, LSM_LANG_SOQL, "query.soql");
 }
 
 /* -- SOSL --------------------------------------------------------------------
@@ -992,9 +992,9 @@ TEST(repro_grammar_markup_sosl) {
         "          Contact(Id, FirstName, LastName)\n"
         "LIMIT 50\n";
     static const char bad[] = "FIND {Acme*} IN NAME FIELDS RETURNING";
-    if (markup_base_battery("SOSL", src, CBM_LANG_SOSL, "search.sosl") != 0)
+    if (markup_base_battery("SOSL", src, LSM_LANG_SOSL, "search.sosl") != 0)
         return 1;
-    return markup_robustness("SOSL", bad, CBM_LANG_SOSL, "search.sosl");
+    return markup_robustness("SOSL", bad, LSM_LANG_SOSL, "search.sosl");
 }
 
 /* -- Suite ------------------------------------------------------------------- */

@@ -6,8 +6,8 @@
  * Production code outside compat_fs.c should use the public APIs in
  * compat_fs.h instead.
  */
-#ifndef CBM_FOUNDATION_COMPAT_FS_INTERNAL_H
-#define CBM_FOUNDATION_COMPAT_FS_INTERNAL_H
+#ifndef LSM_FOUNDATION_COMPAT_FS_INTERNAL_H
+#define LSM_FOUNDATION_COMPAT_FS_INTERNAL_H
 
 #ifdef _WIN32
 
@@ -15,7 +15,7 @@
 
 /*
  * Build a properly-quoted Windows command line from a NULL-terminated
- * argv array. This is the quoting step underlying cbm_exec_no_shell on
+ * argv array. This is the quoting step underlying lsm_exec_no_shell on
  * Windows: it is what turns {"taskkill", "/FI", "IMAGENAME eq foo.exe"}
  * into `taskkill /FI "IMAGENAME eq foo.exe"` rather than three bare
  * tokens (the #697 regression).
@@ -29,18 +29,18 @@
  * Returns a heap-allocated wide string the caller must free(), or NULL on
  * allocation failure.
  */
-wchar_t *cbm_build_cmdline(const char *const *argv);
+wchar_t *lsm_build_cmdline(const char *const *argv);
 
 /*
  * Test hook for the isolated popen path (#798): returns 1 when the most
- * recent cbm_popen(..., "r") stream was produced by the isolated
+ * recent lsm_popen(..., "r") stream was produced by the isolated
  * CreateProcessW + PROC_THREAD_ATTRIBUTE_HANDLE_LIST spawn, 0 otherwise
  * (e.g. a non-read mode routed to _popen, or a failed isolated spawn).
  * Not synchronized across threads; intended for single-threaded test
  * assertions only.
  */
-int cbm_popen_last_was_isolated(void);
+int lsm_popen_last_was_isolated(void);
 
 #endif /* _WIN32 */
 
-#endif /* CBM_FOUNDATION_COMPAT_FS_INTERNAL_H */
+#endif /* LSM_FOUNDATION_COMPAT_FS_INTERNAL_H */

@@ -26,7 +26,7 @@
  * is 95%+ — see docs/BENCHMARK_PYTHON.md).
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/py_lsp.h"
 #include <stdlib.h>
 #include <time.h>
@@ -226,7 +226,7 @@ TEST(pylsp_bench_resolution_ratio) {
     struct timespec t0;
     struct timespec t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    CBMFileResult *r = cbm_extract_file(bench_source, slen, CBM_LANG_PYTHON,
+    LSMFileResult *r = lsm_extract_file(bench_source, slen, LSM_LANG_PYTHON,
                                         "test", "bench.py", 0, NULL, NULL);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     ASSERT_NOT_NULL(r);
@@ -244,7 +244,7 @@ TEST(pylsp_bench_resolution_ratio) {
            loc, calls, resolved, ratio * 100.0, ms);
 
     /* Free the result BEFORE asserting so a budget miss doesn't leak. */
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     ASSERT_GTE(calls, 1);
     ASSERT_GTE(resolved, 1);

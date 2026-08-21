@@ -25,12 +25,12 @@ that guard the daemon's PRODUCT contract under stress and misuse:
 Every daemon this guard starts carries a kill-by-pid backstop so a stuck
 daemon can never hang the suite. Each section runs under its OWN cache
 directory: daemon coordination is cache-scoped, so sections are isolated from
-each other and from any interactive CBM use on the host.
+each other and from any interactive LSM use on the host.
 
 Exit code: 0 == all sections green, 1 == regression, 2 == setup error.
 
 Usage:
-    python test_daemon_stability.py <path-to-codebase-memory-mcp[.exe]>
+    python test_daemon_stability.py <path-to-logan-spine-mcp[.exe]>
 """
 import json
 import os
@@ -48,7 +48,7 @@ STATUS_POLL_S = 0.5
 
 def run_cli(binary, cache, args, stdin=None, timeout=90):
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = cache
+    env["LSM_CACHE_DIR"] = cache
     return subprocess.run([binary] + args, capture_output=True, timeout=timeout,
                           env=env, input=stdin)
 
@@ -133,7 +133,7 @@ def section_hook_fail_open(binary, work):
         print("RED: hook-augment without a daemon must fail OPEN (exit 0), got rc=%d:\n%s"
               % (first.returncode, (first_out + first_err)[:300]))
         return False
-    if "systemMessage" not in first_out or "no CBM daemon" not in first_err:
+    if "systemMessage" not in first_out or "no LSM daemon" not in first_err:
         print("RED: the first absent-daemon hook call must surface the visible notice "
               "(stdout systemMessage + stderr):\nstdout=%r\nstderr=%r"
               % (first_out[:200], first_err[:200]))
@@ -206,7 +206,7 @@ def section_stop_refuses_busy(binary, work):
             print("SETUP FAIL: permanent daemon did not start for the busy-stop check")
             return False
         env = dict(os.environ)
-        env["CBM_CACHE_DIR"] = cache
+        env["LSM_CACHE_DIR"] = cache
         session = subprocess.Popen([binary], stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                    env=env)
@@ -378,7 +378,7 @@ def main():
         print("FAIL: binary not found: %s" % binary)
         return 2
 
-    work = tempfile.mkdtemp(prefix="cbm_daemon_stab_")
+    work = tempfile.mkdtemp(prefix="lsm_daemon_stab_")
     sections = [
         section_params,
         section_hook_fail_open,

@@ -7,35 +7,35 @@
 
 #include <string.h>
 
-static int crc_edge_count(cbm_store_t *store, const char *project, const char *type,
+static int crc_edge_count(lsm_store_t *store, const char *project, const char *type,
                           const char *source_name, const char *target_label,
                           const char *target_name) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    if (cbm_store_find_edges_by_type(store, project, type, &edges, &edge_count) != CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_type(store, project, type, &edges, &edge_count) != LSM_STORE_OK) {
         return -1;
     }
     int matches = 0;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t source = {0};
-        cbm_node_t target = {0};
+        lsm_node_t source = {0};
+        lsm_node_t target = {0};
         bool source_ok =
-            cbm_store_find_node_by_id(store, edges[i].source_id, &source) == CBM_STORE_OK;
+            lsm_store_find_node_by_id(store, edges[i].source_id, &source) == LSM_STORE_OK;
         bool target_ok =
-            cbm_store_find_node_by_id(store, edges[i].target_id, &target) == CBM_STORE_OK;
+            lsm_store_find_node_by_id(store, edges[i].target_id, &target) == LSM_STORE_OK;
         if (source_ok && target_ok && source.name && target.name &&
             strcmp(source.name, source_name) == 0 && strcmp(target.name, target_name) == 0 &&
             (!target_label || (target.label && strcmp(target.label, target_label) == 0))) {
             matches++;
         }
-        cbm_node_free_fields(&source);
-        cbm_node_free_fields(&target);
+        lsm_node_free_fields(&source);
+        lsm_node_free_fields(&target);
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     return matches;
 }
 
-static int crc_global_handler_edge_count(cbm_store_t *store, const char *project,
+static int crc_global_handler_edge_count(lsm_store_t *store, const char *project,
                                          const char *caller) {
     int references =
         crc_edge_count(store, project, "CALL_REFERENCE", caller, "Function", "handler");
@@ -44,10 +44,10 @@ static int crc_global_handler_edge_count(cbm_store_t *store, const char *project
     return references < 0 || calls < 0 || usages < 0 ? -1 : references + calls + usages;
 }
 
-static int crc_function_count(cbm_store_t *store, const char *project, const char *name) {
-    cbm_node_t *nodes = NULL;
+static int crc_function_count(lsm_store_t *store, const char *project, const char *name) {
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
-    if (cbm_store_find_nodes_by_name(store, project, name, &nodes, &node_count) != CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_name(store, project, name, &nodes, &node_count) != LSM_STORE_OK) {
         return -1;
     }
     int functions = 0;
@@ -56,7 +56,7 @@ static int crc_function_count(cbm_store_t *store, const char *project, const cha
             functions++;
         }
     }
-    cbm_store_free_nodes(nodes, node_count);
+    lsm_store_free_nodes(nodes, node_count);
     return functions;
 }
 
@@ -65,7 +65,7 @@ TEST(call_reference_typescript_direct_argument_is_exact) {
                                  "function register(callback: () => void): void {}\n"
                                  "function bootstrap(): void { register(handler); }\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "main.ts", source);
+    lsm_store_t *store = rh_index(&project, "main.ts", source);
     ASSERT_NOT_NULL(store);
     int registrar =
         crc_edge_count(store, project.project, "CALLS", "bootstrap", "Function", "register");
@@ -90,7 +90,7 @@ TEST(call_reference_kotlin_alias_argument_is_exact) {
                                  "  accept(callback)\n"
                                  "}\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "AliasArgument.kt", source);
+    lsm_store_t *store = rh_index(&project, "AliasArgument.kt", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Function", "handler");
@@ -113,7 +113,7 @@ TEST(call_reference_python_use_before_local_shadow_is_not_global) {
                                  "    accept(handler)\n"
                                  "    handler = lambda: None\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "shadow.py", source);
+    lsm_store_t *store = rh_index(&project, "shadow.py", source);
     ASSERT_NOT_NULL(store);
     int registrar = crc_edge_count(store, project.project, "CALLS", "caller", "Function", "accept");
     int handler_nodes = crc_function_count(store, project.project, "handler");
@@ -133,7 +133,7 @@ TEST(call_reference_javascript_use_before_local_shadow_is_not_global) {
                                  "  const handler = () => {};\n"
                                  "}\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "shadow.js", source);
+    lsm_store_t *store = rh_index(&project, "shadow.js", source);
     ASSERT_NOT_NULL(store);
     int registrar = crc_edge_count(store, project.project, "CALLS", "caller", "Function", "accept");
     int handler_nodes = crc_function_count(store, project.project, "handler");
@@ -153,7 +153,7 @@ TEST(call_reference_typescript_use_before_local_shadow_is_not_global) {
                                  "  const handler = (): void => {};\n"
                                  "}\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "shadow.ts", source);
+    lsm_store_t *store = rh_index(&project, "shadow.ts", source);
     ASSERT_NOT_NULL(store);
     int registrar = crc_edge_count(store, project.project, "CALLS", "caller", "Function", "accept");
     int handler_nodes = crc_function_count(store, project.project, "handler");
@@ -173,7 +173,7 @@ TEST(call_reference_python_keyword_argument_is_exact) {
                                  "def argument():\n"
                                  "    accept(callback=handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "keyword.py", source);
+    lsm_store_t *store = rh_index(&project, "keyword.py", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Function", "handler");
@@ -196,7 +196,7 @@ TEST(call_reference_python_bound_method_argument_is_exact) {
                                  "def argument(service: Service):\n"
                                  "    accept(service.handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "bound.py", source);
+    lsm_store_t *store = rh_index(&project, "bound.py", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Method", "handler");
@@ -219,7 +219,7 @@ TEST(call_reference_python_parenthesized_bound_method_is_exact) {
                                  "def argument(service: Service):\n"
                                  "    accept((service.handler))\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "parenthesized.py", source);
+    lsm_store_t *store = rh_index(&project, "parenthesized.py", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Method", "handler");
@@ -244,7 +244,7 @@ TEST(call_reference_python_instance_field_shadow_is_not_method) {
                                  "def argument(service: Service):\n"
                                  "    accept(service.handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "field_shadow.py", source);
+    lsm_store_t *store = rh_index(&project, "field_shadow.py", source);
     ASSERT_NOT_NULL(store);
     int method_reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Method", "handler");
@@ -271,7 +271,7 @@ TEST(call_reference_python_property_value_stays_usage) {
                                  "def argument(service: Service):\n"
                                  "    accept(service.handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "property.py", source);
+    lsm_store_t *store = rh_index(&project, "property.py", source);
     ASSERT_NOT_NULL(store);
     int accept_call =
         crc_edge_count(store, project.project, "CALLS", "argument", "Function", "accept");
@@ -300,7 +300,7 @@ TEST(call_reference_python_unknown_decorated_value_stays_usage) {
                                  "def argument(service: Service):\n"
                                  "    accept(service.handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "unknown_decorator.py", source);
+    lsm_store_t *store = rh_index(&project, "unknown_decorator.py", source);
     ASSERT_NOT_NULL(store);
     int accept_call =
         crc_edge_count(store, project.project, "CALLS", "argument", "Function", "accept");
@@ -330,7 +330,7 @@ TEST(call_reference_python_later_decorated_function_rebinding_stays_usage) {
                                  "def argument():\n"
                                  "    accept(handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "function_rebinding.py", source);
+    lsm_store_t *store = rh_index(&project, "function_rebinding.py", source);
     ASSERT_NOT_NULL(store);
     int accept_call =
         crc_edge_count(store, project.project, "CALLS", "argument", "Function", "accept");
@@ -361,7 +361,7 @@ TEST(call_reference_python_later_decorated_method_rebinding_stays_usage) {
                                  "def argument(service: Service):\n"
                                  "    accept(service.handler)\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "method_rebinding.py", source);
+    lsm_store_t *store = rh_index(&project, "method_rebinding.py", source);
     ASSERT_NOT_NULL(store);
     int accept_call =
         crc_edge_count(store, project.project, "CALLS", "argument", "Function", "accept");
@@ -385,7 +385,7 @@ TEST(call_reference_go_bound_method_argument_is_exact) {
                                  "func accept(callback func()) {}\n"
                                  "func argument(service Service) { accept(service.handler) }\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "bound.go", source);
+    lsm_store_t *store = rh_index(&project, "bound.go", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Method", "handler");
@@ -409,7 +409,7 @@ TEST(call_reference_go_ambiguous_promoted_method_stays_usage) {
                                  "func accept(callback func()) {}\n"
                                  "func argument(service Service) { accept(service.handler) }\n";
     RProj project;
-    cbm_store_t *store = rh_index(&project, "ambiguous.go", source);
+    lsm_store_t *store = rh_index(&project, "ambiguous.go", source);
     ASSERT_NOT_NULL(store);
     int reference =
         crc_edge_count(store, project.project, "CALL_REFERENCE", "argument", "Method", "handler");

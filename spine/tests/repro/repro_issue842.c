@@ -18,7 +18,7 @@
  *   2. resolve_file_throws (pass_parallel.c) — THROWS/RAISES edge source for
  *      a thrown/raised exception.
  *
- * Both called cbm_gbuf_find_by_qn(enclosing_func_qn) directly, with no guard
+ * Both called lsm_gbuf_find_by_qn(enclosing_func_qn) directly, with no guard
  * against the lookup landing on a Folder/Project node — the exact #787 root
  * cause, just unguarded at two more sites.
  *
@@ -207,16 +207,16 @@ static int collect_edge_sources(const RFile *files, int nfiles, const char *node
                                 const char *node_label, const char *edge_type, char **out,
                                 int cap) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         return -1;
     }
 
-    cbm_node_t *candidates = NULL;
+    lsm_node_t *candidates = NULL;
     int ncand = 0;
-    int rc = cbm_store_find_nodes_by_name(store, lp.project, node_name, &candidates, &ncand);
-    if (rc != CBM_STORE_OK || ncand == 0) {
-        cbm_store_free_nodes(candidates, ncand);
+    int rc = lsm_store_find_nodes_by_name(store, lp.project, node_name, &candidates, &ncand);
+    if (rc != LSM_STORE_OK || ncand == 0) {
+        lsm_store_free_nodes(candidates, ncand);
         rh_cleanup(&lp, store);
         return -1;
     }
@@ -229,25 +229,25 @@ static int collect_edge_sources(const RFile *files, int nfiles, const char *node
             break;
         }
     }
-    cbm_store_free_nodes(candidates, ncand);
+    lsm_store_free_nodes(candidates, ncand);
 
     if (!target_id) {
         rh_cleanup(&lp, store);
         return -1;
     }
 
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int nedges = 0;
-    rc = cbm_store_find_edges_by_target_type(store, target_id, edge_type, &edges, &nedges);
-    if (rc != CBM_STORE_OK) {
+    rc = lsm_store_find_edges_by_target_type(store, target_id, edge_type, &edges, &nedges);
+    if (rc != LSM_STORE_OK) {
         rh_cleanup(&lp, store);
         return -1;
     }
 
     int found = 0;
     for (int i = 0; i < nedges && found < cap; i++) {
-        cbm_node_t src_node;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &src_node) != CBM_STORE_OK) {
+        lsm_node_t src_node;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &src_node) != LSM_STORE_OK) {
             continue;
         }
         if (!src_node.file_path || !src_node.file_path[0]) {
@@ -267,7 +267,7 @@ static int collect_edge_sources(const RFile *files, int nfiles, const char *node
         out[found++] = strdup(src_node.file_path);
     }
 
-    cbm_store_free_edges(edges, nedges);
+    lsm_store_free_edges(edges, nedges);
     rh_cleanup(&lp, store);
     return found;
 }
@@ -311,7 +311,7 @@ static int check_sources_exact(char **paths, int count, const char **expected, i
  * package Folder node.
  *
  * RED on buggy HEAD: create_env_configures_for_file resolves `src` via a
- * direct cbm_gbuf_find_by_qn(enclosing_func_qn) with no dir-container guard,
+ * direct lsm_gbuf_find_by_qn(enclosing_func_qn) with no dir-container guard,
  * so both files' static-block env accesses source from the one shared
  * Folder/Module node for org.example.owner — the distinct source set has 1
  * entry (whichever file's Module def was upserted/merged last) instead of 2.
@@ -351,7 +351,7 @@ TEST(repro_issue842_env_configures_exact_sources) {
  * build_parallel_fixture's comment).
  *
  * RED on buggy HEAD: resolve_file_throws resolves `src` via a direct
- * cbm_gbuf_find_by_qn(enclosing_func_qn) with no dir-container guard and no
+ * lsm_gbuf_find_by_qn(enclosing_func_qn) with no dir-container guard and no
  * File-node fallback at all (a miss just skips the edge) — both files'
  * static-block throws source from the one shared Folder/Module node, so the
  * distinct source set has 1 entry instead of 2.

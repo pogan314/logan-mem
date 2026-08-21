@@ -3,7 +3,7 @@
 
 Reads scripts/new-languages.json and generates:
 1. Grammar wrapper .c files (written directly)
-2. Enum entries for cbm.h
+2. Enum entries for lsm.h
 3. Lang spec entries for lang_specs.c (designated initializer + factory)
 4. Extension/filename/name entries for language.c
 """
@@ -14,7 +14,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 MANIFEST = os.path.join(SCRIPT_DIR, "new-languages.json")
-GRAMMAR_DIR = os.path.join(PROJECT_DIR, "internal", "cbm")
+GRAMMAR_DIR = os.path.join(PROJECT_DIR, "internal", "lsm")
 
 
 def main():
@@ -57,10 +57,10 @@ def generate_wrappers(langs):
 
 
 def generate_enum(langs):
-    """Print enum entries for cbm.h."""
-    print("\n=== Enum Entries (paste into cbm.h before CBM_LANG_KUSTOMIZE) ===")
+    """Print enum entries for lsm.h."""
+    print("\n=== Enum Entries (paste into lsm.h before LSM_LANG_KUSTOMIZE) ===")
     for lang in langs:
-        print(f"    CBM_LANG_{lang['enum']},")
+        print(f"    LSM_LANG_{lang['enum']},")
 
 
 def generate_specs(langs):
@@ -79,9 +79,9 @@ def generate_specs(langs):
     print("\n=== Spec Table Entries (paste into lang_specs[]) ===")
     for lang in langs:
         mod = f"{lang['name']}_module_types"
-        print(f"    // CBM_LANG_{lang['enum']}")
+        print(f"    // LSM_LANG_{lang['enum']}")
         print(
-            f"    [CBM_LANG_{lang['enum']}] = {{CBM_LANG_{lang['enum']}, "
+            f"    [LSM_LANG_{lang['enum']}] = {{LSM_LANG_{lang['enum']}, "
             f"empty_types, empty_types, empty_types, {mod}, "
             f"empty_types, empty_types, empty_types, empty_types, "
             f"empty_types, empty_types, empty_types, NULL, empty_types, "
@@ -99,18 +99,18 @@ def generate_language_c(langs):
             ext_entries.append((ext, lang["enum"], lang["display"]))
     for ext, enum, display in sorted(ext_entries, key=lambda x: x[0].lower()):
         print(f'    /* {display} */')
-        print(f'    {{"{ext}", CBM_LANG_{enum}}},')
+        print(f'    {{"{ext}", LSM_LANG_{enum}}},')
         print()
 
     print("\n=== FILENAME_TABLE Entries ===")
     for lang in langs:
         for fn in lang["filenames"]:
-            print(f'    {{"{fn}", CBM_LANG_{lang["enum"]}}},')
+            print(f'    {{"{fn}", LSM_LANG_{lang["enum"]}}},')
 
     print("\n=== LANG_NAMES Entries ===")
     for lang in langs:
         print(
-            f'    [CBM_LANG_{lang["enum"]}] = "{lang["display"]}",'
+            f'    [LSM_LANG_{lang["enum"]}] = "{lang["display"]}",'
         )
 
 

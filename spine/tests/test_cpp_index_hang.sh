@@ -3,7 +3,7 @@
 # "won't finish indexing big C++ codebases".
 #
 # Root cause: the C/C++ cross-LSP resolve looked up method/symbol overloads with
-# a LINEAR scan over the whole project's registered funcs (cbm_registry_lookup_
+# a LINEAR scan over the whole project's registered funcs (lsm_registry_lookup_
 # method_by_types / _by_args / lookup_symbol_by_* in type_registry.c). On a large
 # translation unit (the reported Model.hpp had 10989 defs) this made the per-file
 # resolve O(calls × project_funcs) — ~34s for ONE header — so a repo with many
@@ -25,22 +25,22 @@
 #
 # Usage:
 #   bash tests/test_cpp_index_hang.sh
-#   CBM_HANG_TIMEOUT=60 CBM_HANG_CLASSES=6000 bash tests/test_cpp_index_hang.sh
+#   LSM_HANG_TIMEOUT=60 LSM_HANG_CLASSES=6000 bash tests/test_cpp_index_hang.sh
 
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/build/c/codebase-memory-mcp"
+BIN="$ROOT/build/c/logan-spine-mcp"
 
 # Number of classes/methods in the synthetic TU. Each class has a method that
 # calls the next class's method by value-of-known-type → routes through the
 # linear overload-lookup hot path. 5000 is enough to make the unfixed code take
 # minutes while the fixed code stays well under a couple of seconds.
-CLASSES="${CBM_HANG_CLASSES:-5000}"
+CLASSES="${LSM_HANG_CLASSES:-5000}"
 # Wall-clock budget. The fixed index finishes in ~1-3s; the unfixed O(n^2) needs
 # minutes. 45s gives huge head-room for the fixed path on a loaded laptop while
 # still catching the hang.
-TIMEOUT="${CBM_HANG_TIMEOUT:-45}"
+TIMEOUT="${LSM_HANG_TIMEOUT:-45}"
 
 if [ ! -x "$BIN" ]; then
     echo "[hang] building prod binary ..."
@@ -49,7 +49,7 @@ fi
 [ -x "$BIN" ] || { echo "[hang] FAIL — binary not found at $BIN"; exit 1; }
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"; rm -f "$HOME/.cache/codebase-memory-mcp/$PROJ.db"* 2>/dev/null' EXIT
+trap 'rm -rf "$WORK"; rm -f "$HOME/.cache/logan-spine-mcp/$PROJ.db"* 2>/dev/null' EXIT
 
 HDR="$WORK/model.hpp"
 SRC="$WORK/main.cpp"
@@ -57,7 +57,7 @@ SRC="$WORK/main.cpp"
 echo "[hang] generating synthetic TU: $CLASSES classes/methods ..."
 # Header: a chain of classes C0..CN. Each Ck has a method work() that constructs
 # the next class and calls its work(). Member calls (obj.work()) on a known local
-# type go through cbm_registry_lookup_method_by_types — the O(project_funcs) scan.
+# type go through lsm_registry_lookup_method_by_types — the O(project_funcs) scan.
 {
     echo '#pragma once'
     echo 'namespace model {'
@@ -81,7 +81,7 @@ echo "[hang] generating synthetic TU: $CLASSES classes/methods ..."
 } > "$SRC"
 
 PROJ="$(printf '%s' "$WORK" | sed 's#^/##; s#[^A-Za-z0-9._-]#-#g')"
-rm -f "$HOME/.cache/codebase-memory-mcp/$PROJ.db"* 2>/dev/null
+rm -f "$HOME/.cache/logan-spine-mcp/$PROJ.db"* 2>/dev/null
 
 echo "[hang] indexing with ${TIMEOUT}s wall-clock budget ..."
 START=$(date +%s)

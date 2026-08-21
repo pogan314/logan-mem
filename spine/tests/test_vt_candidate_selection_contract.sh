@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FIX="$(mktemp -d "${TMPDIR:-/tmp}/cbm-vt-select.XXXXXX")"
+FIX="$(mktemp -d "${TMPDIR:-/tmp}/lsm-vt-select.XXXXXX")"
 trap 'rm -rf "$FIX"' EXIT
 
 STAGE="$ROOT/scripts/ci/stage-release-candidates.py"
@@ -55,13 +55,13 @@ RESULT_FIELDS = (
     "microsoft_engine_version", "microsoft_engine_update", "virustotal_url",
 )
 ARCHIVES = tuple(
-    f"codebase-memory-mcp-{target}.tar.gz"
+    f"logan-spine-mcp-{target}.tar.gz"
     for target in TARGETS if not target.startswith("windows-")
 ) + tuple(
-    f"codebase-memory-mcp-{target}.zip"
+    f"logan-spine-mcp-{target}.zip"
     for target in TARGETS if target.startswith("windows-")
 ) + tuple(
-    f"codebase-memory-mcp-{target}.mcpb"
+    f"logan-spine-mcp-{target}.mcpb"
     for target in TARGETS
     if target.startswith(("darwin-", "windows-")) or target.endswith("-portable")
 )
@@ -106,7 +106,7 @@ def write_tsv(path: pathlib.Path, marker: str, metadata: dict[str, object],
 
 
 def candidate_bytes(target: str, variant: str) -> bytes:
-    linked = f"codebase-memory-mcp:{target}:same-linker-output\n".encode()
+    linked = f"logan-spine-mcp:{target}:same-linker-output\n".encode()
     suffix = {
         "unstripped": b"debug-and-local-symbols\n",
         "debug-stripped": b"local-symbols-only\n",
@@ -124,7 +124,7 @@ def make_artifacts(directory: pathlib.Path, *, reverse: bool = False) -> dict[tu
         rows = []
         source_hash = digest(candidate_bytes(target, "unstripped"))
         for variant in VARIANTS:
-            name = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+            name = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
             data = candidate_bytes(target, variant)
             objects[target, variant] = data
             path = artifact / variant / name
@@ -149,7 +149,7 @@ def make_artifacts(directory: pathlib.Path, *, reverse: bool = False) -> dict[tu
                 "pair_verification": "same-linker-output-v1",
             })
         write_tsv(artifact / "candidate-provenance.tsv",
-                  "cbm-release-candidate-provenance-v1", {}, FIELDS, rows)
+                  "lsm-release-candidate-provenance-v1", {}, FIELDS, rows)
         # Required target-bound notice adjacent to each downloaded artifact.
         (artifact / "THIRD_PARTY_NOTICES.md").write_text(
             f"third-party notice for {target}\n", encoding="utf-8")
@@ -170,7 +170,7 @@ require(sorted(path.name for path in staged.iterdir()) ==
         "stager output is not the exact atomic bundle")
 
 cmeta, candidates = manifest(staged / "candidates.tsv")
-require(cmeta["marker"] == "# cbm-release-candidates-v1", "candidate marker changed")
+require(cmeta["marker"] == "# lsm-release-candidates-v1", "candidate marker changed")
 require(cmeta.get("targets") == "8" and cmeta.get("candidates") == "24", "candidate counts not bound")
 require([(row["target"], row["variant"]) for row in candidates] ==
         [(target, variant) for target in TARGETS for variant in VARIANTS],
@@ -218,8 +218,8 @@ def replace_candidate_with_symlink(path: pathlib.Path) -> None:
     binary.chmod(0o700)
     binary.unlink()
     target = provenances[1].parent / "unstripped" / (
-        "codebase-memory-mcp.exe" if "windows" in str(provenances[1])
-        else "codebase-memory-mcp"
+        "logan-spine-mcp.exe" if "windows" in str(provenances[1])
+        else "logan-spine-mcp"
     )
     binary.symlink_to(target)
 
@@ -258,7 +258,7 @@ def result_rows(classifications: dict[tuple[str, str], str], *, shuffle: bool = 
 
 
 def write_results(path: pathlib.Path, rows: list[dict[str, object]]) -> None:
-    write_tsv(path, "cbm-virustotal-results-v2", {
+    write_tsv(path, "lsm-virustotal-results-v2", {
         "scan_objects": 24, "associations": 24, "min_engines_policy": 50,
         "min_completed_engines": 71, "max_completed_engines": 71,
     }, RESULT_FIELDS, rows)
@@ -311,7 +311,7 @@ result = run(select_tool, "--candidates", staged / "candidates.tsv",
              "--results", results_file)
 require(result.returncode == 0, f"valid truth-table results rejected: {result.stdout}{result.stderr}")
 smeta, selections = selection_rows(selected)
-require(smeta["marker"] == "# cbm-release-selection-v1", "selection marker changed")
+require(smeta["marker"] == "# lsm-release-selection-v1", "selection marker changed")
 require(smeta.get("policy") == "virustotal-v2", "scanned selection policy not recorded")
 require([row["target"] for row in selections] == list(TARGETS), "selection order is not canonical")
 for row in selections:
@@ -321,7 +321,7 @@ for row in selections:
     require(row["decision"] == expected_decision,
             f"truth-table decision reason wrong for {target}: {row['decision']!r}")
     chosen = next(c for c in candidates if c["target"] == target and c["variant"] == expected[target])
-    path = selected / "selected" / target / ("codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp")
+    path = selected / "selected" / target / ("logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp")
     require(path.read_bytes() == candidate_data[target, expected[target]], f"wrong selected bytes for {target}")
     require(row["selected_sha256"] == chosen["sha256"], f"selection hash wrong for {target}")
 
@@ -382,10 +382,10 @@ for row in selections:
     target = row["target"]
     archive_for[target] = candidate_data[target, row["selected_variant"]]
 for name in ARCHIVES:
-    target = next(target for target in TARGETS if name.startswith(f"codebase-memory-mcp-{target}."))
+    target = next(target for target in TARGETS if name.startswith(f"logan-spine-mcp-{target}."))
     destination = archives / target / ("mcpb" if name.endswith(".mcpb") else "archive") / name
     destination.parent.mkdir(parents=True, exist_ok=True)
-    binary_name = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+    binary_name = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
     member = f"server/{binary_name}" if name.endswith(".mcpb") else binary_name
     if name.endswith((".zip", ".mcpb")):
         with zipfile.ZipFile(destination, "w") as handle:
@@ -420,21 +420,21 @@ expect_verify_failure("surplus", lambda path: (path / "surplus.zip").write_bytes
 
 
 def mutate_zip(path: pathlib.Path) -> None:
-    archive = next(path.rglob("codebase-memory-mcp-windows-amd64.zip"))
+    archive = next(path.rglob("logan-spine-mcp-windows-amd64.zip"))
     with zipfile.ZipFile(archive, "w") as handle:
-        handle.writestr("codebase-memory-mcp.exe", b"mutated-selected-binary")
+        handle.writestr("logan-spine-mcp.exe", b"mutated-selected-binary")
 
 
 expect_verify_failure("mutation", mutate_zip)
 
 
 def remove_unix_executable_mode(path: pathlib.Path) -> None:
-    archive = next(path.rglob("codebase-memory-mcp-darwin-arm64.mcpb"))
+    archive = next(path.rglob("logan-spine-mcp-darwin-arm64.mcpb"))
     with zipfile.ZipFile(archive, "r") as handle:
         entries = [(info, handle.read(info)) for info in handle.infolist()]
     with zipfile.ZipFile(archive, "w") as handle:
         for info, payload in entries:
-            if info.filename == "server/codebase-memory-mcp":
+            if info.filename == "server/logan-spine-mcp":
                 info.create_system = 3
                 info.external_attr = (stat.S_IFREG | 0o644) << 16
             handle.writestr(info, payload)
@@ -444,10 +444,10 @@ expect_verify_failure("unix-executable-mode", remove_unix_executable_mode)
 
 
 def wrong_target(path: pathlib.Path) -> None:
-    archive = next(path.rglob("codebase-memory-mcp-linux-amd64.tar.gz"))
+    archive = next(path.rglob("logan-spine-mcp-linux-amd64.tar.gz"))
     with tarfile.open(archive, "w:gz") as handle:
         data = archive_for["linux-arm64"]
-        info = tarfile.TarInfo("codebase-memory-mcp")
+        info = tarfile.TarInfo("logan-spine-mcp")
         info.size = len(data)
         handle.addfile(info, io.BytesIO(data))
 

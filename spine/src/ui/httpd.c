@@ -20,9 +20,9 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
-typedef SOCKET cbm_sock_t;
-#define CBM_SOCK_BAD INVALID_SOCKET
-#define cbm_sock_close closesocket
+typedef SOCKET lsm_sock_t;
+#define LSM_SOCK_BAD INVALID_SOCKET
+#define lsm_sock_close closesocket
 #else
 #include <arpa/inet.h>
 #include <errno.h>
@@ -33,42 +33,42 @@ typedef SOCKET cbm_sock_t;
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
-typedef int cbm_sock_t;
-#define CBM_SOCK_BAD (-1)
-#define cbm_sock_close close
+typedef int lsm_sock_t;
+#define LSM_SOCK_BAD (-1)
+#define lsm_sock_close close
 #endif
 
 /* Suppress SIGPIPE on send: Linux has the per-call flag, macOS has the
  * per-socket option (set at accept), Windows has no signals. */
 #ifdef MSG_NOSIGNAL
-#define CBM_SEND_FLAGS MSG_NOSIGNAL
+#define LSM_SEND_FLAGS MSG_NOSIGNAL
 #else
-#define CBM_SEND_FLAGS 0
+#define LSM_SEND_FLAGS 0
 #endif
 
 /* A non-reading peer may occupy the sequential event loop only briefly. */
-#define CBM_HTTP_SEND_DEADLINE_MS 1000
-#define CBM_HTTP_SEND_SLICE_BYTES (64U * 1024U)
+#define LSM_HTTP_SEND_DEADLINE_MS 1000
+#define LSM_HTTP_SEND_SLICE_BYTES (64U * 1024U)
 #ifdef _WIN32
 /* Winsock select() is not reliably interrupted by shutdown() from another
  * thread, so bound how long stop waits before re-checking the owner flag. */
-#define CBM_HTTP_WAIT_SLICE_MS 50
+#define LSM_HTTP_WAIT_SLICE_MS 50
 #endif
 
-struct cbm_httpd {
-    cbm_sock_t fd;
+struct lsm_httpd {
+    lsm_sock_t fd;
     int port;
     int recv_deadline_ms;
-    cbm_mutex_t active_mutex;
-    struct cbm_http_conn *active;
+    lsm_mutex_t active_mutex;
+    struct lsm_http_conn *active;
     bool interrupted;
     int send_buffer_for_test;
     int send_deadline_for_test_ms;
 };
 
-struct cbm_http_conn {
-    cbm_sock_t fd;
-    cbm_httpd_t *owner;
+struct lsm_http_conn {
+    lsm_sock_t fd;
+    lsm_httpd_t *owner;
     int recv_deadline_ms;
     int send_deadline_ms;
     atomic_bool response_started;
@@ -91,7 +91,7 @@ static int64_t now_ms(void) {
 /* Wait until the socket is readable/writable. 1 = ready, 0 = timeout, -1 = error.
  * Windows uses select() deliberately (WSAPoll has a Won't-Fix bug where
  * certain socket errors are never reported, which can stall an event loop). */
-static int wait_ready(cbm_sock_t fd, bool writing, int timeout_ms) {
+static int wait_ready(lsm_sock_t fd, bool writing, int timeout_ms) {
 #ifdef _WIN32
     fd_set ready;
     fd_set errors;
@@ -118,7 +118,7 @@ static int wait_ready(cbm_sock_t fd, bool writing, int timeout_ms) {
 #endif
 }
 
-static int wait_readable(cbm_sock_t fd, int timeout_ms) {
+static int wait_readable(lsm_sock_t fd, int timeout_ms) {
     return wait_ready(fd, false, timeout_ms);
 }
 
@@ -131,7 +131,7 @@ static bool socket_would_block(void) {
 #endif
 }
 
-static bool socket_set_nonblocking(cbm_sock_t fd) {
+static bool socket_set_nonblocking(lsm_sock_t fd) {
 #ifdef _WIN32
     u_long enabled = 1;
     return ioctlsocket(fd, FIONBIO, &enabled) == 0;
@@ -141,7 +141,7 @@ static bool socket_set_nonblocking(cbm_sock_t fd) {
 #endif
 }
 
-static void socket_shutdown(cbm_sock_t fd) {
+static void socket_shutdown(lsm_sock_t fd) {
 #ifdef _WIN32
     (void)shutdown(fd, SD_BOTH);
 #else
@@ -149,13 +149,13 @@ static void socket_shutdown(cbm_sock_t fd) {
 #endif
 }
 
-static bool connection_interrupted(cbm_http_conn_t *connection) {
-    cbm_httpd_t *owner = connection->owner;
+static bool connection_interrupted(lsm_http_conn_t *connection) {
+    lsm_httpd_t *owner = connection->owner;
     if (!owner)
         return false;
-    cbm_mutex_lock(&owner->active_mutex);
+    lsm_mutex_lock(&owner->active_mutex);
     bool interrupted = owner->interrupted;
-    cbm_mutex_unlock(&owner->active_mutex);
+    lsm_mutex_unlock(&owner->active_mutex);
     return interrupted;
 }
 
@@ -163,7 +163,7 @@ static bool connection_interrupted(cbm_http_conn_t *connection) {
  * slices because shutdown() from the stop thread does not reliably wake a
  * Winsock select(); POSIX keeps its one-shot poll wait and shutdown fast path.
  * 1 = ready, 0 = original deadline expired, -1 = interrupted/error. */
-static int wait_connection_ready(cbm_http_conn_t *connection, bool writing, int64_t deadline) {
+static int wait_connection_ready(lsm_http_conn_t *connection, bool writing, int64_t deadline) {
     for (;;) {
         if (connection_interrupted(connection))
             return -1;
@@ -173,8 +173,8 @@ static int wait_connection_ready(cbm_http_conn_t *connection, bool writing, int6
             return 0;
         int timeout_ms = remaining > INT_MAX ? INT_MAX : (int)remaining;
 #ifdef _WIN32
-        if (timeout_ms > CBM_HTTP_WAIT_SLICE_MS)
-            timeout_ms = CBM_HTTP_WAIT_SLICE_MS;
+        if (timeout_ms > LSM_HTTP_WAIT_SLICE_MS)
+            timeout_ms = LSM_HTTP_WAIT_SLICE_MS;
 #endif
 
         int ready = wait_ready(connection->fd, writing, timeout_ms);
@@ -186,7 +186,7 @@ static int wait_connection_ready(cbm_http_conn_t *connection, bool writing, int6
     }
 }
 
-static int send_all(cbm_http_conn_t *connection, const void *data, size_t len, int64_t deadline) {
+static int send_all(lsm_http_conn_t *connection, const void *data, size_t len, int64_t deadline) {
     const char *p = data;
     size_t off = 0;
     while (off < len) {
@@ -198,12 +198,12 @@ static int send_all(cbm_http_conn_t *connection, const void *data, size_t len, i
          * giant call can never observe backpressure (and pins its full size
          * in nonpaged pool). Slicing keeps absorption bounded by the send
          * buffer so a non-reading peer hits EWOULDBLOCK deterministically. */
-        if (available > CBM_HTTP_SEND_SLICE_BYTES)
-            available = CBM_HTTP_SEND_SLICE_BYTES;
+        if (available > LSM_HTTP_SEND_SLICE_BYTES)
+            available = LSM_HTTP_SEND_SLICE_BYTES;
 #ifdef _WIN32
-        int n = send(connection->fd, p + off, (int)available, CBM_SEND_FLAGS);
+        int n = send(connection->fd, p + off, (int)available, LSM_SEND_FLAGS);
 #else
-        ssize_t n = send(connection->fd, p + off, available, CBM_SEND_FLAGS);
+        ssize_t n = send(connection->fd, p + off, available, LSM_SEND_FLAGS);
 #endif
         if (n < 0 && socket_would_block())
             continue;
@@ -216,7 +216,7 @@ static int send_all(cbm_http_conn_t *connection, const void *data, size_t len, i
 
 /* ── Listener ─────────────────────────────────────────────────── */
 
-cbm_httpd_t *cbm_httpd_listen(int port) {
+lsm_httpd_t *lsm_httpd_listen(int port) {
 #ifdef _WIN32
     static atomic_int wsa_started = 0;
     int expected = 0;
@@ -226,8 +226,8 @@ cbm_httpd_t *cbm_httpd_listen(int port) {
     }
 #endif
 
-    cbm_sock_t fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == CBM_SOCK_BAD)
+    lsm_sock_t fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd == LSM_SOCK_BAD)
         return NULL;
 
     /* POSIX: SO_REUSEADDR only permits rebinding a TIME_WAIT port.
@@ -249,7 +249,7 @@ cbm_httpd_t *cbm_httpd_listen(int port) {
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, 16) != 0 ||
         !socket_set_nonblocking(fd)) {
-        cbm_sock_close(fd);
+        lsm_sock_close(fd);
         return NULL;
     }
 
@@ -257,62 +257,62 @@ cbm_httpd_t *cbm_httpd_listen(int port) {
     struct sockaddr_in bound;
     socklen_t blen = sizeof(bound);
     if (getsockname(fd, (struct sockaddr *)&bound, &blen) != 0) {
-        cbm_sock_close(fd);
+        lsm_sock_close(fd);
         return NULL;
     }
 
-    cbm_httpd_t *d = calloc(1, sizeof(*d));
+    lsm_httpd_t *d = calloc(1, sizeof(*d));
     if (!d) {
-        cbm_sock_close(fd);
+        lsm_sock_close(fd);
         return NULL;
     }
     d->fd = fd;
     d->port = (int)ntohs(bound.sin_port);
-    d->recv_deadline_ms = CBM_HTTP_RECV_DEADLINE_MS;
-    cbm_mutex_init(&d->active_mutex);
+    d->recv_deadline_ms = LSM_HTTP_RECV_DEADLINE_MS;
+    lsm_mutex_init(&d->active_mutex);
     return d;
 }
 
-int cbm_httpd_port(const cbm_httpd_t *d) {
+int lsm_httpd_port(const lsm_httpd_t *d) {
     return d ? d->port : -1;
 }
 
-void cbm_httpd_set_recv_deadline_ms(cbm_httpd_t *d, int ms) {
+void lsm_httpd_set_recv_deadline_ms(lsm_httpd_t *d, int ms) {
     if (d && ms > 0) {
-        cbm_mutex_lock(&d->active_mutex);
+        lsm_mutex_lock(&d->active_mutex);
         d->recv_deadline_ms = ms;
-        cbm_mutex_unlock(&d->active_mutex);
+        lsm_mutex_unlock(&d->active_mutex);
     }
 }
 
-void cbm_httpd_interrupt(cbm_httpd_t *d) {
+void lsm_httpd_interrupt(lsm_httpd_t *d) {
     if (!d)
         return;
-    cbm_mutex_lock(&d->active_mutex);
+    lsm_mutex_lock(&d->active_mutex);
     d->interrupted = true;
     if (d->active)
         socket_shutdown(d->active->fd);
-    cbm_mutex_unlock(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
 }
 
-bool cbm_httpd_close(cbm_httpd_t *d) {
+bool lsm_httpd_close(lsm_httpd_t *d) {
     if (!d)
         return true;
-    cbm_mutex_lock(&d->active_mutex);
+    lsm_mutex_lock(&d->active_mutex);
     d->interrupted = true;
     if (d->active) {
         socket_shutdown(d->active->fd);
-        cbm_mutex_unlock(&d->active_mutex);
+        lsm_mutex_unlock(&d->active_mutex);
         return false;
     }
-    cbm_mutex_unlock(&d->active_mutex);
-    cbm_sock_close(d->fd);
-    cbm_mutex_destroy(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
+    lsm_sock_close(d->fd);
+    lsm_mutex_destroy(&d->active_mutex);
     free(d);
     return true;
 }
 
-void cbm_httpd_set_send_deadline_for_test(cbm_httpd_t *d, int ms) {
+void lsm_httpd_set_send_deadline_for_test(lsm_httpd_t *d, int ms) {
     /* Lets a test pin the send deadline far above (or below) the default so
      * an observed abort has exactly ONE possible cause — the interruption
      * tests once discriminated interrupt-abort from deadline-abort by wall
@@ -323,44 +323,44 @@ void cbm_httpd_set_send_deadline_for_test(cbm_httpd_t *d, int ms) {
     d->send_deadline_for_test_ms = ms;
 }
 
-void cbm_httpd_set_send_buffer_for_test(cbm_httpd_t *d, int bytes) {
+void lsm_httpd_set_send_buffer_for_test(lsm_httpd_t *d, int bytes) {
     if (!d)
         return;
-    cbm_mutex_lock(&d->active_mutex);
+    lsm_mutex_lock(&d->active_mutex);
     d->send_buffer_for_test = bytes;
-    cbm_mutex_unlock(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
 }
 
-cbm_httpd_activity_t cbm_httpd_activity_for_test(cbm_httpd_t *d) {
+lsm_httpd_activity_t lsm_httpd_activity_for_test(lsm_httpd_t *d) {
     if (!d)
-        return CBM_HTTPD_ACTIVITY_IDLE;
-    cbm_mutex_lock(&d->active_mutex);
-    cbm_httpd_activity_t activity = CBM_HTTPD_ACTIVITY_IDLE;
+        return LSM_HTTPD_ACTIVITY_IDLE;
+    lsm_mutex_lock(&d->active_mutex);
+    lsm_httpd_activity_t activity = LSM_HTTPD_ACTIVITY_IDLE;
     if (d->active) {
         activity = atomic_load_explicit(&d->active->response_started, memory_order_acquire)
-                       ? CBM_HTTPD_ACTIVITY_RESPONDING
-                       : CBM_HTTPD_ACTIVITY_READING_REQUEST;
+                       ? LSM_HTTPD_ACTIVITY_RESPONDING
+                       : LSM_HTTPD_ACTIVITY_READING_REQUEST;
     }
-    cbm_mutex_unlock(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
     return activity;
 }
 
 /* ── Accept ───────────────────────────────────────────────────── */
 
-cbm_http_conn_t *cbm_httpd_accept(cbm_httpd_t *d, int timeout_ms) {
+lsm_http_conn_t *lsm_httpd_accept(lsm_httpd_t *d, int timeout_ms) {
     if (!d)
         return NULL;
-    cbm_mutex_lock(&d->active_mutex);
+    lsm_mutex_lock(&d->active_mutex);
     bool interrupted = d->interrupted;
     int send_buffer = d->send_buffer_for_test;
-    cbm_mutex_unlock(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
     if (interrupted)
         return NULL;
     if (wait_readable(d->fd, timeout_ms) != 1)
         return NULL;
 
-    cbm_sock_t cfd = accept(d->fd, NULL, NULL);
-    if (cfd == CBM_SOCK_BAD)
+    lsm_sock_t cfd = accept(d->fd, NULL, NULL);
+    if (cfd == LSM_SOCK_BAD)
         return NULL;
 
     int one = 1;
@@ -375,55 +375,55 @@ cbm_http_conn_t *cbm_httpd_accept(cbm_httpd_t *d, int timeout_ms) {
 #endif
 
     if (!socket_set_nonblocking(cfd)) {
-        cbm_sock_close(cfd);
+        lsm_sock_close(cfd);
         return NULL;
     }
 
-    cbm_http_conn_t *c = calloc(1, sizeof(*c));
+    lsm_http_conn_t *c = calloc(1, sizeof(*c));
     if (!c) {
-        cbm_sock_close(cfd);
+        lsm_sock_close(cfd);
         return NULL;
     }
     c->fd = cfd;
     c->owner = d;
     c->send_deadline_ms = d->send_deadline_for_test_ms > 0 ? d->send_deadline_for_test_ms
-                                                            : CBM_HTTP_SEND_DEADLINE_MS;
+                                                            : LSM_HTTP_SEND_DEADLINE_MS;
     atomic_init(&c->response_started, false);
 
-    cbm_mutex_lock(&d->active_mutex);
+    lsm_mutex_lock(&d->active_mutex);
     if (d->interrupted || d->active) {
-        cbm_mutex_unlock(&d->active_mutex);
-        cbm_sock_close(cfd);
+        lsm_mutex_unlock(&d->active_mutex);
+        lsm_sock_close(cfd);
         free(c);
         return NULL;
     }
     c->recv_deadline_ms = d->recv_deadline_ms;
     d->active = c;
-    cbm_mutex_unlock(&d->active_mutex);
+    lsm_mutex_unlock(&d->active_mutex);
     return c;
 }
 
-void cbm_httpd_conn_close(cbm_http_conn_t *c) {
+void lsm_httpd_conn_close(lsm_http_conn_t *c) {
     if (!c)
         return;
-    cbm_httpd_t *owner = c->owner;
+    lsm_httpd_t *owner = c->owner;
     if (owner) {
-        cbm_mutex_lock(&owner->active_mutex);
+        lsm_mutex_lock(&owner->active_mutex);
         if (owner->active == c)
             owner->active = NULL;
-        cbm_sock_close(c->fd);
-        cbm_mutex_unlock(&owner->active_mutex);
+        lsm_sock_close(c->fd);
+        lsm_mutex_unlock(&owner->active_mutex);
     } else {
-        cbm_sock_close(c->fd);
+        lsm_sock_close(c->fd);
     }
     free(c);
 }
 
-int cbm_http_conn_status(const cbm_http_conn_t *c) {
+int lsm_http_conn_status(const lsm_http_conn_t *c) {
     return c ? c->response_status : 0;
 }
 
-size_t cbm_http_conn_response_bytes(const cbm_http_conn_t *c) {
+size_t lsm_http_conn_response_bytes(const lsm_http_conn_t *c) {
     return c ? c->response_bytes : 0;
 }
 
@@ -454,7 +454,7 @@ static bool copy_header_value(const char *val, const char *val_end, char *out, s
     return true;
 }
 
-int cbm_http_parse_head(const char *data, size_t len, cbm_http_req_t *req, size_t *body_offset,
+int lsm_http_parse_head(const char *data, size_t len, lsm_http_req_t *req, size_t *body_offset,
                         size_t *content_length) {
     memset(req, 0, sizeof(*req));
     *body_offset = 0;
@@ -462,7 +462,7 @@ int cbm_http_parse_head(const char *data, size_t len, cbm_http_req_t *req, size_
 
     /* Scan for the CRLFCRLF terminator. While scanning, enforce the strict
      * byte rules: no raw NUL, no LF that is not preceded by CR. */
-    size_t scan = len < CBM_HTTP_MAX_HEAD ? len : CBM_HTTP_MAX_HEAD;
+    size_t scan = len < LSM_HTTP_MAX_HEAD ? len : LSM_HTTP_MAX_HEAD;
     size_t head_end = 0; /* offset just past CRLFCRLF */
     for (size_t i = 0; i < scan; i++) {
         char ch = data[i];
@@ -476,7 +476,7 @@ int cbm_http_parse_head(const char *data, size_t len, cbm_http_req_t *req, size_
         }
     }
     if (head_end == 0)
-        return len >= CBM_HTTP_MAX_HEAD ? 431 : CBM_HTTP_NEED_MORE;
+        return len >= LSM_HTTP_MAX_HEAD ? 431 : LSM_HTTP_NEED_MORE;
 
     /* ── Request line: METHOD SP request-target SP HTTP/1.x ── */
     const char *line = data;
@@ -583,7 +583,7 @@ int cbm_http_parse_head(const char *data, size_t len, cbm_http_req_t *req, size_
                 if (!isdigit((unsigned char)*v))
                     return 400;
                 cl = cl * 10 + (uint64_t)(*v - '0');
-                if (cl > (uint64_t)CBM_HTTP_MAX_BODY)
+                if (cl > (uint64_t)LSM_HTTP_MAX_BODY)
                     return 413;
             }
             if (have_content_length && cl != (uint64_t)*content_length)
@@ -600,18 +600,18 @@ int cbm_http_parse_head(const char *data, size_t len, cbm_http_req_t *req, size_
 
 /* ── Request reading ──────────────────────────────────────────── */
 
-int cbm_httpd_read_request(cbm_http_conn_t *c, cbm_http_req_t *req) {
+int lsm_httpd_read_request(lsm_http_conn_t *c, lsm_http_req_t *req) {
     if (!c || !req)
         return -1;
 
-    char *head = malloc(CBM_HTTP_MAX_HEAD);
+    char *head = malloc(LSM_HTTP_MAX_HEAD);
     if (!head)
         return -1;
 
     int64_t deadline = now_ms() + c->recv_deadline_ms;
     size_t have = 0;
     size_t body_off = 0, clen = 0;
-    int rc = CBM_HTTP_NEED_MORE;
+    int rc = LSM_HTTP_NEED_MORE;
 
     /* Read until the head parses (or fails to). */
     for (;;) {
@@ -625,9 +625,9 @@ int cbm_httpd_read_request(cbm_http_conn_t *c, cbm_http_req_t *req) {
             return -1;
         }
 #ifdef _WIN32
-        int n = recv(c->fd, head + have, (int)(CBM_HTTP_MAX_HEAD - have), 0);
+        int n = recv(c->fd, head + have, (int)(LSM_HTTP_MAX_HEAD - have), 0);
 #else
-        ssize_t n = recv(c->fd, head + have, CBM_HTTP_MAX_HEAD - have, 0);
+        ssize_t n = recv(c->fd, head + have, LSM_HTTP_MAX_HEAD - have, 0);
 #endif
         if (n < 0 && socket_would_block())
             continue;
@@ -637,14 +637,14 @@ int cbm_httpd_read_request(cbm_http_conn_t *c, cbm_http_req_t *req) {
         }
         have += (size_t)n;
 
-        rc = cbm_http_parse_head(head, have, req, &body_off, &clen);
+        rc = lsm_http_parse_head(head, have, req, &body_off, &clen);
         if (rc == 0)
             break;
-        if (rc != CBM_HTTP_NEED_MORE) {
+        if (rc != LSM_HTTP_NEED_MORE) {
             free(head);
             return rc;
         }
-        if (have >= CBM_HTTP_MAX_HEAD) {
+        if (have >= LSM_HTTP_MAX_HEAD) {
             free(head);
             return 431;
         }
@@ -692,7 +692,7 @@ int cbm_httpd_read_request(cbm_http_conn_t *c, cbm_http_req_t *req) {
     return 0;
 }
 
-void cbm_http_req_free(cbm_http_req_t *req) {
+void lsm_http_req_free(lsm_http_req_t *req) {
     if (req && req->body) {
         free(req->body);
         req->body = NULL;
@@ -737,7 +737,7 @@ static const char *status_reason(int status) {
     }
 }
 
-void cbm_http_reply_buf(cbm_http_conn_t *c, int status, const char *extra_headers, const void *data,
+void lsm_http_reply_buf(lsm_http_conn_t *c, int status, const char *extra_headers, const void *data,
                         size_t len) {
     if (!c)
         return;
@@ -761,7 +761,7 @@ void cbm_http_reply_buf(cbm_http_conn_t *c, int status, const char *extra_header
         (void)send_all(c, data, len, deadline);
 }
 
-void cbm_http_replyf(cbm_http_conn_t *c, int status, const char *extra_headers, const char *fmt,
+void lsm_http_replyf(lsm_http_conn_t *c, int status, const char *extra_headers, const char *fmt,
                      ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -786,14 +786,14 @@ void cbm_http_replyf(cbm_http_conn_t *c, int status, const char *extra_headers, 
     vsnprintf(body, (size_t)need + 1, fmt, ap2);
     va_end(ap2);
 
-    cbm_http_reply_buf(c, status, extra_headers, body, (size_t)need);
+    lsm_http_reply_buf(c, status, extra_headers, body, (size_t)need);
     if (body != stack_buf)
         free(body);
 }
 
 /* ── Pure helpers ─────────────────────────────────────────────── */
 
-bool cbm_http_path_match(const char *str, const char *pattern) {
+bool lsm_http_path_match(const char *str, const char *pattern) {
     if (!str || !pattern)
         return false;
     size_t plen = strlen(pattern);
@@ -812,7 +812,7 @@ static int hex_val(char ch) {
     return -1;
 }
 
-bool cbm_http_query_param(const char *query, const char *name, char *buf, int bufsz) {
+bool lsm_http_query_param(const char *query, const char *name, char *buf, int bufsz) {
     if (!query || !name || !buf || bufsz <= 0)
         return false;
     buf[0] = '\0';

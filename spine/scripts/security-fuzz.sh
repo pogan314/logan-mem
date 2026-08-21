@@ -24,9 +24,9 @@ TOTAL=0
 # Temp directory for input files (avoids pipe/stdin issues with timeout)
 # shellcheck source=test-runtime.sh
 source "$(dirname "${BASH_SOURCE[0]}")/test-runtime.sh"
-cbm_test_runtime_init
-FUZZ_TMPDIR="$CBM_TEST_RUNTIME_ROOT"
-trap 'cbm_test_runtime_cleanup "$BINARY"' EXIT
+lsm_test_runtime_init
+FUZZ_TMPDIR="$LSM_TEST_RUNTIME_ROOT"
+trap 'lsm_test_runtime_cleanup "$BINARY"' EXIT
 FUZZ_HOME="$FUZZ_TMPDIR/home"
 mkdir "$FUZZ_HOME"
 export HOME="$FUZZ_HOME"

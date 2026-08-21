@@ -57,5 +57,5 @@ PenaltyReturnTypeOnItsOwnLine: 200
 
 # Keep existing formatting for macro-heavy code
 ForEachMacros:
-  - CBM_DYN_ARRAY_FOREACH
+  - LSM_DYN_ARRAY_FOREACH
 ...

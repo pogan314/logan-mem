@@ -11,7 +11,7 @@
  *
  *  2. CANONICAL BYTES: every field is written, in fixed order, with an
  *     explicit JSON null for absent strings (NULL and "" are different
- *     values in the CBMLSPDef contract — receiver_type NULL means "not a
+ *     values in the LSMLSPDef contract — receiver_type NULL means "not a
  *     method", and several registrars branch on that). Byte equality of the
  *     serialization therefore IS surface equality, and the sha over the
  *     bytes is the early-cutoff key: a body edit reserializes identically.
@@ -28,7 +28,7 @@
 enum { SURFACE_CODEC_VERSION = 1 };
 
 /* Labels the incremental name registry serves that pxc_map_label does NOT
- * carry into the CBMLSPDef set. Their (name, qn, label) triple must still
+ * carry into the LSMLSPDef set. Their (name, qn, label) triple must still
  * participate in the surface hash, or renaming one would slip past the
  * early cutoff while stale references to it survive in dependent files.
  * KEEP IN SYNC with pxc_map_label (pass_lsp_cross.c) and
@@ -68,7 +68,7 @@ static void add_str_array_or_null(yyjson_mut_doc *doc, yyjson_mut_val *obj, cons
 
 /* Serialize one file's surface: its slice of all_defs plus the registry-only
  * symbols from its raw extraction defs. Returns a malloc'd JSON string. */
-static char *surface_file_to_json(const CBMFileResult *result, const CBMLSPDef *defs,
+static char *surface_file_to_json(const LSMFileResult *result, const LSMLSPDef *defs,
                                   int def_count) {
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
     if (!doc) {
@@ -80,7 +80,7 @@ static char *surface_file_to_json(const CBMFileResult *result, const CBMLSPDef *
 
     yyjson_mut_val *lsp = yyjson_mut_arr(doc);
     for (int i = 0; i < def_count; i++) {
-        const CBMLSPDef *d = &defs[i];
+        const LSMLSPDef *d = &defs[i];
         yyjson_mut_val *o = yyjson_mut_obj(doc);
         add_str_or_null(doc, o, "qn", d->qualified_name);
         add_str_or_null(doc, o, "sn", d->short_name);
@@ -106,7 +106,7 @@ static char *surface_file_to_json(const CBMFileResult *result, const CBMLSPDef *
     yyjson_mut_val *reg = yyjson_mut_arr(doc);
     if (result) {
         for (int i = 0; i < result->defs.count; i++) {
-            const CBMDefinition *d = &result->defs.items[i];
+            const LSMDefinition *d = &result->defs.items[i];
             if (!surface_reg_only_label(d->label) || !d->name || !d->qualified_name) {
                 continue;
             }
@@ -124,16 +124,16 @@ static char *surface_file_to_json(const CBMFileResult *result, const CBMLSPDef *
     return json;
 }
 
-int cbm_lsp_surface_build_rows(const char *project, CBMFileResult **cache,
-                               const cbm_file_info_t *files, int file_count,
-                               const CBMLSPDef *all_defs, const int *def_starts,
-                               cbm_lsp_surface_row_t **out_rows, int *out_count) {
+int lsm_lsp_surface_build_rows(const char *project, LSMFileResult **cache,
+                               const lsm_file_info_t *files, int file_count,
+                               const LSMLSPDef *all_defs, const int *def_starts,
+                               lsm_lsp_surface_row_t **out_rows, int *out_count) {
     *out_rows = NULL;
     *out_count = 0;
     if (file_count <= 0) {
         return 0;
     }
-    cbm_lsp_surface_row_t *rows = calloc((size_t)file_count, sizeof(*rows));
+    lsm_lsp_surface_row_t *rows = calloc((size_t)file_count, sizeof(*rows));
     if (!rows) {
         return -1;
     }
@@ -151,12 +151,12 @@ int cbm_lsp_surface_build_rows(const char *project, CBMFileResult **cache,
         char *json =
             surface_file_to_json(cache[i], all_defs ? all_defs + start : NULL, end - start);
         if (!json) {
-            cbm_store_free_lsp_surfaces(rows, n);
+            lsm_store_free_lsp_surfaces(rows, n);
             return -1;
         }
-        char sha[CBM_SHA256_HEX_LEN + 1];
-        cbm_sha256_hex(json, strlen(json), sha);
-        cbm_lsp_surface_row_t *r = &rows[n];
+        char sha[LSM_SHA256_HEX_LEN + 1];
+        lsm_sha256_hex(json, strlen(json), sha);
+        lsm_lsp_surface_row_t *r = &rows[n];
         r->project = strdup(project);
         r->rel_path = strdup(files[i].rel_path);
         r->surface_sha = strdup(sha);
@@ -166,7 +166,7 @@ int cbm_lsp_surface_build_rows(const char *project, CBMFileResult **cache,
         r->config_ctx = strdup("");
         if (!r->project || !r->rel_path || !r->surface_sha || !r->config_ctx) {
             n++;
-            cbm_store_free_lsp_surfaces(rows, n);
+            lsm_store_free_lsp_surfaces(rows, n);
             return -1;
         }
         n++;
@@ -176,15 +176,15 @@ int cbm_lsp_surface_build_rows(const char *project, CBMFileResult **cache,
     return 0;
 }
 
-static const char *arena_str_or_null(CBMArena *arena, yyjson_val *v) {
+static const char *arena_str_or_null(LSMArena *arena, yyjson_val *v) {
     if (!v || yyjson_is_null(v)) {
         return NULL;
     }
     const char *s = yyjson_get_str(v);
-    return s ? cbm_arena_strdup(arena, s) : NULL;
+    return s ? lsm_arena_strdup(arena, s) : NULL;
 }
 
-static const char **arena_str_array(CBMArena *arena, yyjson_val *arr, bool null_terminated,
+static const char **arena_str_array(LSMArena *arena, yyjson_val *arr, bool null_terminated,
                                     int *out_count) {
     *out_count = 0;
     if (!arr || yyjson_is_null(arr) || !yyjson_is_arr(arr)) {
@@ -192,13 +192,13 @@ static const char **arena_str_array(CBMArena *arena, yyjson_val *arr, bool null_
     }
     int count = (int)yyjson_arr_size(arr);
     const char **items =
-        cbm_arena_alloc(arena, (size_t)(count + (null_terminated ? 1 : 0)) * sizeof(char *));
+        lsm_arena_alloc(arena, (size_t)(count + (null_terminated ? 1 : 0)) * sizeof(char *));
     if (!items) {
         return NULL;
     }
     for (int i = 0; i < count; i++) {
         const char *s = yyjson_get_str(yyjson_arr_get(arr, (size_t)i));
-        items[i] = s ? cbm_arena_strdup(arena, s) : "?";
+        items[i] = s ? lsm_arena_strdup(arena, s) : "?";
     }
     if (null_terminated) {
         items[count] = NULL;
@@ -207,7 +207,7 @@ static const char **arena_str_array(CBMArena *arena, yyjson_val *arr, bool null_
     return items;
 }
 
-int cbm_lsp_surface_defs_from_json(CBMArena *arena, const char *defs_json, CBMLSPDef **out_defs) {
+int lsm_lsp_surface_defs_from_json(LSMArena *arena, const char *defs_json, LSMLSPDef **out_defs) {
     *out_defs = NULL;
     if (!defs_json) {
         return -1;
@@ -228,15 +228,15 @@ int cbm_lsp_surface_defs_from_json(CBMArena *arena, const char *defs_json, CBMLS
         yyjson_doc_free(doc);
         return 0;
     }
-    CBMLSPDef *defs = cbm_arena_alloc(arena, (size_t)count * sizeof(CBMLSPDef));
+    LSMLSPDef *defs = lsm_arena_alloc(arena, (size_t)count * sizeof(LSMLSPDef));
     if (!defs) {
         yyjson_doc_free(doc);
         return -1;
     }
-    memset(defs, 0, (size_t)count * sizeof(CBMLSPDef));
+    memset(defs, 0, (size_t)count * sizeof(LSMLSPDef));
     for (int i = 0; i < count; i++) {
         yyjson_val *o = yyjson_arr_get(lsp, (size_t)i);
-        CBMLSPDef *d = &defs[i];
+        LSMLSPDef *d = &defs[i];
         d->qualified_name = arena_str_or_null(arena, yyjson_obj_get(o, "qn"));
         d->short_name = arena_str_or_null(arena, yyjson_obj_get(o, "sn"));
         d->label = arena_str_or_null(arena, yyjson_obj_get(o, "lb"));
@@ -249,7 +249,7 @@ int cbm_lsp_surface_defs_from_json(CBMArena *arena, const char *defs_json, CBMLS
         d->signature_param_types =
             arena_str_array(arena, yyjson_obj_get(o, "spt"), false, &d->signature_param_count);
         d->is_interface = yyjson_get_bool(yyjson_obj_get(o, "ii"));
-        d->lang = (CBMLanguage)yyjson_get_int(yyjson_obj_get(o, "lg"));
+        d->lang = (LSMLanguage)yyjson_get_int(yyjson_obj_get(o, "lg"));
         d->namespace_name = arena_str_or_null(arena, yyjson_obj_get(o, "ns"));
         d->trait_qn = arena_str_or_null(arena, yyjson_obj_get(o, "tq"));
         d->is_rust_impl_relation = yyjson_get_bool(yyjson_obj_get(o, "ir"));

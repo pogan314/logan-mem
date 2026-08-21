@@ -11,7 +11,7 @@ static int cleanup_path_exists(const char *path) {
 }
 
 static int cleanup_write_sentinel(const char *path) {
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     if (!file) {
         return 0;
     }
@@ -27,7 +27,7 @@ TEST(repro_harness_cleans_temp_project_after_fixture_write_failure) {
         "fixture content",
     };
 
-    cbm_store_t *store = rh_index_files(&project, &invalid_file, 1);
+    lsm_store_t *store = rh_index_files(&project, &invalid_file, 1);
 
     char tmpdir[sizeof(project.tmpdir)];
     char cachedir[sizeof(project.cachedir)];
@@ -41,7 +41,7 @@ TEST(repro_harness_cleans_temp_project_after_fixture_write_failure) {
     /* This failure happens before dbpath is initialized. Keep rh_cleanup's WAL
      * cleanup absolute so the RED guard cannot unlink a relative workspace file. */
     if (!project.dbpath[0]) {
-        snprintf(project.dbpath, sizeof(project.dbpath), "/tmp/cbm_repro_cleanup_guard_%ld.db",
+        snprintf(project.dbpath, sizeof(project.dbpath), "/tmp/lsm_repro_cleanup_guard_%ld.db",
                  (long)getpid());
     }
     rh_cleanup(&project, store);
@@ -78,9 +78,9 @@ TEST(repro_harness_cleans_temp_project_after_fixture_write_failure) {
 TEST(repro_harness_cleanup_empty_dbpath_preserves_relative_sidecars) {
     /* Empty dbpath must be a no-op for sidecars, never a cwd-relative unlink. */
     char original_cwd[1024];
-    char private_dir[256] = "/tmp/cbm_repro_empty_dbpath_XXXXXX";
+    char private_dir[256] = "/tmp/lsm_repro_empty_dbpath_XXXXXX";
     _Static_assert(sizeof(private_dir) >= 256,
-                   "cbm_mkdtemp requires a 256-byte caller buffer on Windows");
+                   "lsm_mkdtemp requires a 256-byte caller buffer on Windows");
     int entered_private_dir = 0;
     int wal_created = 0;
     int shm_created = 0;
@@ -90,7 +90,7 @@ TEST(repro_harness_cleanup_empty_dbpath_preserves_relative_sidecars) {
     if (!getcwd(original_cwd, sizeof(original_cwd))) {
         FAIL("test could not record the original working directory");
     }
-    if (!cbm_mkdtemp(private_dir)) {
+    if (!lsm_mkdtemp(private_dir)) {
         FAIL("test could not create a private temporary working directory");
     }
 

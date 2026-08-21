@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-void cbm_secure_zero(void *buffer, size_t length) {
+void lsm_secure_zero(void *buffer, size_t length) {
     volatile uint8_t *cursor = buffer;
     while (cursor && length > 0) {
         *cursor++ = 0;
@@ -17,7 +17,7 @@ void cbm_secure_zero(void *buffer, size_t length) {
 #include <windows.h>
 #include <bcrypt.h>
 
-bool cbm_secure_random(void *buffer, size_t length) {
+bool lsm_secure_random(void *buffer, size_t length) {
     if (!buffer && length != 0) {
         return false;
     }
@@ -39,7 +39,7 @@ bool cbm_secure_random(void *buffer, size_t length) {
 #include <fcntl.h>
 #include <unistd.h>
 
-bool cbm_secure_random(void *buffer, size_t length) {
+bool lsm_secure_random(void *buffer, size_t length) {
     if (!buffer && length != 0) {
         return false;
     }

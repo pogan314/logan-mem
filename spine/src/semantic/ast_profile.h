@@ -8,8 +8,8 @@
  * Stored as a compact comma-separated string in properties_json ("sp" key)
  * and decoded in the semantic post-pass for combined similarity scoring.
  */
-#ifndef CBM_AST_PROFILE_H
-#define CBM_AST_PROFILE_H
+#ifndef LSM_AST_PROFILE_H
+#define LSM_AST_PROFILE_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -56,27 +56,27 @@ typedef struct {
     /* Body metrics */
     uint16_t body_lines;
     uint16_t body_tokens; /* leaf AST node count */
-} cbm_ast_profile_t;
+} lsm_ast_profile_t;
 
 /* Number of dimensions when serialized as a float vector. */
-enum { CBM_AST_PROFILE_DIMS = 25 };
+enum { LSM_AST_PROFILE_DIMS = 25 };
 
 /* Compute AST structural profile from a function body node.
  * Pure function — thread-safe, no shared state.
  * Returns true if the profile was computed (function was large enough). */
-bool cbm_ast_profile_compute(TSNode func_body, const char *source, const char **param_names,
-                             int param_count, cbm_ast_profile_t *out);
+bool lsm_ast_profile_compute(TSNode func_body, const char *source, const char **param_names,
+                             int param_count, lsm_ast_profile_t *out);
 
 /* Encode profile to a compact comma-separated string.
- * buf must be at least CBM_AST_PROFILE_BUF bytes. */
-enum { CBM_AST_PROFILE_BUF = 200 };
-void cbm_ast_profile_to_str(const cbm_ast_profile_t *p, char *buf, int bufsize);
+ * buf must be at least LSM_AST_PROFILE_BUF bytes. */
+enum { LSM_AST_PROFILE_BUF = 200 };
+void lsm_ast_profile_to_str(const lsm_ast_profile_t *p, char *buf, int bufsize);
 
 /* Decode profile from comma-separated string. Returns true on success. */
-bool cbm_ast_profile_from_str(const char *str, cbm_ast_profile_t *out);
+bool lsm_ast_profile_from_str(const char *str, lsm_ast_profile_t *out);
 
 /* Convert profile to a normalized float vector for cosine similarity.
- * out must have CBM_AST_PROFILE_DIMS elements. */
-void cbm_ast_profile_to_vector(const cbm_ast_profile_t *p, float *out);
+ * out must have LSM_AST_PROFILE_DIMS elements. */
+void lsm_ast_profile_to_vector(const lsm_ast_profile_t *p, float *out);
 
-#endif /* CBM_AST_PROFILE_H */
+#endif /* LSM_AST_PROFILE_H */

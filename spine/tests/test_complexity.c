@@ -25,11 +25,11 @@
  * on scheduling; wall time does. Therefore ONLY counters gate. Throughput
  * (nodes/s, edges/s) is measured and written to a LOCAL report under private/
  * as information for trend comparison — it never gates, and the report step is
- * skipped entirely under CBM_SKIP_PERF (starved fidelity legs would record
+ * skipped entirely under LSM_SKIP_PERF (starved fidelity legs would record
  * meaningless rates).
  *
  * Dynamic coverage: languages come from two providers, iterated over the full
- * CBM_LANG_COUNT enum —
+ * LSM_LANG_COUNT enum —
  *   1. embedded templates below (the LSP-hybrid languages, where cross-file
  *      machinery — and therefore files×corpus coupling risk — lives);
  *   2. auto-discovered fixture dirs tests/fixtures/complexity/<lang-name>/
@@ -47,7 +47,7 @@
 #include "../src/foundation/compat_fs.h"
 #include "../src/foundation/log.h"
 #include "../src/foundation/profile.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "discover/discover.h"
 #include "pipeline/pass_lsp_cross.h"
 #include "pipeline/pipeline.h"
@@ -149,7 +149,7 @@ static void cx_emit_ts(FILE *f, int m, int j) {
 }
 
 typedef struct {
-    CBMLanguage lang;
+    LSMLanguage lang;
     const char *dirname; /* corpus subdir, doubles as the per-lang scope */
     const char *file_prefix;
     const char *ext;
@@ -157,27 +157,27 @@ typedef struct {
 } CxTemplate;
 
 static const CxTemplate CX_TEMPLATES[] = {
-    {CBM_LANG_JAVA, "javasrc", "C", ".java", cx_emit_java},
-    {CBM_LANG_PYTHON, "pysrc", "f", ".py", cx_emit_python},
-    {CBM_LANG_GO, "gosrc", "f", ".go", cx_emit_go},
-    {CBM_LANG_TYPESCRIPT, "tssrc", "f", ".ts", cx_emit_ts},
+    {LSM_LANG_JAVA, "javasrc", "C", ".java", cx_emit_java},
+    {LSM_LANG_PYTHON, "pysrc", "f", ".py", cx_emit_python},
+    {LSM_LANG_GO, "gosrc", "f", ".go", cx_emit_go},
+    {LSM_LANG_TYPESCRIPT, "tssrc", "f", ".ts", cx_emit_ts},
 };
 enum { CX_TEMPLATE_COUNT = sizeof(CX_TEMPLATES) / sizeof(CX_TEMPLATES[0]) };
 
 /* Fixture-dir provider: tests/fixtures/complexity/<lang-name>/ — every file in
  * it is copied verbatim into each module dir. Lets a new language join the
  * guard by dropping fixtures, with no edit to this suite. */
-static bool cx_fixture_dir_for(CBMLanguage lang, char *out, size_t cap) {
-    const char *name = cbm_language_name(lang);
+static bool cx_fixture_dir_for(LSMLanguage lang, char *out, size_t cap) {
+    const char *name = lsm_language_name(lang);
     if (!name || !name[0]) {
         return false;
     }
     snprintf(out, cap, "tests/fixtures/complexity/%s", name);
-    cbm_dir_t *d = cbm_opendir(out);
+    lsm_dir_t *d = lsm_opendir(out);
     if (!d) {
         return false;
     }
-    cbm_closedir(d);
+    lsm_closedir(d);
     return true;
 }
 
@@ -227,10 +227,10 @@ static int cx_build_corpus(const char *root, int k_modules) {
     /* Fixture-dir providers: replicate each discovered language dir into
      * k module copies. Distinct paths make distinct modules/QNs, which is all
      * the independence argument needs. */
-    for (int lang = 0; lang < CBM_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < LSM_LANG_COUNT; lang++) {
         bool templated = false;
         for (int t = 0; t < CX_TEMPLATE_COUNT; t++) {
-            if (CX_TEMPLATES[t].lang == (CBMLanguage)lang) {
+            if (CX_TEMPLATES[t].lang == (LSMLanguage)lang) {
                 templated = true;
             }
         }
@@ -238,21 +238,21 @@ static int cx_build_corpus(const char *root, int k_modules) {
             continue;
         }
         char fixdir[512];
-        if (!cx_fixture_dir_for((CBMLanguage)lang, fixdir, sizeof(fixdir))) {
+        if (!cx_fixture_dir_for((LSMLanguage)lang, fixdir, sizeof(fixdir))) {
             continue;
         }
-        cbm_dir_t *d = cbm_opendir(fixdir);
+        lsm_dir_t *d = lsm_opendir(fixdir);
         if (!d) {
             continue;
         }
-        cbm_dirent_t *entry;
-        while ((entry = cbm_readdir(d)) != NULL) {
+        lsm_dirent_t *entry;
+        while ((entry = lsm_readdir(d)) != NULL) {
             if (entry->name[0] == '.') {
                 continue;
             }
             for (int m = 0; m < k_modules; m++) {
                 snprintf(dir, sizeof(dir), "%s/fx_%s/mod%d", root,
-                         cbm_language_name((CBMLanguage)lang), m);
+                         lsm_language_name((LSMLanguage)lang), m);
                 if (th_mkdir_p(dir) != 0) {
                     continue;
                 }
@@ -262,7 +262,7 @@ static int cx_build_corpus(const char *root, int k_modules) {
                 (void)cx_copy_file(src, path);
             }
         }
-        cbm_closedir(d);
+        lsm_closedir(d);
     }
     return 0;
 }
@@ -358,7 +358,7 @@ typedef struct {
 
 static double cx_now_s(void) {
     struct timespec ts;
-    cbm_profile_now(&ts);
+    lsm_profile_now(&ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
@@ -369,29 +369,29 @@ static int cx_run(const char *root, const char *db_path, CxMetrics *out) {
     uint64_t b0;
     uint64_t f0;
     uint64_t x0;
-    cbm_pxc_filter_stats(&d0, &b0, &f0, &x0);
+    lsm_pxc_filter_stats(&d0, &b0, &f0, &x0);
     uint64_t tl0 = atomic_load_explicit(&g_lsp_tail_lookups, memory_order_relaxed);
     uint64_t tc0 = atomic_load_explicit(&g_lsp_tail_candidates, memory_order_relaxed);
-    uint64_t fb0 = cbm_pp_lsp_linear_fallback_rows();
+    uint64_t fb0 = lsm_pp_lsp_linear_fallback_rows();
 
     atomic_store_explicit(&g_cx_pass_count, 0, memory_order_relaxed);
-    cbm_log_set_sink_ex(cx_pass_sink, CBM_LOG_SINK_TEE);
+    lsm_log_set_sink_ex(cx_pass_sink, LSM_LOG_SINK_TEE);
 
     double t0 = cx_now_s();
-    cbm_pipeline_t *p = cbm_pipeline_new(root, db_path, CBM_MODE_FULL);
+    lsm_pipeline_t *p = lsm_pipeline_new(root, db_path, LSM_MODE_FULL);
     if (!p) {
         return -1;
     }
-    int rc = cbm_pipeline_run(p);
+    int rc = lsm_pipeline_run(p);
     out->wall_s = cx_now_s() - t0;
-    cbm_log_set_sink(NULL);
+    lsm_log_set_sink(NULL);
     int captured = atomic_load_explicit(&g_cx_pass_count, memory_order_relaxed);
     out->pass_count = captured < CX_MAX_PASSES ? captured : CX_MAX_PASSES;
     memcpy(out->passes, g_cx_passes, (size_t)out->pass_count * sizeof(CxPassMs));
 
     char project[512];
-    snprintf(project, sizeof(project), "%s", cbm_pipeline_project_name(p));
-    cbm_pipeline_free(p);
+    snprintf(project, sizeof(project), "%s", lsm_pipeline_project_name(p));
+    lsm_pipeline_free(p);
     if (rc != 0) {
         return rc;
     }
@@ -400,25 +400,25 @@ static int cx_run(const char *root, const char *db_path, CxMetrics *out) {
     uint64_t b1;
     uint64_t f1;
     uint64_t x1;
-    cbm_pxc_filter_stats(&d1, &b1, &f1, &x1);
+    lsm_pxc_filter_stats(&d1, &b1, &f1, &x1);
     out->perfile_defs = d1 - d0;
     out->build_files = b1 - b0;
     out->filter_failed = x1 - x0;
     out->tail_lookups = atomic_load_explicit(&g_lsp_tail_lookups, memory_order_relaxed) - tl0;
     out->tail_candidates = atomic_load_explicit(&g_lsp_tail_candidates, memory_order_relaxed) - tc0;
-    out->fallback_rows = cbm_pp_lsp_linear_fallback_rows() - fb0;
+    out->fallback_rows = lsm_pp_lsp_linear_fallback_rows() - fb0;
 
-    cbm_store_t *s = cbm_store_open_path(db_path);
+    lsm_store_t *s = lsm_store_open_path(db_path);
     if (!s) {
         return -1;
     }
-    out->nodes = cbm_store_count_nodes(s, project);
-    out->edges = cbm_store_count_edges(s, project);
+    out->nodes = lsm_store_count_nodes(s, project);
+    out->edges = lsm_store_count_edges(s, project);
     for (int t = 0; t < CX_TEMPLATE_COUNT; t++) {
-        out->lang_nodes[t] = cbm_store_count_nodes_scoped(s, project, CX_TEMPLATES[t].dirname);
-        out->lang_edges[t] = cbm_store_count_edges_scoped(s, project, CX_TEMPLATES[t].dirname);
+        out->lang_nodes[t] = lsm_store_count_nodes_scoped(s, project, CX_TEMPLATES[t].dirname);
+        out->lang_edges[t] = lsm_store_count_edges_scoped(s, project, CX_TEMPLATES[t].dirname);
     }
-    cbm_store_close(s);
+    lsm_store_close(s);
     return 0;
 }
 
@@ -438,10 +438,10 @@ static int cx_measure_pair(void) {
     if (g_cx_measured) {
         return 0;
     }
-    const char *tmp = cbm_tmpdir();
-    snprintf(g_cx_root_base, sizeof(g_cx_root_base), "%s/cbm_cx_base_XXXXXX", tmp);
-    snprintf(g_cx_root_doubled, sizeof(g_cx_root_doubled), "%s/cbm_cx_dbl_XXXXXX", tmp);
-    if (!cbm_mkdtemp(g_cx_root_base) || !cbm_mkdtemp(g_cx_root_doubled)) {
+    const char *tmp = lsm_tmpdir();
+    snprintf(g_cx_root_base, sizeof(g_cx_root_base), "%s/lsm_cx_base_XXXXXX", tmp);
+    snprintf(g_cx_root_doubled, sizeof(g_cx_root_doubled), "%s/lsm_cx_dbl_XXXXXX", tmp);
+    if (!lsm_mkdtemp(g_cx_root_base) || !lsm_mkdtemp(g_cx_root_doubled)) {
         return -1;
     }
     if (cx_build_corpus(g_cx_root_base, CX_K_BASE) != 0 ||
@@ -546,12 +546,12 @@ static int cx_measure_bigpkg_pair(void) {
     if (g_cx_big_measured) {
         return 0;
     }
-    const char *tmp = cbm_tmpdir();
+    const char *tmp = lsm_tmpdir();
     char ra[512];
     char rb[512];
-    snprintf(ra, sizeof(ra), "%s/cbm_cxbig_a_XXXXXX", tmp);
-    snprintf(rb, sizeof(rb), "%s/cbm_cxbig_b_XXXXXX", tmp);
-    if (!cbm_mkdtemp(ra) || !cbm_mkdtemp(rb)) {
+    snprintf(ra, sizeof(ra), "%s/lsm_cxbig_a_XXXXXX", tmp);
+    snprintf(rb, sizeof(rb), "%s/lsm_cxbig_b_XXXXXX", tmp);
+    if (!lsm_mkdtemp(ra) || !lsm_mkdtemp(rb)) {
         return -1;
     }
     if (cx_build_bigpkg(ra, CX_K_BASE) != 0 || cx_build_bigpkg(rb, CX_K_BASE * 2) != 0) {
@@ -604,27 +604,27 @@ TEST(complexity_shared_package_growth_stays_linear) {
 
 /* Throughput report — information only, never a gate (CI-determinism rule:
  * rates depend on the machine and scheduler, so a threshold would be a
- * lottery). Written locally under private/ (gitignored); CBM_COMPLEXITY_
+ * lottery). Written locally under private/ (gitignored); LSM_COMPLEXITY_
  * REPORT_DIR overrides. Skipped on starved legs where rates are meaningless. */
 TEST(complexity_throughput_report_written) {
-    const char *skip_perf = getenv("CBM_SKIP_PERF");
+    const char *skip_perf = getenv("LSM_SKIP_PERF");
     if (skip_perf && skip_perf[0] == '1') {
         /* Deliberate operator config, not a hidden environment failure
-         * (no-skips policy): rates measured under CBM_SKIP_PERF starvation
+         * (no-skips policy): rates measured under LSM_SKIP_PERF starvation
          * would only mislead, so reporting is OFF and there is nothing left
          * for this test to assert. */
-        fprintf(stderr, "  [complexity] CBM_SKIP_PERF=1: throughput report disabled by config\n");
+        fprintf(stderr, "  [complexity] LSM_SKIP_PERF=1: throughput report disabled by config\n");
         PASS();
     }
     if (cx_measure_pair() != 0) {
         FAIL("failed to build/run the complexity corpus pair");
     }
-    const char *dir = getenv("CBM_COMPLEXITY_REPORT_DIR");
+    const char *dir = getenv("LSM_COMPLEXITY_REPORT_DIR");
     if (!dir || !dir[0]) {
         dir = "private/benchmarks";
     }
     if (th_mkdir_p(dir) != 0) {
-        FAIL("report dir not creatable (set CBM_COMPLEXITY_REPORT_DIR to a writable path)");
+        FAIL("report dir not creatable (set LSM_COMPLEXITY_REPORT_DIR to a writable path)");
     }
     char path[1024];
     snprintf(path, sizeof(path), "%s/complexity-%lld.json", dir, (long long)time(NULL));
@@ -692,19 +692,19 @@ TEST(complexity_throughput_report_written) {
      * the artifact rather than implied. */
     fprintf(f, "  \"skipped_languages\": [");
     bool first = true;
-    for (int lang = 0; lang < CBM_LANG_COUNT; lang++) {
+    for (int lang = 0; lang < LSM_LANG_COUNT; lang++) {
         bool covered = false;
         for (int t = 0; t < CX_TEMPLATE_COUNT; t++) {
-            if (CX_TEMPLATES[t].lang == (CBMLanguage)lang) {
+            if (CX_TEMPLATES[t].lang == (LSMLanguage)lang) {
                 covered = true;
             }
         }
         char fixdir[512];
-        if (!covered && cx_fixture_dir_for((CBMLanguage)lang, fixdir, sizeof(fixdir))) {
+        if (!covered && cx_fixture_dir_for((LSMLanguage)lang, fixdir, sizeof(fixdir))) {
             covered = true;
         }
         if (!covered) {
-            const char *name = cbm_language_name((CBMLanguage)lang);
+            const char *name = lsm_language_name((LSMLanguage)lang);
             if (name && name[0]) {
                 fprintf(f, "%s\"%s\"", first ? "" : ", ", name);
                 first = false;

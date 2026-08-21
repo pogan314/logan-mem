@@ -9,7 +9,7 @@
  *
  * The two sources are deliberate and neither replaces the other:
  *
- *   CBM_SANITIZED_BUILD — set by the build system (Makefile.cbm), and the ONLY
+ *   LSM_SANITIZED_BUILD — set by the build system (Makefile.lsm), and the ONLY
  *   source that can answer for UBSan and trap-UBSan: undefined-behaviour
  *   instrumentation leaves no macro and no __has_feature bit behind, so no
  *   probe can see it. This is why the build system stays the source of truth.
@@ -29,10 +29,10 @@
  * Deliberately no #error when a probe fires without the define. Promoting
  * leaves the binary CORRECT while the build lane is fixed, whereas an error
  * would break it, and would also break an out-of-tree
- * `make CFLAGS_EXTRA=-fsanitize=address` that never went near Makefile.cbm.
+ * `make CFLAGS_EXTRA=-fsanitize=address` that never went near Makefile.lsm.
  */
-#ifndef CBM_SANITIZED_H
-#define CBM_SANITIZED_H
+#ifndef LSM_SANITIZED_H
+#define LSM_SANITIZED_H
 
 /* Define __has_feature away where it does not exist. `defined(__has_feature) &&
  * __has_feature(...)` is NOT a substitute: && does not spare a preprocessor
@@ -46,15 +46,15 @@
 #define __has_feature(x) 0
 #endif
 
-#if defined(CBM_SANITIZED_BUILD) && CBM_SANITIZED_BUILD
-#define CBM_SANITIZED 1
+#if defined(LSM_SANITIZED_BUILD) && LSM_SANITIZED_BUILD
+#define LSM_SANITIZED 1
 #elif __has_feature(address_sanitizer) || __has_feature(thread_sanitizer) || \
     __has_feature(memory_sanitizer)
-#define CBM_SANITIZED 1
+#define LSM_SANITIZED 1
 #elif defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
-#define CBM_SANITIZED 1
+#define LSM_SANITIZED 1
 #else
-#define CBM_SANITIZED 0
+#define LSM_SANITIZED 0
 #endif
 
-#endif /* CBM_SANITIZED_H */
+#endif /* LSM_SANITIZED_H */

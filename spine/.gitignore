@@ -1,6 +1,6 @@
 # Binaries
 code-graph-mcp
-/codebase-memory-mcp
+/logan-spine-mcp
 bin/
 *.exe
 *.dll
@@ -13,7 +13,7 @@ bin/
 coverage.txt
 
 # Test fixture temp dirs (created by C test suite in CWD instead of /tmp/)
-cbm_*/
+lsm_*/
 cli-*/
 
 # IDE
@@ -84,5 +84,5 @@ soak-results-query-leak/
 # Compiled Go wrapper binary. `go build` in pkg/go drops the executable beside
 # its sources; one was committed by accident (8.8 MB ELF, flagged by OSSF
 # Scorecard as a binary artifact in source). Source only, never the build.
-/pkg/go/codebase-memory-mcp
-/pkg/go/codebase-memory-mcp.exe
+/pkg/go/logan-spine-mcp
+/pkg/go/logan-spine-mcp.exe

@@ -32,7 +32,7 @@ for the long-lived VM, where roots accumulate; a fresh runner has none.
 #>
 [CmdletBinding()]
 param(
-    [string]$Prefix = 'cbm-tmp-',
+    [string]$Prefix = 'lsm-tmp-',
     [string[]]$ProtectDir = @(),
     [switch]$PruneStale
 )

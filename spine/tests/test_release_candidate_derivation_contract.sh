@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FIX="$(mktemp -d "${TMPDIR:-/tmp}/cbm-candidate-derive.XXXXXX")"
+FIX="$(mktemp -d "${TMPDIR:-/tmp}/lsm-candidate-derive.XXXXXX")"
 trap 'rm -rf "$FIX"' EXIT
 
 PREPARE="$ROOT/scripts/ci/prepare-release-candidates.sh"
@@ -32,7 +32,7 @@ arm64 | aarch64 | ARM64) GOARCH=arm64 ;;
 esac
 
 TARGET="$GOOS-$GOARCH"
-BINARY_NAME=codebase-memory-mcp
+BINARY_NAME=logan-spine-mcp
 [[ "$GOOS" == windows ]] && BINARY_NAME+=.exe
 INPUT="$FIX/$BINARY_NAME"
 
@@ -45,18 +45,18 @@ pathlib.Path(sys.argv[1]).write_text(
 #include <stdlib.h>
 #include <string.h>
 static const char release_canary[] =
-    "codebase-memory-mcp OMIT_LOAD_EXTENSION candidate-derivation-contract";
+    "logan-spine-mcp OMIT_LOAD_EXTENSION candidate-derivation-contract";
 static _Thread_local unsigned long release_tls_counter;
 static int visible_symbol_for_real_strip(int value) { return value + 17; }
 int main(int argc, char **argv) {
-    const char *sentinel = getenv("CBM_CANDIDATE_EXEC_SENTINEL");
+    const char *sentinel = getenv("LSM_CANDIDATE_EXEC_SENTINEL");
     if (sentinel) {
         FILE *handle = fopen(sentinel, "wb");
         if (handle) fclose(handle);
     }
     release_tls_counter += (unsigned long)argc;
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-        puts("codebase-memory-mcp 0.0.0-candidate-contract");
+        puts("logan-spine-mcp 0.0.0-candidate-contract");
         return 0;
     }
     puts(release_canary);
@@ -74,7 +74,7 @@ PY
 )"
 
 OUT="$FIX/published"
-env CBM_CANDIDATE_EXEC_SENTINEL="$FIX/executed-before-selection" \
+env LSM_CANDIDATE_EXEC_SENTINEL="$FIX/executed-before-selection" \
     STRIP="${STRIP:-$(command -v strip)}" CODESIGN="${CODESIGN:-$(command -v codesign 2>/dev/null || true)}" \
     "$PREPARE" "$GOOS" "$GOARCH" --binary "$INPUT" --out-dir "$OUT"
 [[ ! -e "$FIX/executed-before-selection" ]] || {
@@ -111,7 +111,7 @@ source_hash = sys.argv[3]
 target = sys.argv[4]
 binary_name = sys.argv[5]
 lines = manifest.read_text(encoding="utf-8").splitlines()
-if not lines or lines[0] != "# cbm-release-candidate-provenance-v1":
+if not lines or lines[0] != "# lsm-release-candidate-provenance-v1":
     raise SystemExit("FAIL: candidate provenance marker is missing")
 rows = list(csv.DictReader(lines[1:], delimiter="\t"))
 expected_fields = (

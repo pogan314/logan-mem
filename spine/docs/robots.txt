@@ -1,4 +1,4 @@
-# codebase-memory-mcp — all crawlers welcome, including AI answer engines.
+# logan-spine-mcp — all crawlers welcome, including AI answer engines.
 User-agent: *
 Allow: /
 
@@ -30,4 +30,4 @@ Allow: /
 User-agent: Bingbot
 Allow: /
 
-Sitemap: https://deusdata.github.io/codebase-memory-mcp/sitemap.xml
+Sitemap: https://deusdata.github.io/logan-spine-mcp/sitemap.xml

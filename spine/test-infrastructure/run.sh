@@ -14,7 +14,7 @@
 # built to be core-count-independent for correctness (timing/scheduling/
 # subprocess suites assert invariants — ordering, bounded-return, RUNNING poll
 # state — not wall-clock), so it passes at any parallelism and there is no
-# reason to throttle it. The CBM_LOCAL_CI_CPUS knob survives only for the
+# reason to throttle it. The LSM_LOCAL_CI_CPUS knob survives only for the
 # smoke/soak services, where deliberate resource starvation is the point; it is
 # NOT a pre-push gate for the regular suite. ccache persists in named volumes;
 # entries are content-verified
@@ -66,31 +66,31 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # cache stay SHARED on purpose: ccache is concurrency-safe and content-verified,
 # and sharing them is what keeps an isolated run fast rather than cold.
 #
-#   CBM_CI_RUN_ID=<id>       name/reuse a run (default: pid + epoch, unique)
-#   CBM_CI_SHARED_BUILD=1    opt back into the single shared `cbm-build` volume
-#   CBM_CI_KEEP=1            keep this run's build volume even on success
-RUN_ID="${CBM_CI_RUN_ID:-$$-$(date +%s)}"
-if [ "${CBM_CI_SHARED_BUILD:-0}" = "1" ]; then
-    CBM_CI_BUILD_VOLUME="cbm-build"
+#   LSM_CI_RUN_ID=<id>       name/reuse a run (default: pid + epoch, unique)
+#   LSM_CI_SHARED_BUILD=1    opt back into the single shared `lsm-build` volume
+#   LSM_CI_KEEP=1            keep this run's build volume even on success
+RUN_ID="${LSM_CI_RUN_ID:-$$-$(date +%s)}"
+if [ "${LSM_CI_SHARED_BUILD:-0}" = "1" ]; then
+    LSM_CI_BUILD_VOLUME="lsm-build"
 else
-    CBM_CI_BUILD_VOLUME="cbm-build-${RUN_ID}"
+    LSM_CI_BUILD_VOLUME="lsm-build-${RUN_ID}"
 fi
-export CBM_CI_BUILD_VOLUME
+export LSM_CI_BUILD_VOLUME
 
 # Tidy what this run generated. A FAILED run KEEPS its volume — those artifacts
 # are the post-mortem — and prints how to inspect and drop it. Successful runs
 # leave nothing behind. Shared-volume mode never removes anything.
 ci_cleanup() {
     local rc=$?
-    if [ "${CBM_CI_BUILD_VOLUME}" = "cbm-build" ] || [ "${CBM_CI_KEEP:-0}" = "1" ]; then
+    if [ "${LSM_CI_BUILD_VOLUME}" = "lsm-build" ] || [ "${LSM_CI_KEEP:-0}" = "1" ]; then
         return $rc
     fi
     if [ $rc -eq 0 ]; then
-        docker volume rm -f "${CBM_CI_BUILD_VOLUME}" >/dev/null 2>&1 || true
+        docker volume rm -f "${LSM_CI_BUILD_VOLUME}" >/dev/null 2>&1 || true
     else
-        echo "run.sh: kept ${CBM_CI_BUILD_VOLUME} for post-mortem (run failed)" >&2
-        echo "        inspect: docker run --rm -v ${CBM_CI_BUILD_VOLUME}:/b alpine ls -R /b" >&2
-        echo "        drop:    docker volume rm ${CBM_CI_BUILD_VOLUME}" >&2
+        echo "run.sh: kept ${LSM_CI_BUILD_VOLUME} for post-mortem (run failed)" >&2
+        echo "        inspect: docker run --rm -v ${LSM_CI_BUILD_VOLUME}:/b alpine ls -R /b" >&2
+        echo "        drop:    docker volume rm ${LSM_CI_BUILD_VOLUME}" >&2
     fi
     return $rc
 }
@@ -106,7 +106,7 @@ The Linux (and cross-compile) local-CI ladder, on Colima. Every leg runs the
 SAME canonical scripts CI runs (scripts/test.sh, build.sh, smoke-local.sh,
 soak-legs.sh) inside pinned containers; this wrapper only picks the container
 and platform. A clean-disk preflight (scripts/ci/preflight-docker.sh) runs
-first — CBM_SKIP_PREFLIGHT=1 skips it, CBM_PREFLIGHT_ARGS=--deep widens it.
+first — LSM_SKIP_PREFLIGHT=1 skips it, LSM_PREFLIGHT_ARGS=--deep widens it.
 
 Legs:
   full (default)  arm64: test + build + TSan + smoke + portable smoke
@@ -114,20 +114,20 @@ Legs:
   all             full + amd64 legs + Windows cross-compile/Wine check
   test|build|smoke|tsan|msan     single arm64 legs
   amd64|test-amd64|tsan-amd64    amd64 legs (tsan-amd64 needs real amd64 HW)
-  perf            arm64 incremental-perf leg (CBM_SKIP_PERF unset)
+  perf            arm64 incremental-perf leg (LSM_SKIP_PERF unset)
   shell|shell-alpine             interactive debug shell inside the image
   portable|portable-test         Alpine musl static build legs
   smoke-artifact  arm64 artifact-flow smoke: package -> extract -> wrapper
   glibc-floor     ubuntu-22.04 (glibc 2.35): portable smoke + dynamic refusal
   soak-linux      both CI soak legs (quick + #581 query-leak) via
-                  scripts/soak-legs.sh; CBM_SOAK_MINUTES per leg (default 10)
+                  scripts/soak-legs.sh; LSM_SOAK_MINUTES per leg (default 10)
   soak-windows    delegates to the real-Windows VM (win.sh soak 10)
 
 Environment:
-  CBM_SOAK_MINUTES     soak-linux duration per leg (default 10)
-  CBM_LOCAL_CI_CPUS    opt-in CPU cap for smoke/soak starvation checks only
+  LSM_SOAK_MINUTES     soak-linux duration per leg (default 10)
+  LSM_LOCAL_CI_CPUS    opt-in CPU cap for smoke/soak starvation checks only
                        (the regular suite always runs full-parallel)
-  CBM_SKIP_PREFLIGHT=1 / CBM_PREFLIGHT_ARGS=--deep   preflight controls
+  LSM_SKIP_PREFLIGHT=1 / LSM_PREFLIGHT_ARGS=--deep   preflight controls
   windows|smoke-windows          mingw cross-compile + Wine version check
   lint            containerized cppcheck + clang-format (CI image)
   -h, --help      This text.
@@ -164,17 +164,17 @@ fi
 # Colima is long-lived and accumulates exited containers and orphaned volumes.
 # Sweep that back to the runner's shape and assert free space before any leg,
 # so a disk that has quietly filled fails here rather than surfacing as a bogus
-# product failure deep inside an install path. CBM_PREFLIGHT_ARGS=--deep also
-# reclaims the build cache; CBM_SKIP_PREFLIGHT=1 opts out for a quick re-run.
-if [ "${CBM_SKIP_PREFLIGHT:-0}" != "1" ]; then
+# product failure deep inside an install path. LSM_PREFLIGHT_ARGS=--deep also
+# reclaims the build cache; LSM_SKIP_PREFLIGHT=1 opts out for a quick re-run.
+if [ "${LSM_SKIP_PREFLIGHT:-0}" != "1" ]; then
     # shellcheck disable=SC2086  # deliberate word-splitting of opt-in flags
-    "$ROOT/scripts/ci/preflight-docker.sh" ${CBM_PREFLIGHT_ARGS:-}
+    "$ROOT/scripts/ci/preflight-docker.sh" ${LSM_PREFLIGHT_ARGS:-}
 fi
 
 case "${1:-full}" in
     full)
         echo "=== Linux arm64: test + build ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test
         $COMPOSE run --rm build
         echo "=== Linux arm64: ThreadSanitizer (data-race gate) ==="
         $COMPOSE run --rm test-tsan
@@ -192,7 +192,7 @@ case "${1:-full}" in
         ;;
     test)
         echo "=== Linux arm64: test (ASan + LeakSanitizer, no perf) ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test
         ;;
     perf)
         echo "=== Linux arm64: perf/incremental tests ==="
@@ -236,11 +236,11 @@ case "${1:-full}" in
         $COMPOSE run --rm smoke
         ;;
     soak-linux)
-        # Both CI legs (quick + #581 query-leak). Duration via CBM_SOAK_MINUTES,
+        # Both CI legs (quick + #581 query-leak). Duration via LSM_SOAK_MINUTES,
         # default 10 to match the dry run. Kept out of `full`/`all` for the same
         # reason soak-windows is: it is a ~20-minute endurance gate, not part of
         # the fast ladder.
-        echo "=== Linux arm64: soak (quick + query-leak, ${CBM_SOAK_MINUTES:-10}m each) ==="
+        echo "=== Linux arm64: soak (quick + query-leak, ${LSM_SOAK_MINUTES:-10}m each) ==="
         $COMPOSE run --rm soak
         ;;
     portable)
@@ -259,7 +259,7 @@ case "${1:-full}" in
         ;;
     portable-test)
         echo "=== Linux portable: Alpine test (ASan + LeakSan) ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test-portable
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test-portable
         ;;
     windows)
         echo "=== Windows: cross-compile + binary version check (Wine) ==="
@@ -273,12 +273,12 @@ case "${1:-full}" in
         # `--help` advertises `amd64|test-amd64`, but only `amd64` dispatched:
         # the documented spelling died with "unknown leg 'test-amd64'".
         echo "=== Linux amd64: test + build ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test-amd64
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test-amd64
         $COMPOSE run --rm build-amd64
         ;;
     all)
         echo "=== Linux arm64: test + build + smoke ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test
         $COMPOSE run --rm build
         $COMPOSE run --rm smoke
         echo "=== Linux arm64: ThreadSanitizer (data-race gate) ==="
@@ -292,7 +292,7 @@ case "${1:-full}" in
         echo "=== Linux glibc-floor (ubuntu-22.04): portable smoke + dynamic refusal ==="
         $COMPOSE run --rm smoke-glibc-floor
         echo "=== Linux amd64: test + build + smoke ==="
-        $COMPOSE run --rm -e CBM_SKIP_PERF=1 test-amd64
+        $COMPOSE run --rm -e LSM_SKIP_PERF=1 test-amd64
         $COMPOSE run --rm build-amd64
         $COMPOSE run --rm smoke-amd64
         echo "=== Windows: cross-compile + binary version check (Wine) ==="

@@ -1,7 +1,7 @@
 """GREEN native-Windows guard for the `update` -> install.ps1 handoff.
 
 Windows ships one executable in its runtime set, exactly like Linux and macOS:
-``codebase-memory-mcp.exe``.
+``logan-spine-mcp.exe``.
 
 There used to be a second, permanently resident launcher stub whose only job
 was to swap the product binary out from under itself, because a running .exe
@@ -9,7 +9,7 @@ cannot replace its own image on Windows. Historical variants of that stub
 received Microsoft Wacatac verdicts. Those observations did not expose a
 stable feature or prove causation, but the stub remained unnecessary loader-
 like behavior and a second artifact to audit. The swap therefore moved OUT of
-the process into install.ps1, which runs while CBM is NOT running.
+the process into install.ps1, which runs while LSM is NOT running.
 
 This guard asserts the replacement contract on real native Windows:
 
@@ -17,7 +17,7 @@ This guard asserts the replacement contract on real native Windows:
 * ``update`` NEVER replaces the running image in-process — the executable's
   bytes are unchanged, and no launcher/payload sibling appears next to it.
 * ``update`` refuses to reach the network first: it hands off before it
-  consults CBM_DOWNLOAD_URL, so it stays fast even when that URL is a black
+  consults LSM_DOWNLOAD_URL, so it stays fast even when that URL is a black
   hole.
 * ``update`` does not disturb an already-open MCP/daemon session.
 
@@ -27,7 +27,7 @@ came back.
 Exit code: 0 == contract honored, 1 == regression, 2 == precondition failure.
 
 Usage:
-    python test_windows_update_handoff.py <codebase-memory-mcp.exe>
+    python test_windows_update_handoff.py <logan-spine-mcp.exe>
 """
 
 import hashlib
@@ -89,7 +89,7 @@ def isolated_environment(work):
             "USERPROFILE": str(home),
             "APPDATA": str(home / "AppData" / "Roaming"),
             "LOCALAPPDATA": str(home / "AppData" / "Local"),
-            "CBM_CACHE_DIR": str(cache),
+            "LSM_CACHE_DIR": str(cache),
             "PYTHONUTF8": "1",
         }
     )
@@ -98,7 +98,7 @@ def isolated_environment(work):
 
 def copy_binary(source, directory):
     directory.mkdir(parents=True, exist_ok=True)
-    binary = directory / "codebase-memory-mcp.exe"
+    binary = directory / "logan-spine-mcp.exe"
     shutil.copy2(source, binary)
     return binary
 
@@ -110,7 +110,7 @@ def assert_update_hands_off_to_install_script(source, env, work):
     # If the handoff regresses into a real in-process update, keep its
     # unintended network path deterministic and fast: a correct implementation
     # never consults this URL.
-    command_env["CBM_DOWNLOAD_URL"] = "https://127.0.0.1:1"
+    command_env["LSM_DOWNLOAD_URL"] = "https://127.0.0.1:1"
 
     # Warm the freshly-copied cold binary first: first-touch antivirus scanning
     # of the just-written image inflates process load time, and the handoff
@@ -146,7 +146,7 @@ def assert_update_hands_off_to_install_script(source, env, work):
         "replace itself; that is exactly what the removed launcher stub was for)",
     )
     require(
-        not (binary.parent / "codebase-memory-mcp.payload.exe").exists(),
+        not (binary.parent / "logan-spine-mcp.payload.exe").exists(),
         "update recreated a launcher/payload pair beside the binary",
     )
     require(
@@ -164,7 +164,7 @@ def assert_update_does_not_drain_active_session(source, env, cache, work):
 
         command = copy_binary(source, work / "update-session-command")
         command_env = dict(env)
-        command_env["CBM_DOWNLOAD_URL"] = "https://127.0.0.1:1"
+        command_env["LSM_DOWNLOAD_URL"] = "https://127.0.0.1:1"
         result = run([command, "update", "--yes"], command_env, timeout=20)
         require(
             result.returncode == 0,
@@ -186,7 +186,7 @@ def main():
         print("PRECONDITION: native Windows is required")
         return 2
     if len(sys.argv) != 2:
-        print("usage: python test_windows_update_handoff.py <codebase-memory-mcp.exe>")
+        print("usage: python test_windows_update_handoff.py <logan-spine-mcp.exe>")
         return 2
 
     source = pathlib.Path(sys.argv[1]).resolve()
@@ -194,7 +194,7 @@ def main():
         print("PRECONDITION: binary not found: %s" % source)
         return 2
 
-    work = pathlib.Path(tempfile.mkdtemp(prefix="cbm_win_update_"))
+    work = pathlib.Path(tempfile.mkdtemp(prefix="lsm_win_update_"))
     try:
         env, cache = isolated_environment(work)
         assert_update_hands_off_to_install_script(source, env, work)

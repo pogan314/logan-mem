@@ -18,10 +18,10 @@
  * ROOT CAUSE -- extract_defs.c, extract_vars_mainstream(), Python case
  * (~line 4068):
  *
- *   case CBM_LANG_PYTHON: {
+ *   case LSM_LANG_PYTHON: {
  *       TSNode left = ts_node_child_by_field_name(node, TS_FIELD("left"));
  *       if (!ts_node_is_null(left) && strcmp(ts_node_type(left), "identifier") == 0) {
- *           push_var_def(ctx, cbm_node_text(a, left, ctx->source), node);
+ *           push_var_def(ctx, lsm_node_text(a, left, ctx->source), node);
  *       }
  *       break;
  *   }
@@ -62,16 +62,16 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <string.h>
 
-static CBMFileResult *rx_py(const char *src) {
-    return cbm_extract_file(src, (int)strlen(src), CBM_LANG_PYTHON, "proj", "mod.py",
+static LSMFileResult *rx_py(const char *src) {
+    return lsm_extract_file(src, (int)strlen(src), LSM_LANG_PYTHON, "proj", "mod.py",
                             0, NULL, NULL);
 }
 
-static int count_var_defs(CBMFileResult *r) {
+static int count_var_defs(LSMFileResult *r) {
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
         if (r->defs.items[i].label && strcmp(r->defs.items[i].label, "Variable") == 0)
@@ -80,9 +80,9 @@ static int count_var_defs(CBMFileResult *r) {
     return n;
 }
 
-static int has_var_def(CBMFileResult *r, const char *name) {
+static int has_var_def(LSMFileResult *r, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (d->label && strcmp(d->label, "Variable") == 0 &&
             d->name && strcmp(d->name, name) == 0)
             return 1;
@@ -113,7 +113,7 @@ TEST(repro_new_py_tuple_unpack_two_vars) {
         "z = 1\n"
         "x, y = some_func()\n";
 
-    CBMFileResult *r = rx_py(src);
+    LSMFileResult *r = rx_py(src);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -131,7 +131,7 @@ TEST(repro_new_py_tuple_unpack_two_vars) {
     int total = count_var_defs(r);
     ASSERT_GT(total, 1); /* RED on buggy code: count == 1 (only z) */
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -151,7 +151,7 @@ TEST(repro_new_py_tuple_unpack_named_vars) {
         "\n"
         "result, err = parse('hello')\n";
 
-    CBMFileResult *r = rx_py(src);
+    LSMFileResult *r = rx_py(src);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -162,7 +162,7 @@ TEST(repro_new_py_tuple_unpack_named_vars) {
     ASSERT_TRUE(has_var_def(r, "result")); /* RED on buggy code */
     ASSERT_TRUE(has_var_def(r, "err"));    /* RED on buggy code */
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

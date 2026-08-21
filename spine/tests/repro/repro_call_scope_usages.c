@@ -9,7 +9,7 @@
  * so duplicate CALLS/USAGE emissions cannot masquerade as a successful fix.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,11 +31,11 @@ static const char *call_short_name(const char *name) {
     return scope ? scope + 1 : short_name;
 }
 
-static int usage_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int usage_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *usage = &r->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->ref_name &&
+        const LSMUsage *usage = &r->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->ref_name &&
             strcmp(usage->ref_name, target) == 0 &&
             (!caller || qn_ends_with(usage->enclosing_func_qn, caller))) {
             count++;
@@ -44,11 +44,11 @@ static int usage_count(const CBMFileResult *r, const char *caller, const char *t
     return count;
 }
 
-static int call_reference_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int call_reference_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *usage = &r->usages.items[i];
-        if (usage->kind == CBM_USAGE_CALL_REFERENCE && usage->ref_name &&
+        const LSMUsage *usage = &r->usages.items[i];
+        if (usage->kind == LSM_USAGE_CALL_REFERENCE && usage->ref_name &&
             strcmp(usage->ref_name, target) == 0 &&
             (!caller || qn_ends_with(usage->enclosing_func_qn, caller))) {
             count++;
@@ -57,10 +57,10 @@ static int call_reference_count(const CBMFileResult *r, const char *caller, cons
     return count;
 }
 
-static int call_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int call_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         const char *callee = call_short_name(call->callee_name);
         if (callee && strcmp(callee, target) == 0 &&
             (!caller || qn_ends_with(call->enclosing_func_qn, caller))) {
@@ -70,11 +70,11 @@ static int call_count(const CBMFileResult *r, const char *caller, const char *ta
     return count;
 }
 
-static int exact_usage_count(const CBMFileResult *r, const char *caller_qn, const char *target) {
+static int exact_usage_count(const LSMFileResult *r, const char *caller_qn, const char *target) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *usage = &r->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->ref_name && usage->enclosing_func_qn &&
+        const LSMUsage *usage = &r->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->ref_name && usage->enclosing_func_qn &&
             strcmp(usage->ref_name, target) == 0 &&
             strcmp(usage->enclosing_func_qn, caller_qn) == 0) {
             count++;
@@ -83,10 +83,10 @@ static int exact_usage_count(const CBMFileResult *r, const char *caller_qn, cons
     return count;
 }
 
-static int exact_call_count(const CBMFileResult *r, const char *caller_qn, const char *callee) {
+static int exact_call_count(const LSMFileResult *r, const char *caller_qn, const char *callee) {
     int count = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (call->callee_name && call->enclosing_func_qn &&
             strcmp(call->callee_name, callee) == 0 &&
             strcmp(call->enclosing_func_qn, caller_qn) == 0) {
@@ -96,11 +96,11 @@ static int exact_call_count(const CBMFileResult *r, const char *caller_qn, const
     return count;
 }
 
-static int exact_definition_count(const CBMFileResult *r, const char *name,
+static int exact_definition_count(const LSMFileResult *r, const char *name,
                                   const char *qualified_name) {
     int count = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        const CBMDefinition *def = &r->defs.items[i];
+        const LSMDefinition *def = &r->defs.items[i];
         if (def->name && def->qualified_name && strcmp(def->name, name) == 0 &&
             strcmp(def->qualified_name, qualified_name) == 0) {
             count++;
@@ -109,20 +109,20 @@ static int exact_definition_count(const CBMFileResult *r, const char *name,
     return count;
 }
 
-static int definition_count(const CBMFileResult *r, const char *name) {
+static int definition_count(const LSMFileResult *r, const char *name) {
     int count = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        const CBMDefinition *def = &r->defs.items[i];
+        const LSMDefinition *def = &r->defs.items[i];
         if (def->name && strcmp(def->name, name) == 0)
             count++;
     }
     return count;
 }
 
-static CBMFileResult *extract_case(const char *tag, const char *source, CBMLanguage language,
+static LSMFileResult *extract_case(const char *tag, const char *source, LSMLanguage language,
                                    const char *filename) {
-    CBMFileResult *r =
-        cbm_extract_file(source, (int)strlen(source), language, "repro", filename, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(source, (int)strlen(source), language, "repro", filename, 0, NULL, NULL);
     if (!r)
         fprintf(stderr, "  [call-scope] case=%s invariant=extract_result expected=non-null\n", tag);
     return r;
@@ -152,14 +152,14 @@ static CBMFileResult *extract_case(const char *tag, const char *source, CBMLangu
 TEST(repro_call_scope_same_spelling_callee_and_argument) {
     static const char source[] = "function foo() {}\n"
                                  "function run() { foo(foo); }\n";
-    CBMFileResult *r = extract_case("same_spelling", source, CBM_LANG_JAVASCRIPT, "main.js");
+    LSMFileResult *r = extract_case("same_spelling", source, LSM_LANG_JAVASCRIPT, "main.js");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("same_spelling", r);
     CHECK_COUNT("same_spelling", "foo_definition", definition_count(r, "foo"), 1);
     CHECK_COUNT("same_spelling", "callee_call", call_count(r, "run", "foo"), 1);
     CHECK_COUNT("same_spelling", "argument_usage_only", usage_count(r, "run", "foo"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -172,7 +172,7 @@ TEST(repro_call_scope_nested_calls_retain_each_argument) {
                                  "function inner(input: number): number { return input; }\n"
                                  "function outer(cb: () => void, input: number): void {}\n"
                                  "function run(): void { outer(handler, inner(value)); }\n";
-    CBMFileResult *r = extract_case("nested_calls", source, CBM_LANG_TYPESCRIPT, "main.ts");
+    LSMFileResult *r = extract_case("nested_calls", source, LSM_LANG_TYPESCRIPT, "main.ts");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("nested_calls", r);
@@ -182,7 +182,7 @@ TEST(repro_call_scope_nested_calls_retain_each_argument) {
     CHECK_COUNT("nested_calls", "value_argument_usage", usage_count(r, "run", "value"), 1);
     CHECK_COUNT("nested_calls", "outer_not_usage", usage_count(r, "run", "outer"), 0);
     CHECK_COUNT("nested_calls", "inner_not_usage", usage_count(r, "run", "inner"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -193,14 +193,14 @@ TEST(repro_call_scope_inline_callback_body_usage) {
     static const char source[] = "const watched = 1;\n"
                                  "function register(callback) {}\n"
                                  "function run() { register(() => { watched; }); }\n";
-    CBMFileResult *r = extract_case("inline_callback", source, CBM_LANG_JAVASCRIPT, "main.js");
+    LSMFileResult *r = extract_case("inline_callback", source, LSM_LANG_JAVASCRIPT, "main.js");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("inline_callback", r);
     CHECK_COUNT("inline_callback", "registrar_call", call_count(r, "run", "register"), 1);
     CHECK_COUNT("inline_callback", "callback_body_usage", usage_count(r, NULL, "watched"), 1);
     CHECK_COUNT("inline_callback", "registrar_not_usage", usage_count(r, "run", "register"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -214,7 +214,7 @@ TEST(repro_call_scope_member_and_computed_components) {
         "const key = 'method';\n"
         "const payload = 1;\n"
         "function run(): void { receiver.method(payload); receiver[key](payload); }\n";
-    CBMFileResult *r = extract_case("member_computed", source, CBM_LANG_TYPESCRIPT, "main.ts");
+    LSMFileResult *r = extract_case("member_computed", source, LSM_LANG_TYPESCRIPT, "main.ts");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("member_computed", r);
@@ -223,7 +223,7 @@ TEST(repro_call_scope_member_and_computed_components) {
     CHECK_COUNT("member_computed", "computed_key_usage", usage_count(r, "run", "key"), 1);
     CHECK_COUNT("member_computed", "argument_usages", usage_count(r, "run", "payload"), 2);
     CHECK_COUNT("member_computed", "terminal_method_not_usage", usage_count(r, "run", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -238,7 +238,7 @@ TEST(repro_call_scope_constructor_and_generic_arguments) {
         "function handler(): void {}\n"
         "function accept<T>(callback: () => void): void {}\n"
         "function run(): void { new Box(handler); accept<Payload>(handler); }\n";
-    CBMFileResult *r = extract_case("constructor_generic", source, CBM_LANG_TYPESCRIPT, "main.ts");
+    LSMFileResult *r = extract_case("constructor_generic", source, LSM_LANG_TYPESCRIPT, "main.ts");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("constructor_generic", r);
@@ -249,7 +249,7 @@ TEST(repro_call_scope_constructor_and_generic_arguments) {
     CHECK_COUNT("constructor_generic", "constructor_not_usage", usage_count(r, "run", "Box"), 0);
     CHECK_COUNT("constructor_generic", "generic_callee_not_usage", usage_count(r, "run", "accept"),
                 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -260,7 +260,7 @@ TEST(repro_call_scope_c_function_pointer_invocation_and_arguments) {
                                  "void invoke(Callback first, Callback second) {}\n"
                                  "Callback shared = 0;\n"
                                  "void run(void) { invoke(shared, handler); shared(); }\n";
-    CBMFileResult *r = extract_case("c_function_pointer", source, CBM_LANG_C, "main.c");
+    LSMFileResult *r = extract_case("c_function_pointer", source, LSM_LANG_C, "main.c");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("c_function_pointer", r);
@@ -270,7 +270,7 @@ TEST(repro_call_scope_c_function_pointer_invocation_and_arguments) {
     CHECK_COUNT("c_function_pointer", "function_argument_usage", usage_count(r, "run", "handler"),
                 1);
     CHECK_COUNT("c_function_pointer", "invoke_not_usage", usage_count(r, "run", "invoke"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -281,7 +281,7 @@ TEST(repro_call_scope_cpp_function_pointer_invocation_and_arguments) {
                                  "void invoke(Callback first, Callback second) {}\n"
                                  "Callback shared = nullptr;\n"
                                  "void run() { invoke(shared, handler); shared(); }\n";
-    CBMFileResult *r = extract_case("cpp_function_pointer", source, CBM_LANG_CPP, "main.cpp");
+    LSMFileResult *r = extract_case("cpp_function_pointer", source, LSM_LANG_CPP, "main.cpp");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("cpp_function_pointer", r);
@@ -292,7 +292,7 @@ TEST(repro_call_scope_cpp_function_pointer_invocation_and_arguments) {
     CHECK_COUNT("cpp_function_pointer", "function_argument_usage", usage_count(r, "run", "handler"),
                 1);
     CHECK_COUNT("cpp_function_pointer", "invoke_not_usage", usage_count(r, "run", "invoke"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -301,7 +301,7 @@ TEST(repro_call_scope_python_keyword_argument) {
     static const char source[] = "def handler():\n    pass\n"
                                  "def accept(callback=None):\n    pass\n"
                                  "def run():\n    accept(callback=handler)\n";
-    CBMFileResult *r = extract_case("python_keyword", source, CBM_LANG_PYTHON, "main.py");
+    LSMFileResult *r = extract_case("python_keyword", source, LSM_LANG_PYTHON, "main.py");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("python_keyword", r);
@@ -309,7 +309,7 @@ TEST(repro_call_scope_python_keyword_argument) {
     CHECK_COUNT("python_keyword", "keyword_value_usage", usage_count(r, "run", "handler"), 1);
     CHECK_COUNT("python_keyword", "keyword_label_not_usage", usage_count(r, "run", "callback"), 0);
     CHECK_COUNT("python_keyword", "callee_not_usage", usage_count(r, "run", "accept"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -320,7 +320,7 @@ TEST(repro_call_scope_python_with_body_usage) {
     static const char source[] = "watched = 1\n"
                                  "def manager():\n    pass\n"
                                  "def run():\n    with manager():\n        watched\n";
-    CBMFileResult *r = extract_case("python_with", source, CBM_LANG_PYTHON, "main.py");
+    LSMFileResult *r = extract_case("python_with", source, LSM_LANG_PYTHON, "main.py");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("python_with", r);
@@ -328,7 +328,7 @@ TEST(repro_call_scope_python_with_body_usage) {
     CHECK_COUNT("python_with", "manager_call", call_count(r, "run", "manager"), 1);
     CHECK_COUNT("python_with", "with_body_usage", usage_count(r, "run", "watched"), 1);
     CHECK_COUNT("python_with", "manager_not_usage", usage_count(r, "run", "manager"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -339,7 +339,7 @@ TEST(repro_call_scope_rust_macro_argument) {
     static const char source[] = "static WATCHED: i32 = 1;\n"
                                  "macro_rules! probe { ($value:expr) => { $value }; }\n"
                                  "fn run() { probe!(WATCHED); }\n";
-    CBMFileResult *r = extract_case("rust_macro", source, CBM_LANG_RUST, "main.rs");
+    LSMFileResult *r = extract_case("rust_macro", source, LSM_LANG_RUST, "main.rs");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("rust_macro", r);
@@ -347,7 +347,7 @@ TEST(repro_call_scope_rust_macro_argument) {
     CHECK_COUNT("rust_macro", "macro_call", call_count(r, "run", "probe"), 1);
     CHECK_COUNT("rust_macro", "macro_argument_usage", usage_count(r, "run", "WATCHED"), 1);
     CHECK_COUNT("rust_macro", "macro_callee_not_usage", usage_count(r, "run", "probe"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -359,7 +359,7 @@ TEST(repro_call_scope_elixir_binary_operator_operand) {
     static const char source[] = "defmodule Sample do\n"
                                  "  def run(), do: watched + 1\n"
                                  "end\n";
-    CBMFileResult *r = extract_case("elixir_binary", source, CBM_LANG_ELIXIR, "sample.ex");
+    LSMFileResult *r = extract_case("elixir_binary", source, LSM_LANG_ELIXIR, "sample.ex");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("elixir_binary", r);
@@ -367,7 +367,7 @@ TEST(repro_call_scope_elixir_binary_operator_operand) {
     CHECK_COUNT("elixir_binary", "operator_call", call_count(r, NULL, "+"), 1);
     CHECK_COUNT("elixir_binary", "operand_usage", usage_count(r, NULL, "watched"), 1);
     CHECK_COUNT("elixir_binary", "operand_not_call", call_count(r, NULL, "watched"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -386,7 +386,7 @@ TEST(repro_call_scope_fortran_keyword_argument) {
                                  "    run = consume(value=watched)\n"
                                  "  end function run\n"
                                  "end module sample\n";
-    CBMFileResult *r = extract_case("fortran_keyword", source, CBM_LANG_FORTRAN, "main.f90");
+    LSMFileResult *r = extract_case("fortran_keyword", source, LSM_LANG_FORTRAN, "main.f90");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("fortran_keyword", r);
@@ -395,14 +395,14 @@ TEST(repro_call_scope_fortran_keyword_argument) {
     CHECK_COUNT("fortran_keyword", "keyword_value_usage", usage_count(r, "run", "watched"), 1);
     CHECK_COUNT("fortran_keyword", "keyword_label_not_usage", usage_count(r, "run", "value"), 0);
     CHECK_COUNT("fortran_keyword", "keyword_label_not_call", call_count(r, "run", "value"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
 
 /* A separate gap discovered while building the keyword-argument control:
  * Fortran's `call` statement is registered as call metadata, yet the direct
- * subroutine invocation currently emits no CBMCall. Keep this independent from
+ * subroutine invocation currently emits no LSMCall. Keep this independent from
  * keyword labels so its future fix cannot hide behind another emitted call. */
 TEST(repro_fortran_subroutine_call_is_extracted) {
     static const char source[] = "subroutine consume(value)\n"
@@ -411,8 +411,8 @@ TEST(repro_fortran_subroutine_call_is_extracted) {
                                  "subroutine run()\n"
                                  "  call consume(watched)\n"
                                  "end subroutine run\n";
-    CBMFileResult *r =
-        extract_case("fortran_subroutine_call", source, CBM_LANG_FORTRAN, "main.f90");
+    LSMFileResult *r =
+        extract_case("fortran_subroutine_call", source, LSM_LANG_FORTRAN, "main.f90");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("fortran_subroutine_call", r);
@@ -421,7 +421,7 @@ TEST(repro_fortran_subroutine_call_is_extracted) {
     CHECK_COUNT("fortran_subroutine_call", "total_calls", r->calls.count, 1);
     CHECK_COUNT("fortran_subroutine_call", "consume_call_from_run", call_count(r, "run", "consume"),
                 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -432,7 +432,7 @@ TEST(repro_call_scope_kotlin_property_navigation) {
     static const char source[] = "class Holder(val value: Int)\n"
                                  "val box = Holder(1)\n"
                                  "fun run(): Int = box.value\n";
-    CBMFileResult *r = extract_case("kotlin_navigation", source, CBM_LANG_KOTLIN, "Main.kt");
+    LSMFileResult *r = extract_case("kotlin_navigation", source, LSM_LANG_KOTLIN, "Main.kt");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("kotlin_navigation", r);
@@ -440,7 +440,7 @@ TEST(repro_call_scope_kotlin_property_navigation) {
     CHECK_COUNT("kotlin_navigation", "receiver_usage", usage_count(r, "run", "box"), 1);
     CHECK_COUNT("kotlin_navigation", "property_usage", usage_count(r, "run", "value"), 1);
     CHECK_COUNT("kotlin_navigation", "receiver_not_call", call_count(r, "run", "box"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -467,7 +467,7 @@ TEST(repro_call_scope_php_first_class_callable) {
                                  "  accept($nullable?->nullable_handler(...));\n"
                                  "  foo(...$args);\n"
                                  "}\n";
-    CBMFileResult *r = extract_case("php_first_class", source, CBM_LANG_PHP, "main.php");
+    LSMFileResult *r = extract_case("php_first_class", source, LSM_LANG_PHP, "main.php");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("php_first_class", r);
@@ -505,7 +505,7 @@ TEST(repro_call_scope_php_first_class_callable) {
     CHECK_COUNT("php_first_class", "unpacking_argument_usage", usage_count(r, "run", "$args"), 1);
     CHECK_COUNT("php_first_class", "unpacking_is_invocation", call_count(r, "run", "foo"), 1);
     CHECK_COUNT("php_first_class", "invoked_callee_not_usage", usage_count(r, "run", "foo"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -532,7 +532,7 @@ TEST(repro_scope_stack_preserves_deepest_function) {
                              "function sibling() { target(); }\n");
     ASSERT_TRUE(used < SOURCE_CAPACITY);
 
-    CBMFileResult *r = extract_case("deep_scope", source, CBM_LANG_JAVASCRIPT, "deep.js");
+    LSMFileResult *r = extract_case("deep_scope", source, LSM_LANG_JAVASCRIPT, "deep.js");
     free(source);
     ASSERT_NOT_NULL(r);
     int failures = 0;
@@ -544,7 +544,7 @@ TEST(repro_scope_stack_preserves_deepest_function) {
     CHECK_COUNT("deep_scope", "deepest_call_attribution", call_count(r, "f64", "target"), 1);
     CHECK_COUNT("deep_scope", "sibling_pop_recovery_control", call_count(r, "sibling", "target"),
                 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -564,7 +564,7 @@ TEST(repro_usage_declarations_are_not_references) {
                                  "  updatedValue++;\n"
                                  "  return localValue + localValue;\n"
                                  "}\n";
-    CBMFileResult *r = extract_case("declaration_usage", source, CBM_LANG_TYPESCRIPT, "main.ts");
+    LSMFileResult *r = extract_case("declaration_usage", source, LSM_LANG_TYPESCRIPT, "main.ts");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("declaration_usage", r);
@@ -580,7 +580,7 @@ TEST(repro_usage_declarations_are_not_references) {
                 usage_count(r, "run", "compoundValue"), 1);
     CHECK_COUNT("declaration_usage", "update_reads_value", usage_count(r, "run", "updatedValue"),
                 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -600,8 +600,8 @@ TEST(repro_call_scope_objectscript_typed_receiver_exact_owner) {
         "}\n";
     static const char caller_qn[] = "repro.Behavior.Sample.Behavior.run";
     static const char callee[] = "Sample.Target.accept";
-    CBMFileResult *r = extract_case("objectscript_typed_receiver", source,
-                                    CBM_LANG_OBJECTSCRIPT_UDL, "Behavior.cls");
+    LSMFileResult *r = extract_case("objectscript_typed_receiver", source,
+                                    LSM_LANG_OBJECTSCRIPT_UDL, "Behavior.cls");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("objectscript_typed_receiver", r);
@@ -616,7 +616,7 @@ TEST(repro_call_scope_objectscript_typed_receiver_exact_owner) {
     CHECK_COUNT("objectscript_typed_receiver", "callee_not_usage",
                 exact_usage_count(r, caller_qn, "accept"), 0);
     CHECK_COUNT("objectscript_typed_receiver", "one_call", r->calls.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }
@@ -631,8 +631,8 @@ TEST(repro_call_scope_objectscript_routine_tag_exact_owner) {
                                  "accept(value)\n"
                                  "    Quit value\n";
     static const char caller_qn[] = "repro.Behavior.run";
-    CBMFileResult *r = extract_case("objectscript_routine_scope", source,
-                                    CBM_LANG_OBJECTSCRIPT_ROUTINE, "Behavior.mac");
+    LSMFileResult *r = extract_case("objectscript_routine_scope", source,
+                                    LSM_LANG_OBJECTSCRIPT_ROUTINE, "Behavior.mac");
     ASSERT_NOT_NULL(r);
     int failures = 0;
     CHECK_CLEAN("objectscript_routine_scope", r);
@@ -647,7 +647,7 @@ TEST(repro_call_scope_objectscript_routine_tag_exact_owner) {
     CHECK_COUNT("objectscript_routine_scope", "callee_not_usage",
                 exact_usage_count(r, caller_qn, "accept"), 0);
     CHECK_COUNT("objectscript_routine_scope", "one_call", r->calls.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_EQ(failures, 0);
     PASS();
 }

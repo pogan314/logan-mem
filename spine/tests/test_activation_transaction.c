@@ -34,9 +34,9 @@
 enum { ACTIVATION_TEST_PATH_CAP = 1024, ACTIVATION_TEST_CONTENT_CAP = 256 };
 
 static bool activation_test_fixture(char out[ACTIVATION_TEST_PATH_CAP]) {
-    int written = snprintf(out, ACTIVATION_TEST_PATH_CAP, "%s/cbm-activation-transaction-XXXXXX",
-                           cbm_tmpdir());
-    return written > 0 && written < ACTIVATION_TEST_PATH_CAP && cbm_mkdtemp(out) != NULL;
+    int written = snprintf(out, ACTIVATION_TEST_PATH_CAP, "%s/lsm-activation-transaction-XXXXXX",
+                           lsm_tmpdir());
+    return written > 0 && written < ACTIVATION_TEST_PATH_CAP && lsm_mkdtemp(out) != NULL;
 }
 
 static bool activation_test_path(char out[ACTIVATION_TEST_PATH_CAP], const char *directory,
@@ -46,7 +46,7 @@ static bool activation_test_path(char out[ACTIVATION_TEST_PATH_CAP], const char 
 }
 
 static bool activation_test_read(const char *path, char out[ACTIVATION_TEST_CONTENT_CAP]) {
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file) {
         return false;
     }
@@ -57,7 +57,7 @@ static bool activation_test_read(const char *path, char out[ACTIVATION_TEST_CONT
 }
 
 static bool activation_test_write(const char *path, const char *contents) {
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     if (!file) {
         return false;
     }
@@ -312,14 +312,14 @@ TEST(activation_transaction_stages_same_directory_private_executable_and_aborts)
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+              LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NOT_NULL(transaction);
-    const char *staged = cbm_activation_transaction_staged_path(transaction);
+    const char *staged = lsm_activation_transaction_staged_path(transaction);
     ASSERT_NOT_NULL(staged);
     ASSERT_TRUE(strncmp(staged, directory, strlen(directory)) == 0);
     /* The invariant is containment in the target's directory, not a specific
@@ -341,7 +341,7 @@ TEST(activation_transaction_stages_same_directory_private_executable_and_aborts)
 
     char staged_copy[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(staged_copy, sizeof(staged_copy), "%s", staged);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_FALSE(activation_test_exists(staged_copy));
     ASSERT_FALSE(activation_test_exists(target));
@@ -353,13 +353,13 @@ TEST(activation_transaction_commit_keeps_backup_until_finalize) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "new", strlen("new"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *backup = cbm_activation_transaction_backup_path(transaction);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "new", strlen("new"), &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *backup = lsm_activation_transaction_backup_path(transaction);
     ASSERT_NOT_NULL(backup);
     char backup_copy[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(backup_copy, sizeof(backup_copy), "%s", backup);
@@ -368,17 +368,17 @@ TEST(activation_transaction_commit_keeps_backup_until_finalize) {
         .expect_absent = false,
         .expected_contents = "new",
     };
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &validation),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &validation),
+              LSM_ACTIVATION_TRANSACTION_OK);
     char contents[ACTIVATION_TEST_CONTENT_CAP];
     ASSERT_TRUE(activation_test_read(target, contents));
     ASSERT_STR_EQ(contents, "new");
     ASSERT_TRUE(activation_test_read(backup_copy, contents));
     ASSERT_STR_EQ(contents, "old");
 
-    ASSERT_EQ(cbm_activation_transaction_finalize(transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_finalize(transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_FALSE(activation_test_exists(backup_copy));
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(th_rmtree(directory), 0);
     PASS();
 }
@@ -387,24 +387,24 @@ TEST(activation_transaction_validation_failure_restores_previous_target) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "bad", strlen("bad"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *backup = cbm_activation_transaction_backup_path(transaction);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "bad", strlen("bad"), &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *backup = lsm_activation_transaction_backup_path(transaction);
     ASSERT_NOT_NULL(backup);
     char backup_copy[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(backup_copy, sizeof(backup_copy), "%s", backup);
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_reject, NULL),
-              CBM_ACTIVATION_TRANSACTION_VALIDATION_FAILED);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_reject, NULL),
+              LSM_ACTIVATION_TRANSACTION_VALIDATION_FAILED);
 
     char contents[ACTIVATION_TEST_CONTENT_CAP];
     ASSERT_TRUE(activation_test_read(target, contents));
     ASSERT_STR_EQ(contents, "old");
     ASSERT_FALSE(activation_test_exists(backup_copy));
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(th_rmtree(directory), 0);
     PASS();
 }
@@ -413,23 +413,23 @@ TEST(activation_transaction_explicit_rollback_restores_previous_target) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "new", strlen("new"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "new", strlen("new"), &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
     activation_test_validation_t validation = {
         .expect_absent = false,
         .expected_contents = "new",
     };
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &validation),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_rollback(transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &validation),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_rollback(transaction), LSM_ACTIVATION_TRANSACTION_OK);
     char contents[ACTIVATION_TEST_CONTENT_CAP];
     ASSERT_TRUE(activation_test_read(target, contents));
     ASSERT_STR_EQ(contents, "old");
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(th_rmtree(directory), 0);
     PASS();
 }
@@ -439,21 +439,21 @@ TEST(activation_transaction_stage_file_installs_new_target) {
     char source[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(source, directory, "downloaded-cbm"));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(source, directory, "downloaded-lsm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(source, "downloaded"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_file(target, source, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_file(target, source, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
     activation_test_validation_t validation = {
         .expect_absent = false,
         .expected_contents = "downloaded",
     };
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &validation),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_finalize(transaction), CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &validation),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_finalize(transaction), LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     char contents[ACTIVATION_TEST_CONTENT_CAP];
     ASSERT_TRUE(activation_test_read(target, contents));
     ASSERT_STR_EQ(contents, "downloaded");
@@ -480,25 +480,25 @@ TEST(activation_transaction_stage_file_survives_long_target_path) {
         ASSERT_TRUE(written > 0 && (size_t)written < sizeof(deep) - used);
     }
     ASSERT_TRUE(strlen(deep) > 300);
-    ASSERT_TRUE(cbm_mkdir_p(deep, 0700));
+    ASSERT_TRUE(lsm_mkdir_p(deep, 0700));
 
     char source[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
-    ASSERT_TRUE(activation_test_path(source, deep, "downloaded-cbm"));
-    ASSERT_TRUE(activation_test_path(target, deep, "cbm"));
+    ASSERT_TRUE(activation_test_path(source, deep, "downloaded-lsm"));
+    ASSERT_TRUE(activation_test_path(target, deep, "lsm"));
     ASSERT_TRUE(activation_test_write(source, "downloaded"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_file(target, source, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_file(target, source, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
     activation_test_validation_t validation = {
         .expect_absent = false,
         .expected_contents = "downloaded",
     };
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &validation),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_finalize(transaction), CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &validation),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_finalize(transaction), LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     char contents[ACTIVATION_TEST_CONTENT_CAP];
     ASSERT_TRUE(activation_test_read(target, contents));
     ASSERT_STR_EQ(contents, "downloaded");
@@ -510,35 +510,35 @@ TEST(activation_transaction_removal_can_rollback_or_finalize) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
     activation_test_validation_t absent = {
         .expect_absent = true,
         .expected_contents = NULL,
     };
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_removal(target, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &absent),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_removal(target, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &absent),
+              LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_FALSE(activation_test_exists(target));
-    ASSERT_EQ(cbm_activation_transaction_rollback(transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_rollback(transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_TRUE(activation_test_exists(target));
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
 
-    ASSERT_EQ(cbm_activation_transaction_stage_removal(target, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *backup = cbm_activation_transaction_backup_path(transaction);
+    ASSERT_EQ(lsm_activation_transaction_stage_removal(target, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *backup = lsm_activation_transaction_backup_path(transaction);
     ASSERT_NOT_NULL(backup);
     char backup_copy[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(backup_copy, sizeof(backup_copy), "%s", backup);
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &absent),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_finalize(transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &absent),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_finalize(transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_FALSE(activation_test_exists(target));
     ASSERT_FALSE(activation_test_exists(backup_copy));
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(th_rmtree(directory), 0);
     PASS();
 }
@@ -554,37 +554,37 @@ TEST(activation_transaction_removal_survives_transient_rename_locks) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
     activation_test_validation_t absent = {
         .expect_absent = true,
         .expected_contents = NULL,
     };
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_removal(target, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_removal(target, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
     /* Strictly inside the budget: the retire must still succeed. */
-    cbm_activation_transaction_rename_failures_set_for_test(3U);
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &absent),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    cbm_activation_transaction_rename_failures_set_for_test(0U);
+    lsm_activation_transaction_rename_failures_set_for_test(3U);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &absent),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_rename_failures_set_for_test(0U);
     ASSERT_FALSE(activation_test_exists(target));
-    ASSERT_EQ(cbm_activation_transaction_finalize(transaction), CBM_ACTIVATION_TRANSACTION_OK);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_finalize(transaction), LSM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
 
     /* Past the budget it must still FAIL, and leave the target in place: a
      * genuinely held file is not something to spin on or to report as removed. */
     ASSERT_TRUE(activation_test_write(target, "old"));
-    ASSERT_EQ(cbm_activation_transaction_stage_removal(target, &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    cbm_activation_transaction_rename_failures_set_for_test(64U);
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, activation_test_validate, &absent),
-              CBM_ACTIVATION_TRANSACTION_IO);
-    cbm_activation_transaction_rename_failures_set_for_test(0U);
+    ASSERT_EQ(lsm_activation_transaction_stage_removal(target, &transaction),
+              LSM_ACTIVATION_TRANSACTION_OK);
+    lsm_activation_transaction_rename_failures_set_for_test(64U);
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, activation_test_validate, &absent),
+              LSM_ACTIVATION_TRANSACTION_IO);
+    lsm_activation_transaction_rename_failures_set_for_test(0U);
     ASSERT_TRUE(activation_test_exists(target));
-    (void)cbm_activation_transaction_rollback(transaction);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    (void)lsm_activation_transaction_rollback(transaction);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(th_rmtree(directory), 0);
     PASS();
 }
@@ -595,12 +595,12 @@ TEST(activation_transaction_rejects_cross_account_writable_target_directory) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_EQ(chmod(directory, 0777), 0);
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
     ASSERT_EQ(chmod(directory, 0700), 0);
     ASSERT_EQ(th_rmtree(directory), 0);
@@ -617,17 +617,17 @@ TEST(activation_transaction_permission_refusal_names_directory_and_mode) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     /* Group-writable LEAF: still refused (the binary lands here), unlike a
      * group-writable ancestor which is now only warned about. */
     ASSERT_EQ(chmod(directory, 0775), 0);
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
 
-    const char *note = cbm_activation_transaction_refusal_note();
+    const char *note = lsm_activation_transaction_refusal_note();
     ASSERT_NOT_NULL(note);
     ASSERT_TRUE(note[0] != '\0');
     /* WHICH rule refused, WHAT the mode was, and WHERE — all three, or the
@@ -652,17 +652,17 @@ TEST(activation_transaction_admits_group_writable_ancestor) {
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(parent));
     ASSERT_TRUE(activation_test_path(child, parent, "bin"));
-    ASSERT_TRUE(cbm_mkdir_p(child, 0700));
-    ASSERT_TRUE(activation_test_path(target, child, "cbm"));
+    ASSERT_TRUE(lsm_mkdir_p(child, 0700));
+    ASSERT_TRUE(activation_test_path(target, child, "lsm"));
     ASSERT_EQ(chmod(parent, 0775), 0);
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+              LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NOT_NULL(transaction);
-    (void)cbm_activation_transaction_rollback(transaction);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    (void)lsm_activation_transaction_rollback(transaction);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
 
     ASSERT_EQ(chmod(parent, 0700), 0);
     ASSERT_EQ(th_rmtree(parent), 0);
@@ -675,23 +675,23 @@ TEST(activation_transaction_rejects_windows_callback_allow_directory_ace) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_windows_set_directory_acl(directory, true));
     ASSERT_TRUE(activation_test_windows_directory_owned_by_current_user(directory));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    cbm_activation_transaction_status_t stage_status = cbm_activation_transaction_stage_bytes(
+    lsm_activation_transaction_t *transaction = NULL;
+    lsm_activation_transaction_status_t stage_status = lsm_activation_transaction_stage_bytes(
         target, "candidate", strlen("candidate"), &transaction);
     bool transaction_was_created = transaction != NULL;
-    cbm_activation_transaction_status_t close_status =
-        transaction ? cbm_activation_transaction_close(&transaction)
-                    : CBM_ACTIVATION_TRANSACTION_OK;
+    lsm_activation_transaction_status_t close_status =
+        transaction ? lsm_activation_transaction_close(&transaction)
+                    : LSM_ACTIVATION_TRANSACTION_OK;
     bool acl_restored = activation_test_windows_set_directory_acl(directory, false);
     int cleanup_status = th_rmtree(directory);
 
-    ASSERT_EQ(stage_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(stage_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_FALSE(transaction_was_created);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_TRUE(acl_restored);
     ASSERT_EQ(cleanup_status, 0);
@@ -722,35 +722,35 @@ TEST(activation_transaction_rejects_symlink_candidate_target_and_parent) {
     ASSERT_TRUE(activation_test_path(real_nested, real_parent, "nested"));
     ASSERT_TRUE(activation_test_path(real_nested_candidate, real_nested, "candidate"));
     ASSERT_TRUE(activation_test_path(parent_link, directory, "parent-link"));
-    ASSERT_TRUE(activation_test_path(linked_parent_target, parent_link, "cbm"));
-    ASSERT_TRUE(activation_test_path(linked_nested_target, parent_link, "nested/cbm"));
+    ASSERT_TRUE(activation_test_path(linked_parent_target, parent_link, "lsm"));
+    ASSERT_TRUE(activation_test_path(linked_nested_target, parent_link, "nested/lsm"));
     ASSERT_TRUE(activation_test_path(linked_nested_candidate, parent_link, "nested/candidate"));
     ASSERT_TRUE(activation_test_write(candidate, "candidate"));
     ASSERT_EQ(symlink(candidate, candidate_link), 0);
     ASSERT_EQ(symlink(candidate, target_link), 0);
-    ASSERT_TRUE(cbm_mkdir_p(real_parent, 0700));
-    ASSERT_TRUE(cbm_mkdir_p(real_nested, 0700));
+    ASSERT_TRUE(lsm_mkdir_p(real_parent, 0700));
+    ASSERT_TRUE(lsm_mkdir_p(real_nested, 0700));
     ASSERT_TRUE(activation_test_write(real_nested_candidate, "candidate"));
     ASSERT_EQ(symlink(real_parent, parent_link), 0);
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_file(target, candidate_link, &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_file(target, candidate_link, &transaction),
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
-    ASSERT_EQ(cbm_activation_transaction_stage_file(target, linked_nested_candidate, &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(lsm_activation_transaction_stage_file(target, linked_nested_candidate, &transaction),
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target_link, "replacement",
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target_link, "replacement",
                                                      strlen("replacement"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(linked_parent_target, "replacement",
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(linked_parent_target, "replacement",
                                                      strlen("replacement"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(linked_nested_target, "replacement",
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(linked_nested_target, "replacement",
                                                      strlen("replacement"), &transaction),
-              CBM_ACTIVATION_TRANSACTION_IO);
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_NULL(transaction);
 
     char contents[ACTIVATION_TEST_CONTENT_CAP];
@@ -772,21 +772,21 @@ TEST(activation_transaction_fails_closed_if_target_directory_is_replaced) {
     ASSERT_TRUE(activation_test_fixture(root));
     ASSERT_TRUE(activation_test_path(active, root, "active"));
     ASSERT_TRUE(activation_test_path(moved, root, "moved"));
-    ASSERT_TRUE(cbm_mkdir_p(active, 0700));
-    ASSERT_TRUE(activation_test_path(target, active, "cbm"));
+    ASSERT_TRUE(lsm_mkdir_p(active, 0700));
+    ASSERT_TRUE(activation_test_path(target, active, "lsm"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+              LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_EQ(rename(active, moved), 0);
-    ASSERT_TRUE(cbm_mkdir_p(active, 0700));
-    ASSERT_EQ(cbm_activation_transaction_commit(transaction, NULL, NULL),
-              CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_TRUE(lsm_mkdir_p(active, 0700));
+    ASSERT_EQ(lsm_activation_transaction_commit(transaction, NULL, NULL),
+              LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_FALSE(activation_test_exists(target));
-    ASSERT_EQ(cbm_rmdir(active), 0);
+    ASSERT_EQ(lsm_rmdir(active), 0);
     ASSERT_EQ(rename(moved, active), 0);
-    ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_EQ(th_rmtree(root), 0);
     PASS();
@@ -797,13 +797,13 @@ TEST(activation_transaction_does_not_replace_target_created_at_publish_boundary)
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
 
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *staged = cbm_activation_transaction_staged_path(transaction);
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *staged = lsm_activation_transaction_staged_path(transaction);
     ASSERT_NOT_NULL(staged);
     char staged_copy[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(staged_copy, sizeof(staged_copy), "%s", staged);
@@ -812,32 +812,32 @@ TEST(activation_transaction_does_not_replace_target_created_at_publish_boundary)
         .contents = "external",
         .created = false,
     };
-    cbm_activation_transaction_set_before_absent_publish_for_test(
+    lsm_activation_transaction_set_before_absent_publish_for_test(
         activation_test_create_competing_target, &competing);
-    cbm_activation_transaction_status_t commit_status =
-        cbm_activation_transaction_commit(transaction, NULL, NULL);
-    cbm_activation_transaction_set_before_absent_publish_for_test(NULL, NULL);
+    lsm_activation_transaction_status_t commit_status =
+        lsm_activation_transaction_commit(transaction, NULL, NULL);
+    lsm_activation_transaction_set_before_absent_publish_for_test(NULL, NULL);
 
     char before_close[ACTIVATION_TEST_CONTENT_CAP];
     bool target_survived_commit = activation_test_read(target, before_close);
     bool stage_survived_commit = activation_test_exists(staged_copy);
-    cbm_activation_transaction_status_t close_status =
-        cbm_activation_transaction_close(&transaction);
+    lsm_activation_transaction_status_t close_status =
+        lsm_activation_transaction_close(&transaction);
     bool stage_survived_close = activation_test_exists(staged_copy);
     char after_close[ACTIVATION_TEST_CONTENT_CAP];
     bool target_survived_close = activation_test_read(target, after_close);
 
     if (activation_test_exists(target)) {
-        ASSERT_EQ(cbm_unlink(target), 0);
+        ASSERT_EQ(lsm_unlink(target), 0);
     }
     ASSERT_EQ(th_rmtree(directory), 0);
 
     ASSERT_TRUE(competing.created);
-    ASSERT_EQ(commit_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(commit_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_TRUE(target_survived_commit);
     ASSERT_STR_EQ(before_close, "external");
     ASSERT_TRUE(stage_survived_commit);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_FALSE(stage_survived_close);
     ASSERT_TRUE(target_survived_close);
@@ -851,7 +851,7 @@ TEST(activation_transaction_rejects_macos_mutating_extended_acl) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_EQ(chmod(directory, 0700), 0);
 
     activation_test_acl_status_t acl_status = activation_test_install_mutating_acl(directory);
@@ -865,18 +865,18 @@ TEST(activation_transaction_rejects_macos_mutating_extended_acl) {
     ASSERT_EQ(stat(directory, &status), 0);
     ASSERT_EQ(status.st_mode & 0777, 0700);
 
-    cbm_activation_transaction_t *transaction = NULL;
-    cbm_activation_transaction_status_t stage_status = cbm_activation_transaction_stage_bytes(
+    lsm_activation_transaction_t *transaction = NULL;
+    lsm_activation_transaction_status_t stage_status = lsm_activation_transaction_stage_bytes(
         target, "candidate", strlen("candidate"), &transaction);
     bool transaction_was_created = transaction != NULL;
-    cbm_activation_transaction_status_t close_status =
-        transaction ? cbm_activation_transaction_close(&transaction)
-                    : CBM_ACTIVATION_TRANSACTION_OK;
+    lsm_activation_transaction_status_t close_status =
+        transaction ? lsm_activation_transaction_close(&transaction)
+                    : LSM_ACTIVATION_TRANSACTION_OK;
     ASSERT_EQ(th_rmtree(directory), 0);
 
-    ASSERT_EQ(stage_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(stage_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_FALSE(transaction_was_created);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
 #endif
     PASS();
@@ -887,7 +887,7 @@ TEST(activation_transaction_rejects_macos_existing_target_mutating_acl) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
 
     activation_test_acl_status_t acl_status = activation_test_install_mutating_acl(target);
@@ -898,14 +898,14 @@ TEST(activation_transaction_rejects_macos_existing_target_mutating_acl) {
     ASSERT_EQ(acl_status, ACTIVATION_TEST_ACL_OK);
     bool metadata_acceptable = activation_test_acl_metadata_acceptable(target, false);
 
-    cbm_activation_transaction_t *transaction = NULL;
-    cbm_activation_transaction_status_t stage_status = cbm_activation_transaction_stage_bytes(
+    lsm_activation_transaction_t *transaction = NULL;
+    lsm_activation_transaction_status_t stage_status = lsm_activation_transaction_stage_bytes(
         target, "candidate", strlen("candidate"), &transaction);
     char staged[ACTIVATION_TEST_PATH_CAP] = {0};
     char backup[ACTIVATION_TEST_PATH_CAP] = {0};
     if (transaction) {
-        const char *staged_path = cbm_activation_transaction_staged_path(transaction);
-        const char *backup_path = cbm_activation_transaction_backup_path(transaction);
+        const char *staged_path = lsm_activation_transaction_staged_path(transaction);
+        const char *backup_path = lsm_activation_transaction_backup_path(transaction);
         if (staged_path) {
             (void)snprintf(staged, sizeof(staged), "%s", staged_path);
         }
@@ -913,29 +913,29 @@ TEST(activation_transaction_rejects_macos_existing_target_mutating_acl) {
             (void)snprintf(backup, sizeof(backup), "%s", backup_path);
         }
     }
-    cbm_activation_transaction_status_t commit_status = CBM_ACTIVATION_TRANSACTION_INVALID_STATE;
-    if (stage_status == CBM_ACTIVATION_TRANSACTION_OK && transaction) {
-        commit_status = cbm_activation_transaction_commit(transaction, NULL, NULL);
+    lsm_activation_transaction_status_t commit_status = LSM_ACTIVATION_TRANSACTION_INVALID_STATE;
+    if (stage_status == LSM_ACTIVATION_TRANSACTION_OK && transaction) {
+        commit_status = lsm_activation_transaction_commit(transaction, NULL, NULL);
     }
     char observed[ACTIVATION_TEST_CONTENT_CAP];
     bool target_unchanged = activation_test_read(target, observed) && strcmp(observed, "old") == 0;
     bool acl_cleared = activation_test_clear_extended_acl_if_exists(target) &&
                        activation_test_clear_extended_acl_if_exists(staged) &&
                        activation_test_clear_extended_acl_if_exists(backup);
-    cbm_activation_transaction_status_t close_status =
-        transaction ? cbm_activation_transaction_close(&transaction)
-                    : CBM_ACTIVATION_TRANSACTION_OK;
+    lsm_activation_transaction_status_t close_status =
+        transaction ? lsm_activation_transaction_close(&transaction)
+                    : LSM_ACTIVATION_TRANSACTION_OK;
     char restored[ACTIVATION_TEST_CONTENT_CAP];
     bool target_restored = activation_test_read(target, restored) && strcmp(restored, "old") == 0;
     int cleanup_status = th_rmtree(directory);
 
     ASSERT_TRUE(metadata_acceptable);
-    ASSERT_TRUE(stage_status == CBM_ACTIVATION_TRANSACTION_IO ||
-                (stage_status == CBM_ACTIVATION_TRANSACTION_OK &&
-                 commit_status == CBM_ACTIVATION_TRANSACTION_IO));
+    ASSERT_TRUE(stage_status == LSM_ACTIVATION_TRANSACTION_IO ||
+                (stage_status == LSM_ACTIVATION_TRANSACTION_OK &&
+                 commit_status == LSM_ACTIVATION_TRANSACTION_IO));
     ASSERT_TRUE(target_unchanged);
     ASSERT_TRUE(acl_cleared);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_TRUE(target_restored);
     ASSERT_EQ(cleanup_status, 0);
@@ -948,35 +948,35 @@ TEST(activation_transaction_revalidates_macos_directory_acl_before_commit) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
+              LSM_ACTIVATION_TRANSACTION_OK);
 
     activation_test_acl_status_t acl_status = activation_test_install_mutating_acl(directory);
     if (acl_status == ACTIVATION_TEST_ACL_UNSUPPORTED) {
-        ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+        ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
         ASSERT_EQ(th_rmtree(directory), 0);
         SKIP_PLATFORM("macOS fixture filesystem has no extended ACL support");
     }
     ASSERT_EQ(acl_status, ACTIVATION_TEST_ACL_OK);
     bool metadata_acceptable = activation_test_acl_metadata_acceptable(directory, true);
-    cbm_activation_transaction_status_t commit_status =
-        cbm_activation_transaction_commit(transaction, NULL, NULL);
+    lsm_activation_transaction_status_t commit_status =
+        lsm_activation_transaction_commit(transaction, NULL, NULL);
     char observed[ACTIVATION_TEST_CONTENT_CAP];
     bool target_unchanged = activation_test_read(target, observed) && strcmp(observed, "old") == 0;
     bool acl_cleared = activation_test_clear_extended_acl(directory);
-    cbm_activation_transaction_status_t close_status =
-        cbm_activation_transaction_close(&transaction);
+    lsm_activation_transaction_status_t close_status =
+        lsm_activation_transaction_close(&transaction);
     int cleanup_status = th_rmtree(directory);
 
     ASSERT_TRUE(metadata_acceptable);
-    ASSERT_EQ(commit_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(commit_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_TRUE(target_unchanged);
     ASSERT_TRUE(acl_cleared);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_EQ(cleanup_status, 0);
 #endif
@@ -988,40 +988,40 @@ TEST(activation_transaction_revalidates_macos_staged_file_acl_before_commit) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *staged_path = cbm_activation_transaction_staged_path(transaction);
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *staged_path = lsm_activation_transaction_staged_path(transaction);
     ASSERT_NOT_NULL(staged_path);
     char staged[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(staged, sizeof(staged), "%s", staged_path);
 
     activation_test_acl_status_t acl_status = activation_test_install_mutating_acl(staged);
     if (acl_status == ACTIVATION_TEST_ACL_UNSUPPORTED) {
-        ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+        ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
         ASSERT_EQ(th_rmtree(directory), 0);
         SKIP_PLATFORM("macOS fixture filesystem has no extended ACL support");
     }
     ASSERT_EQ(acl_status, ACTIVATION_TEST_ACL_OK);
     bool metadata_acceptable = activation_test_acl_metadata_acceptable(staged, false);
-    cbm_activation_transaction_status_t commit_status =
-        cbm_activation_transaction_commit(transaction, NULL, NULL);
+    lsm_activation_transaction_status_t commit_status =
+        lsm_activation_transaction_commit(transaction, NULL, NULL);
     char observed[ACTIVATION_TEST_CONTENT_CAP];
     bool target_unchanged = activation_test_read(target, observed) && strcmp(observed, "old") == 0;
     bool acl_cleared = activation_test_clear_extended_acl_if_exists(staged) &&
                        activation_test_clear_extended_acl_if_exists(target);
-    cbm_activation_transaction_status_t close_status =
-        cbm_activation_transaction_close(&transaction);
+    lsm_activation_transaction_status_t close_status =
+        lsm_activation_transaction_close(&transaction);
     int cleanup_status = th_rmtree(directory);
 
     ASSERT_TRUE(metadata_acceptable);
-    ASSERT_EQ(commit_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(commit_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_TRUE(target_unchanged);
     ASSERT_TRUE(acl_cleared);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_EQ(cleanup_status, 0);
 #endif
@@ -1033,40 +1033,40 @@ TEST(activation_transaction_revalidates_macos_target_file_acl_before_commit) {
     char directory[ACTIVATION_TEST_PATH_CAP];
     char target[ACTIVATION_TEST_PATH_CAP];
     ASSERT_TRUE(activation_test_fixture(directory));
-    ASSERT_TRUE(activation_test_path(target, directory, "cbm"));
+    ASSERT_TRUE(activation_test_path(target, directory, "lsm"));
     ASSERT_TRUE(activation_test_write(target, "old"));
-    cbm_activation_transaction_t *transaction = NULL;
-    ASSERT_EQ(cbm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
+    lsm_activation_transaction_t *transaction = NULL;
+    ASSERT_EQ(lsm_activation_transaction_stage_bytes(target, "candidate", strlen("candidate"),
                                                      &transaction),
-              CBM_ACTIVATION_TRANSACTION_OK);
-    const char *backup_path = cbm_activation_transaction_backup_path(transaction);
+              LSM_ACTIVATION_TRANSACTION_OK);
+    const char *backup_path = lsm_activation_transaction_backup_path(transaction);
     ASSERT_NOT_NULL(backup_path);
     char backup[ACTIVATION_TEST_PATH_CAP];
     (void)snprintf(backup, sizeof(backup), "%s", backup_path);
 
     activation_test_acl_status_t acl_status = activation_test_install_mutating_acl(target);
     if (acl_status == ACTIVATION_TEST_ACL_UNSUPPORTED) {
-        ASSERT_EQ(cbm_activation_transaction_close(&transaction), CBM_ACTIVATION_TRANSACTION_OK);
+        ASSERT_EQ(lsm_activation_transaction_close(&transaction), LSM_ACTIVATION_TRANSACTION_OK);
         ASSERT_EQ(th_rmtree(directory), 0);
         SKIP_PLATFORM("macOS fixture filesystem has no extended ACL support");
     }
     ASSERT_EQ(acl_status, ACTIVATION_TEST_ACL_OK);
     bool metadata_acceptable = activation_test_acl_metadata_acceptable(target, false);
-    cbm_activation_transaction_status_t commit_status =
-        cbm_activation_transaction_commit(transaction, NULL, NULL);
+    lsm_activation_transaction_status_t commit_status =
+        lsm_activation_transaction_commit(transaction, NULL, NULL);
     char observed[ACTIVATION_TEST_CONTENT_CAP];
     bool target_unchanged = activation_test_read(target, observed) && strcmp(observed, "old") == 0;
     bool acl_cleared = activation_test_clear_extended_acl_if_exists(target) &&
                        activation_test_clear_extended_acl_if_exists(backup);
-    cbm_activation_transaction_status_t close_status =
-        cbm_activation_transaction_close(&transaction);
+    lsm_activation_transaction_status_t close_status =
+        lsm_activation_transaction_close(&transaction);
     int cleanup_status = th_rmtree(directory);
 
     ASSERT_TRUE(metadata_acceptable);
-    ASSERT_EQ(commit_status, CBM_ACTIVATION_TRANSACTION_IO);
+    ASSERT_EQ(commit_status, LSM_ACTIVATION_TRANSACTION_IO);
     ASSERT_TRUE(target_unchanged);
     ASSERT_TRUE(acl_cleared);
-    ASSERT_EQ(close_status, CBM_ACTIVATION_TRANSACTION_OK);
+    ASSERT_EQ(close_status, LSM_ACTIVATION_TRANSACTION_OK);
     ASSERT_NULL(transaction);
     ASSERT_EQ(cleanup_status, 0);
 #endif

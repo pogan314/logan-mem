@@ -8,27 +8,27 @@
  * inside its body. The shared single-file + pipeline runners keep this DRY and
  * identical to repro_grammar_core.c so the families are comparable.
  *
- * Languages covered (15) and the CBM_LANG_* enum each uses (all verified present
- * in internal/cbm/cbm.h -- none missing, none skipped):
- *   GLSL     -> CBM_LANG_GLSL      (shader; reuses C node types)
- *   HLSL     -> CBM_LANG_HLSL      (shader; C++-family node types)
- *   WGSL     -> CBM_LANG_WGSL      (shader; own grammar)
- *   ISPC     -> CBM_LANG_ISPC      (shader/SIMD; C-family node types)
- *   Slang    -> CBM_LANG_SLANG     (shader; C++-family node types)
- *   Cairo    -> CBM_LANG_CAIRO     (smart-contract; Rust-like)
- *   Sway     -> CBM_LANG_SWAY      (smart-contract; Rust-like)
- *   FunC     -> CBM_LANG_FUNC      (smart-contract; TON)
- *   Wolfram  -> CBM_LANG_WOLFRAM   (CAS; assignment-as-definition)
- *   MATLAB   -> CBM_LANG_MATLAB    (numeric)
- *   Magma    -> CBM_LANG_MAGMA     (CAS)
- *   FORM     -> CBM_LANG_FORM      (symbolic; procedure_definition / call_statement)
- *   TLA+     -> CBM_LANG_TLAPLUS   (formal spec; operator_definition)
- *   Agda     -> CBM_LANG_AGDA      (dependently-typed)
- *   Apex     -> CBM_LANG_APEX      (Salesforce; Java-like, methods only)
+ * Languages covered (15) and the LSM_LANG_* enum each uses (all verified present
+ * in internal/lsm/lsm.h -- none missing, none skipped):
+ *   GLSL     -> LSM_LANG_GLSL      (shader; reuses C node types)
+ *   HLSL     -> LSM_LANG_HLSL      (shader; C++-family node types)
+ *   WGSL     -> LSM_LANG_WGSL      (shader; own grammar)
+ *   ISPC     -> LSM_LANG_ISPC      (shader/SIMD; C-family node types)
+ *   Slang    -> LSM_LANG_SLANG     (shader; C++-family node types)
+ *   Cairo    -> LSM_LANG_CAIRO     (smart-contract; Rust-like)
+ *   Sway     -> LSM_LANG_SWAY      (smart-contract; Rust-like)
+ *   FunC     -> LSM_LANG_FUNC      (smart-contract; TON)
+ *   Wolfram  -> LSM_LANG_WOLFRAM   (CAS; assignment-as-definition)
+ *   MATLAB   -> LSM_LANG_MATLAB    (numeric)
+ *   Magma    -> LSM_LANG_MAGMA     (CAS)
+ *   FORM     -> LSM_LANG_FORM      (symbolic; procedure_definition / call_statement)
+ *   TLA+     -> LSM_LANG_TLAPLUS   (formal spec; operator_definition)
+ *   Agda     -> LSM_LANG_AGDA      (dependently-typed)
+ *   Apex     -> LSM_LANG_APEX      (Salesforce; Java-like, methods only)
  *
  * BATTERY DIMENSIONS (identical to repro_grammar_core.c)
  * -----------------------------------------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *   2. labels-valid    : inv_count_bad_labels(r) == 0
  *   3. fqn-wellformed  : inv_count_bad_fqns(r) == 0
@@ -36,7 +36,7 @@
  *   5. defs-present    : the function/method written in the fixture is extracted
  *   6. calls-extracted : inv_has_call(r, "<callee>") == 1 (the in-body call)
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : module_sourced == 0 -- every in-body call sourced at a
  *                          Function/Method node, NEVER at a Module node.
  *   8. no-dangling       : inv_count_dangling_edges(store,project,"CALLS") == 0
@@ -47,7 +47,7 @@
  *
  * KNOWN GAP (the point of this file): these are mostly grammar-only (non-LSP)
  * languages, so dimension 7 (callable-sourcing) is expected RED for the majority
- * via the same cbm_enclosing_func_qn -> Module fallback documented in
+ * via the same lsm_enclosing_func_qn -> Module fallback documented in
  * repro_grammar_core.c (func_kinds_for_lang in helpers.c not matching the
  * grammar's emitted function node types, with no cross-LSP rescue for these
  * langs). Several langs are additionally expected RED at dimension 6
@@ -78,7 +78,7 @@
  * must appear in the extracted calls.
  */
 static int single_file_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file,
+                               LSMLanguage lang, const char *file,
                                const char *expect_label,
                                const char *expect_label2, const char *callee) {
     const char *RED = tf_red();
@@ -92,7 +92,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -142,7 +142,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -163,7 +163,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -211,16 +211,16 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
  * Returns 0 on PASS (returned + ranges sane), 1 on FAIL.
  */
 static int robustness_probe(const char *lang_tag, const char *bad_src,
-                            CBMLanguage lang, const char *file) {
+                            LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
-    CBMFileResult *r = inv_rx(bad_src, lang, file);
+    LSMFileResult *r = inv_rx(bad_src, lang, file);
     if (!r) {
         /* Returned cleanly with NULL -- acceptable, no crash. */
         return 0;
     }
     int bad_ranges = inv_count_bad_ranges(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     if (bad_ranges != 0) {
         printf("  %sFAIL%s  [%s] robustness: malformed input produced %d def(s) "
                "with invalid range\n",
@@ -248,11 +248,11 @@ TEST(repro_grammar_scientific_glsl) {
         "    float v = scale(0.5);\n"
         "    gl_FragColor = vec4(v);\n"
         "}\n";
-    if (single_file_battery("GLSL", src, CBM_LANG_GLSL, "shader.frag",
+    if (single_file_battery("GLSL", src, LSM_LANG_GLSL, "shader.frag",
                             "Function", NULL, "scale") != 0)
         return 1;
     if (robustness_probe("GLSL", "void main() { float v = scale(",
-                         CBM_LANG_GLSL, "shader.frag") != 0)
+                         LSM_LANG_GLSL, "shader.frag") != 0)
         return 1;
     return pipeline_battery("GLSL", "shader.frag", src);
 }
@@ -273,11 +273,11 @@ TEST(repro_grammar_scientific_hlsl) {
         "    float v = scale(uv.x);\n"
         "    return float4(v, v, v, 1.0);\n"
         "}\n";
-    if (single_file_battery("HLSL", src, CBM_LANG_HLSL, "shader.hlsl",
+    if (single_file_battery("HLSL", src, LSM_LANG_HLSL, "shader.hlsl",
                             "Function", NULL, "scale") != 0)
         return 1;
     if (robustness_probe("HLSL", "float4 PSMain( { return scale(",
-                         CBM_LANG_HLSL, "shader.hlsl") != 0)
+                         LSM_LANG_HLSL, "shader.hlsl") != 0)
         return 1;
     return pipeline_battery("HLSL", "shader.hlsl", src);
 }
@@ -301,11 +301,11 @@ TEST(repro_grammar_scientific_wgsl) {
         "    let v = scale(0.5);\n"
         "    return vec4<f32>(v, v, v, 1.0);\n"
         "}\n";
-    if (single_file_battery("WGSL", src, CBM_LANG_WGSL, "shader.wgsl",
+    if (single_file_battery("WGSL", src, LSM_LANG_WGSL, "shader.wgsl",
                             "Function", NULL, "scale") != 0)
         return 1;
     if (robustness_probe("WGSL", "fn fs_main() -> { let v = scale(",
-                         CBM_LANG_WGSL, "shader.wgsl") != 0)
+                         LSM_LANG_WGSL, "shader.wgsl") != 0)
         return 1;
     return pipeline_battery("WGSL", "shader.wgsl", src);
 }
@@ -327,11 +327,11 @@ TEST(repro_grammar_scientific_ispc) {
         "        out[i] = scale((float)i);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("ISPC", src, CBM_LANG_ISPC, "kernel.ispc",
+    if (single_file_battery("ISPC", src, LSM_LANG_ISPC, "kernel.ispc",
                             "Function", NULL, "scale") != 0)
         return 1;
     if (robustness_probe("ISPC", "export void run( { out[0] = scale(",
-                         CBM_LANG_ISPC, "kernel.ispc") != 0)
+                         LSM_LANG_ISPC, "kernel.ispc") != 0)
         return 1;
     return pipeline_battery("ISPC", "kernel.ispc", src);
 }
@@ -353,11 +353,11 @@ TEST(repro_grammar_scientific_slang) {
         "    float v = scale(float(tid.x));\n"
         "    outBuf[tid.x] = v;\n"
         "}\n";
-    if (single_file_battery("Slang", src, CBM_LANG_SLANG, "shader.slang",
+    if (single_file_battery("Slang", src, LSM_LANG_SLANG, "shader.slang",
                             "Function", NULL, "scale") != 0)
         return 1;
     if (robustness_probe("Slang", "void csMain( { float v = scale(",
-                         CBM_LANG_SLANG, "shader.slang") != 0)
+                         LSM_LANG_SLANG, "shader.slang") != 0)
         return 1;
     return pipeline_battery("Slang", "shader.slang", src);
 }
@@ -378,11 +378,11 @@ TEST(repro_grammar_scientific_cairo) {
         "fn compute(x: felt252) -> felt252 {\n"
         "    add(x, 1)\n"
         "}\n";
-    if (single_file_battery("Cairo", src, CBM_LANG_CAIRO, "lib.cairo",
+    if (single_file_battery("Cairo", src, LSM_LANG_CAIRO, "lib.cairo",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("Cairo", "fn compute(x: felt252) -> { add(",
-                         CBM_LANG_CAIRO, "lib.cairo") != 0)
+                         LSM_LANG_CAIRO, "lib.cairo") != 0)
         return 1;
     return pipeline_battery("Cairo", "lib.cairo", src);
 }
@@ -401,11 +401,11 @@ TEST(repro_grammar_scientific_sway) {
         "fn compute(x: u64) -> u64 {\n"
         "    add(x, 1)\n"
         "}\n";
-    if (single_file_battery("Sway", src, CBM_LANG_SWAY, "main.sw",
+    if (single_file_battery("Sway", src, LSM_LANG_SWAY, "main.sw",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("Sway", "fn compute(x: u64) -> { add(",
-                         CBM_LANG_SWAY, "main.sw") != 0)
+                         LSM_LANG_SWAY, "main.sw") != 0)
         return 1;
     return pipeline_battery("Sway", "main.sw", src);
 }
@@ -426,11 +426,11 @@ TEST(repro_grammar_scientific_func) {
         "int compute(int x) {\n"
         "    return add(x, 1);\n"
         "}\n";
-    if (single_file_battery("FunC", src, CBM_LANG_FUNC, "contract.fc",
+    if (single_file_battery("FunC", src, LSM_LANG_FUNC, "contract.fc",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("FunC", "int compute(int x) { return add(",
-                         CBM_LANG_FUNC, "contract.fc") != 0)
+                         LSM_LANG_FUNC, "contract.fc") != 0)
         return 1;
     return pipeline_battery("FunC", "contract.fc", src);
 }
@@ -448,11 +448,11 @@ TEST(repro_grammar_scientific_wolfram) {
         "add[a_, b_] := a + b\n"
         "\n"
         "compute[x_] := add[x, 1]\n";
-    if (single_file_battery("Wolfram", src, CBM_LANG_WOLFRAM, "calc.wl",
+    if (single_file_battery("Wolfram", src, LSM_LANG_WOLFRAM, "calc.wl",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("Wolfram", "compute[x_] := add[x,",
-                         CBM_LANG_WOLFRAM, "calc.wl") != 0)
+                         LSM_LANG_WOLFRAM, "calc.wl") != 0)
         return 1;
     return pipeline_battery("Wolfram", "calc.wl", src);
 }
@@ -474,11 +474,11 @@ TEST(repro_grammar_scientific_matlab) {
         "function s = add(a, b)\n"
         "    s = a + b;\n"
         "end\n";
-    if (single_file_battery("MATLAB", src, CBM_LANG_MATLAB, "calc.m",
+    if (single_file_battery("MATLAB", src, LSM_LANG_MATLAB, "calc.m",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("MATLAB", "function r = compute(x)\n  r = add(",
-                         CBM_LANG_MATLAB, "calc.m") != 0)
+                         LSM_LANG_MATLAB, "calc.m") != 0)
         return 1;
     return pipeline_battery("MATLAB", "calc.m", src);
 }
@@ -505,11 +505,11 @@ TEST(repro_grammar_scientific_magma) {
         "function Compute(x)\n"
         "    return Add(x, 1);\n"
         "end function;\n";
-    if (single_file_battery("Magma", src, CBM_LANG_MAGMA, "calc.magma",
+    if (single_file_battery("Magma", src, LSM_LANG_MAGMA, "calc.magma",
                             "Function", NULL, "Add") != 0)
         return 1;
     if (robustness_probe("Magma", "function Compute(x)\n  return Add(",
-                         CBM_LANG_MAGMA, "calc.magma") != 0)
+                         LSM_LANG_MAGMA, "calc.magma") != 0)
         return 1;
     return pipeline_battery("Magma", "calc.magma", src);
 }
@@ -531,11 +531,11 @@ TEST(repro_grammar_scientific_form) {
         "#procedure compute(y)\n"
         "    #call add(`y')\n"
         "#endprocedure\n";
-    if (single_file_battery("FORM", src, CBM_LANG_FORM, "calc.frm",
+    if (single_file_battery("FORM", src, LSM_LANG_FORM, "calc.frm",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("FORM", "#procedure compute(y)\n  #call add(",
-                         CBM_LANG_FORM, "calc.frm") != 0)
+                         LSM_LANG_FORM, "calc.frm") != 0)
         return 1;
     return pipeline_battery("FORM", "calc.frm", src);
 }
@@ -554,11 +554,11 @@ TEST(repro_grammar_scientific_tlaplus) {
         "Add(a, b) == a + b\n"
         "Compute(x) == Add(x, 1)\n"
         "====\n";
-    if (single_file_battery("TLA+", src, CBM_LANG_TLAPLUS, "Calc.tla",
+    if (single_file_battery("TLA+", src, LSM_LANG_TLAPLUS, "Calc.tla",
                             "Function", NULL, "Add") != 0)
         return 1;
     if (robustness_probe("TLA+", "---- MODULE Calc ----\nCompute(x) == Add(",
-                         CBM_LANG_TLAPLUS, "Calc.tla") != 0)
+                         LSM_LANG_TLAPLUS, "Calc.tla") != 0)
         return 1;
     return pipeline_battery("TLA+", "Calc.tla", src);
 }
@@ -583,11 +583,11 @@ TEST(repro_grammar_scientific_agda) {
         "\n"
         "compute : Nat -> Nat\n"
         "compute x = add x 1\n";
-    if (single_file_battery("Agda", src, CBM_LANG_AGDA, "Calc.agda",
+    if (single_file_battery("Agda", src, LSM_LANG_AGDA, "Calc.agda",
                             "Function", NULL, "add") != 0)
         return 1;
     if (robustness_probe("Agda", "module Calc where\ncompute x = add x",
-                         CBM_LANG_AGDA, "Calc.agda") != 0)
+                         LSM_LANG_AGDA, "Calc.agda") != 0)
         return 1;
     return pipeline_battery("Agda", "Calc.agda", src);
 }
@@ -611,11 +611,11 @@ TEST(repro_grammar_scientific_apex) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Apex", src, CBM_LANG_APEX, "Calculator.cls",
+    if (single_file_battery("Apex", src, LSM_LANG_APEX, "Calculator.cls",
                             "Method", "Class", "add") != 0)
         return 1;
     if (robustness_probe("Apex", "public class Calculator { Integer compute() { return add(",
-                         CBM_LANG_APEX, "Calculator.cls") != 0)
+                         LSM_LANG_APEX, "Calculator.cls") != 0)
         return 1;
     return pipeline_battery("Apex", "Calculator.cls", src);
 }

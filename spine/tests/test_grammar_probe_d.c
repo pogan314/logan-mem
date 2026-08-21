@@ -9,10 +9,10 @@
  *   tablegen, tlaplus, verilog, vhdl, wolfram.
  *
  * SKIPPED (with reason):
- *   systemverilog — CBM_LANG_SYSTEMVERILOG has no extension entry in the
+ *   systemverilog — LSM_LANG_SYSTEMVERILOG has no extension entry in the
  *     EXT_TABLE (language.c); the only SV extension ".sv" maps to
- *     CBM_LANG_VERILOG.  File-based index_repository cannot route to
- *     CBM_LANG_SYSTEMVERILOG via extension alone.  It is already exercised
+ *     LSM_LANG_VERILOG.  File-based index_repository cannot route to
+ *     LSM_LANG_SYSTEMVERILOG via extension alone.  It is already exercised
  *     by the test_grammar_regression.c direct-language fixture and the
  *     grammar_labels histogram (Class:1,Function:1,Module:1).
  *
@@ -33,7 +33,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -54,7 +54,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } GpdProj;
 
 typedef struct {
@@ -68,29 +68,29 @@ static void gpd_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *gpd_open_indexed(GpdProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *gpd_open_indexed(GpdProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *gpd_index_files(GpdProj *lp, const GpdFile *files, int nfiles) {
+static lsm_store_t *gpd_index_files(GpdProj *lp, const GpdFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_gpd_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_gpd_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     gpd_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -98,7 +98,7 @@ static cbm_store_t *gpd_index_files(GpdProj *lp, const GpdFile *files, int nfile
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -109,9 +109,9 @@ static cbm_store_t *gpd_index_files(GpdProj *lp, const GpdFile *files, int nfile
     return gpd_open_indexed(lp);
 }
 
-static void gpd_cleanup(GpdProj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void gpd_cleanup(GpdProj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project);
     lp->project = NULL;
     th_rmtree(lp->tmpdir);
@@ -125,17 +125,17 @@ static void gpd_cleanup(GpdProj *lp, cbm_store_t *store) {
 
 /* ── Node-count helpers ─────────────────────────────────────────── */
 
-static int gpd_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int gpd_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Sum of all type-like labels. */
-static int gpd_type_nodes(cbm_store_t *store, const char *project) {
+static int gpd_type_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class","Struct","Interface","Enum","Trait","Type",NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -158,16 +158,16 @@ typedef struct {
 
 static GpdMetrics gpd_metrics_files(const GpdFile *files, int nfiles) {
     GpdProj lp;
-    cbm_store_t *store = gpd_index_files(&lp, files, nfiles);
+    lsm_store_t *store = gpd_index_files(&lp, files, nfiles);
     GpdMetrics m = {0};
     if (store) {
         m.ok          = 1;
-        m.total_nodes = cbm_store_count_nodes(store, lp.project);
+        m.total_nodes = lsm_store_count_nodes(store, lp.project);
         m.functions   = gpd_count_label(store, lp.project, "Function");
         m.methods     = gpd_count_label(store, lp.project, "Method");
         m.types       = gpd_type_nodes(store, lp.project);
-        m.imports     = cbm_store_count_edges_by_type(store, lp.project, "IMPORTS");
-        m.inherits    = cbm_store_count_edges_by_type(store, lp.project, "INHERITS");
+        m.imports     = lsm_store_count_edges_by_type(store, lp.project, "IMPORTS");
+        m.inherits    = lsm_store_count_edges_by_type(store, lp.project, "INHERITS");
     }
     gpd_cleanup(&lp, store);
     return m;
@@ -184,7 +184,7 @@ static GpdMetrics gpd_metrics(const char *filename, const char *content) {
  * Agda label histogram: Function:1, Module:1 (grammar_labels histogram).
  * Spec: agda_func_types = {"function"}, agda_class_types = {"data","record"},
  *       agda_import_types = {"import","open","import_directive","instance"}.
- * Extension: .agda → CBM_LANG_AGDA.
+ * Extension: .agda → LSM_LANG_AGDA.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Agda: function definition → Function node. */
@@ -252,7 +252,7 @@ TEST(probe_agda_imports_edge) {
  *
  * Assembly label histogram: Function:1, Module:1.
  * Spec: assembly_func_types = {"label"}, no class/import types.
- * Extension: .s → CBM_LANG_ASSEMBLY.
+ * Extension: .s → LSM_LANG_ASSEMBLY.
  * Assembly has no OOP, no imports — only labels extracted as Functions.
  * ══════════════════════════════════════════════════════════════════ */
 
@@ -306,7 +306,7 @@ TEST(probe_assembly_no_type_nodes) {
  * Spec: bicep_func_types = {"user_defined_function","lambda_expression"},
  *       bicep_class_types = {"resource_declaration","type_declaration","module_declaration"},
  *       bicep_import_types = {"import_statement","module_declaration","import","using_statement"}.
- * Extension: .bicep → CBM_LANG_BICEP.
+ * Extension: .bicep → LSM_LANG_BICEP.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Bicep: user-defined function → Function node. */
@@ -371,7 +371,7 @@ TEST(probe_bicep_module_import) {
  * CFML label histogram: Function:1, Module:1.
  * Spec: cfml_func_types = {"function_declaration","function_expression"};
  *       cffunction tags handled separately as cf_function_tag.
- * Extension: .cfm → CBM_LANG_CFML.
+ * Extension: .cfm → LSM_LANG_CFML.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* CFML: <cffunction> tag → Function node. */
@@ -422,7 +422,7 @@ TEST(probe_cfml_no_type_nodes) {
  * CFScript label histogram: Function:2, Module:1 (from grammar_labels for cfscript).
  * Spec: cfscript_func_types = {"function_declaration","function_expression",
  *                              "arrow_function","method_definition"}.
- * Extension: .cfc → CBM_LANG_CFSCRIPT.
+ * Extension: .cfc → LSM_LANG_CFSCRIPT.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* CFScript: component with two function declarations → 2 Function nodes. */
@@ -463,7 +463,7 @@ TEST(probe_cfscript_no_import_edges) {
  * COBOL label histogram: Class:1, Function:1 (from MUST_EXTRACT_DEFS fixture).
  * Spec: cobol_func_types = {"program_definition"},
  *       cobol_import_types = {"open_statement","use_statement","with_clause"}.
- * Extension: .cob → CBM_LANG_COBOL.
+ * Extension: .cob → LSM_LANG_COBOL.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* COBOL: PROGRAM-ID → Function (program_definition) node. */
@@ -504,7 +504,7 @@ TEST(probe_cobol_no_crash) {
  * Spec: elm_func_types = {"value_declaration","function_declaration"},
  *       elm_class_types = {"type_declaration","type_alias_declaration","module_declaration"},
  *       elm_import_types = {"import"}.
- * Extension: .elm → CBM_LANG_ELM.
+ * Extension: .elm → LSM_LANG_ELM.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Elm: function definition → Function node. */
@@ -575,7 +575,7 @@ TEST(probe_elm_imports_edge) {
  * FunC label histogram: Function:1, Module:1.
  * Spec: func_func_types = {"function_definition"},
  *       func_import_types = {"include_directive"}.
- * Extension: .fc → CBM_LANG_FUNC.
+ * Extension: .fc → LSM_LANG_FUNC.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* FunC: function definition → Function node. */
@@ -631,9 +631,9 @@ TEST(probe_func_no_type_nodes) {
  * GROUP 9 — Janet (.janet)
  *
  * Janet label histogram: Module:1 only (from grammar_labels MUST_EXTRACT_DEFS).
- * Spec: CBM_LANG_JANET uses empty_types for all definition types — no function
+ * Spec: LSM_LANG_JANET uses empty_types for all definition types — no function
  *       extraction is configured; the grammar emits only a source/Module node.
- * Extension: .janet → CBM_LANG_JANET.
+ * Extension: .janet → LSM_LANG_JANET.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Janet: pipeline indexes the file without crashing — total_nodes >= 1. */
@@ -669,7 +669,7 @@ TEST(probe_janet_function_extraction_gap) {
  * Spec: lean_func_types = {"def","theorem","instance","abbrev"},
  *       lean_class_types = {"structure","class_inductive","inductive"},
  *       lean_import_types = {"import","extends","instance"}.
- * Extension: .lean → CBM_LANG_LEAN.
+ * Extension: .lean → LSM_LANG_LEAN.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Lean: two `def` definitions → 2 Function nodes. */
@@ -737,7 +737,7 @@ TEST(probe_lean_imports_edge) {
  *
  * LLVM IR label histogram: Function:1, Module:1.
  * Spec: llvm_func_types = {"function_header"}, no class/import types.
- * Extension: .ll → CBM_LANG_LLVM_IR.
+ * Extension: .ll → LSM_LANG_LLVM_IR.
  * LLVM IR has no OOP and no import mechanism at the IR level.
  * ══════════════════════════════════════════════════════════════════ */
 
@@ -795,9 +795,9 @@ TEST(probe_llvmir_no_type_nodes) {
  * Spec: magma_func_types = {"function_definition","procedure_definition",
  *                           "intrinsic_definition","anonymous_function"},
  *       magma_import_types = {"load_statement","require","require_statement"}.
- * Extension: .mag → CBM_LANG_MAGMA.
+ * Extension: .mag → LSM_LANG_MAGMA.
  * Note: .m also resolves to Magma if content has end function/procedure markers
- *       (via cbm_disambiguate_m), but .mag is unambiguous.
+ *       (via lsm_disambiguate_m), but .mag is unambiguous.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Magma: function definition → Function node. */
@@ -847,7 +847,7 @@ TEST(probe_magma_no_type_nodes) {
  * Spec: move_func_types = {"function_item"}, no class types (grammar comment:
  *   struct/enum exist only as anonymous keyword tokens, never as parent nodes),
  *   move_import_types = {"use_declaration"}.
- * Extension: .move → CBM_LANG_MOVE.
+ * Extension: .move → LSM_LANG_MOVE.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Move: function inside module → Function node. */
@@ -919,7 +919,7 @@ TEST(probe_move_struct_not_extracted) {
  * Spec: nasm_func_types = {"label","preproc_def","preproc_multiline_macro"},
  *       nasm_class_types = {"struc_declaration"},
  *       nasm_import_types = {"preproc_include"}.
- * Extension: .nasm → CBM_LANG_NASM.
+ * Extension: .nasm → LSM_LANG_NASM.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* NASM: label → Function node. */
@@ -988,8 +988,8 @@ TEST(probe_nasm_include_edge) {
  * Spec: objc_func_types = {"function_definition","method_definition","method_declaration"},
  *       objc_class_types = {"class_interface","class_implementation","protocol_declaration",...},
  *       objc_import_types = {"preproc_import","preproc_include"}.
- * Extension: .m → disambiguated to CBM_LANG_OBJC when @interface/@implementation
- *             markers are present (via cbm_disambiguate_m).
+ * Extension: .m → disambiguated to LSM_LANG_OBJC when @interface/@implementation
+ *             markers are present (via lsm_disambiguate_m).
  * ══════════════════════════════════════════════════════════════════ */
 
 /* ObjC: @interface declaration → Class node. */
@@ -1026,7 +1026,7 @@ TEST(probe_objc_method_nodes) {
         "@end\n");
     ASSERT_TRUE(m.ok);
     /* GREEN: ObjC method_definition is labelled "Method" (extract_defs.c
-     *        sets def.label = "Method" for CBM_LANG_OBJC method_definition),
+     *        sets def.label = "Method" for LSM_LANG_OBJC method_definition),
      *        not "Function" — matches grammar_labels histogram objc=Method:1.
      *        Fixture fix: assert Method, not Function. */
     ASSERT_TRUE(m.methods >= 1);
@@ -1092,7 +1092,7 @@ TEST(probe_objc_import_edge) {
  *                           "trait_definition","interface_definition","primitive_definition",
  *                           "type_alias"},
  *       pony_import_types = {"use_statement"}.
- * Extension: .pony → CBM_LANG_PONY.
+ * Extension: .pony → LSM_LANG_PONY.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Pony: class definition → Class node. */
@@ -1190,7 +1190,7 @@ TEST(probe_pony_imports_edge) {
  * Spec: purescript_func_types = {"function"},
  *       purescript_class_types = {"class_declaration","data","newtype","type_alias"},
  *       purescript_import_types = {"import","import_item","instance"}.
- * Extension: .purs → CBM_LANG_PURESCRIPT.
+ * Extension: .purs → LSM_LANG_PURESCRIPT.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* PureScript: function definition → Function node. */
@@ -1259,7 +1259,7 @@ TEST(probe_purescript_imports_edge) {
  * Pine label histogram: Function:1, Module:1 (from grammar_labels).
  * Spec: pine_func_types = {"function_declaration_statement"},
  *       pine_class_types = {"type_definition_statement"}.
- * Extension: .pine → CBM_LANG_PINE.
+ * Extension: .pine → LSM_LANG_PINE.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Pine Script: function declaration → Function node. */
@@ -1307,7 +1307,7 @@ TEST(probe_pine_type_node) {
  *                          "enum_declaration","interface_declaration","ui_inline_component"},
  *       qml_import_types = {"import_statement","import","ui_import"}.
  *       Function types reuse js_func_types (QMLJS is a TS/JS superset).
- * Extension: .qml → CBM_LANG_QML.
+ * Extension: .qml → LSM_LANG_QML.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* QML: JavaScript function inside a component → Function node. */
@@ -1365,7 +1365,7 @@ TEST(probe_qml_imports_edge) {
  * Spec: smali_func_types = {"method_definition"},
  *       smali_class_types = {"class_definition"},
  *       smali_import_types = {"super_directive","implements_directive"}.
- * Extension: .smali → CBM_LANG_SMALI.
+ * Extension: .smali → LSM_LANG_SMALI.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Smali: class definition → Class node. */
@@ -1441,7 +1441,7 @@ TEST(probe_smali_super_import) {
  * Spec: tablegen_func_types = {"def","multiclass","defm"},
  *       tablegen_class_types = {"class"},
  *       tablegen_import_types = {"include","include_directive"}.
- * Extension: .td → CBM_LANG_TABLEGEN.
+ * Extension: .td → LSM_LANG_TABLEGEN.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* TableGen: `def` record → Function node (def is in func_types). */
@@ -1504,7 +1504,7 @@ TEST(probe_tablegen_include_edge) {
  * TLA+ label histogram: Function:1, Module:1.
  * Spec: tlaplus_func_types = {"operator_definition","function_definition"},
  *       tlaplus_import_types = {"extends","instance"}.
- * Extension: .tla → CBM_LANG_TLAPLUS.
+ * Extension: .tla → LSM_LANG_TLAPLUS.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* TLA+: operator definition → Function node. */
@@ -1568,8 +1568,8 @@ TEST(probe_tlaplus_no_type_nodes) {
  * Spec: verilog_func_types = {"function_declaration","task_declaration",...},
  *       verilog_class_types = {"module_declaration","class_declaration",...},
  *       verilog_import_types = {"extends","import","package_import_declaration"}.
- * Extension: .v → CBM_LANG_VERILOG.
- * Note: .sv also maps to CBM_LANG_VERILOG (not CBM_LANG_SYSTEMVERILOG).
+ * Extension: .v → LSM_LANG_VERILOG.
+ * Note: .sv also maps to LSM_LANG_VERILOG (not LSM_LANG_SYSTEMVERILOG).
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Verilog: module declaration → type-like node. */
@@ -1614,8 +1614,8 @@ TEST(probe_verilog_function) {
     PASS();
 }
 
-/* Verilog: SystemVerilog-style file (.sv) — lands on CBM_LANG_VERILOG via EXT_TABLE.
- * No separate CBM_LANG_SYSTEMVERILOG routing is available through file extension. */
+/* Verilog: SystemVerilog-style file (.sv) — lands on LSM_LANG_VERILOG via EXT_TABLE.
+ * No separate LSM_LANG_SYSTEMVERILOG routing is available through file extension. */
 TEST(probe_verilog_sv_extension) {
     GpdMetrics m = gpd_metrics("adder.sv",
         "module adder(\n"
@@ -1626,7 +1626,7 @@ TEST(probe_verilog_sv_extension) {
         "    assign sum = a + b;\n"
         "endmodule\n");
     ASSERT_TRUE(m.ok);
-    /* GREEN: .sv → CBM_LANG_VERILOG; module_declaration must produce type-like node. */
+    /* GREEN: .sv → LSM_LANG_VERILOG; module_declaration must produce type-like node. */
     ASSERT_TRUE(m.types >= 1);
     PASS();
 }
@@ -1641,7 +1641,7 @@ TEST(probe_verilog_sv_extension) {
  *                           "package_declaration","protected_type_declaration",
  *                           "record_type_definition","type_declaration"},
  *       vhdl_import_types = {"library_clause","use_clause"}.
- * Extension: .vhd / .vhdl → CBM_LANG_VHDL.
+ * Extension: .vhd / .vhdl → LSM_LANG_VHDL.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* VHDL: entity declaration → type-like node. */
@@ -1718,7 +1718,7 @@ TEST(probe_vhdl_use_imports_edge) {
  * Wolfram label histogram: Function:2, Module:1.
  * Spec: wolfram_func_types = {"set_delayed_top","set_top","set_delayed","set"},
  *       wolfram_import_types = {"get_top"}.
- * Extension: .wl / .wls → CBM_LANG_WOLFRAM.
+ * Extension: .wl / .wls → LSM_LANG_WOLFRAM.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Wolfram: SetDelayed function definition → Function node. */
@@ -1902,7 +1902,7 @@ SUITE(grammar_probe_d) {
     RUN_TEST(probe_tlaplus_extends_edge);
     RUN_TEST(probe_tlaplus_no_type_nodes);
 
-    /* Verilog (.v — also covers .sv routed as CBM_LANG_VERILOG) */
+    /* Verilog (.v — also covers .sv routed as LSM_LANG_VERILOG) */
     RUN_TEST(probe_verilog_module_node);
     RUN_TEST(probe_verilog_function);
     RUN_TEST(probe_verilog_sv_extension);

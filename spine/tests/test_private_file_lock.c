@@ -70,32 +70,32 @@ static int private_lock_macos_set_mutating_acl(const char *path) {
 typedef struct {
     char parent[PRIVATE_LOCK_TEST_PATH_CAP];
     char root[PRIVATE_LOCK_TEST_PATH_CAP];
-    cbm_private_lock_directory_t *directory;
+    lsm_private_lock_directory_t *directory;
 } private_lock_fixture_t;
 
 static bool private_lock_fixture_start(private_lock_fixture_t *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 #ifdef _WIN32
-    int written = snprintf(fixture->parent, sizeof(fixture->parent), "%s/cbm-private-lock-XXXXXX",
-                           cbm_tmpdir());
-    if (written <= 0 || written >= (int)sizeof(fixture->parent) || !cbm_mkdtemp(fixture->parent)) {
+    int written = snprintf(fixture->parent, sizeof(fixture->parent), "%s/lsm-private-lock-XXXXXX",
+                           lsm_tmpdir());
+    if (written <= 0 || written >= (int)sizeof(fixture->parent) || !lsm_mkdtemp(fixture->parent)) {
         return false;
     }
     written = snprintf(fixture->root, sizeof(fixture->root), "%s/root", fixture->parent);
-    if (written <= 0 || written >= (int)sizeof(fixture->root) || cbm_mkdir(fixture->root) != 0) {
+    if (written <= 0 || written >= (int)sizeof(fixture->root) || lsm_mkdir(fixture->root) != 0) {
         return false;
     }
-    FILE *seed = cbm_daemon_ipc_private_log_open(fixture->root, "seed", 64);
+    FILE *seed = lsm_daemon_ipc_private_log_open(fixture->root, "seed", 64);
     bool seeded = seed && fclose(seed) == 0;
     char seed_path[PRIVATE_LOCK_TEST_PATH_CAP];
     written = snprintf(seed_path, sizeof(seed_path), "%s/seed", fixture->root);
     wchar_t *wide_seed =
-        written > 0 && written < (int)sizeof(seed_path) ? cbm_utf8_to_wide(seed_path) : NULL;
+        written > 0 && written < (int)sizeof(seed_path) ? lsm_utf8_to_wide(seed_path) : NULL;
     if (wide_seed) {
         (void)DeleteFileW(wide_seed);
     }
     free(wide_seed);
-    wchar_t *wide_root = seeded ? cbm_utf8_to_wide(fixture->root) : NULL;
+    wchar_t *wide_root = seeded ? lsm_utf8_to_wide(fixture->root) : NULL;
     HANDLE handle =
         wide_root ? CreateFileW(wide_root, FILE_READ_ATTRIBUTES | READ_CONTROL,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
@@ -103,18 +103,18 @@ static bool private_lock_fixture_start(private_lock_fixture_t *fixture) {
                                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL)
                   : INVALID_HANDLE_VALUE;
     free(wide_root);
-    cbm_private_file_lock_status_t status =
+    lsm_private_file_lock_status_t status =
         handle != INVALID_HANDLE_VALUE
-            ? cbm_private_lock_directory_adopt_windows(handle, fixture->root, &fixture->directory)
-            : CBM_PRIVATE_FILE_LOCK_IO;
-    if (status != CBM_PRIVATE_FILE_LOCK_OK && handle != INVALID_HANDLE_VALUE) {
+            ? lsm_private_lock_directory_adopt_windows(handle, fixture->root, &fixture->directory)
+            : LSM_PRIVATE_FILE_LOCK_IO;
+    if (status != LSM_PRIVATE_FILE_LOCK_OK && handle != INVALID_HANDLE_VALUE) {
         (void)CloseHandle(handle);
     }
-    return status == CBM_PRIVATE_FILE_LOCK_OK;
+    return status == LSM_PRIVATE_FILE_LOCK_OK;
 #else
-    int written = snprintf(fixture->parent, sizeof(fixture->parent), "%s/cbm-private-lock-XXXXXX",
-                           cbm_tmpdir());
-    if (written <= 0 || written >= (int)sizeof(fixture->parent) || !cbm_mkdtemp(fixture->parent)) {
+    int written = snprintf(fixture->parent, sizeof(fixture->parent), "%s/lsm-private-lock-XXXXXX",
+                           lsm_tmpdir());
+    if (written <= 0 || written >= (int)sizeof(fixture->parent) || !lsm_mkdtemp(fixture->parent)) {
         return false;
     }
     written = snprintf(fixture->root, sizeof(fixture->root), "%s/root", fixture->parent);
@@ -122,9 +122,9 @@ static bool private_lock_fixture_start(private_lock_fixture_t *fixture) {
         return false;
     }
     int fd = open(fixture->root, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
-    cbm_private_file_lock_status_t status =
-        cbm_private_lock_directory_adopt_posix(fd, fixture->root, &fixture->directory);
-    if (status != CBM_PRIVATE_FILE_LOCK_OK) {
+    lsm_private_file_lock_status_t status =
+        lsm_private_lock_directory_adopt_posix(fd, fixture->root, &fixture->directory);
+    if (status != LSM_PRIVATE_FILE_LOCK_OK) {
         if (fd >= 0) {
             (void)close(fd);
         }
@@ -142,7 +142,7 @@ static bool private_lock_path(char out[PRIVATE_LOCK_TEST_PATH_CAP],
 
 #ifdef _WIN32
 static void private_lock_windows_remove(const char *path, bool directory) {
-    wchar_t *wide = cbm_utf8_to_wide(path);
+    wchar_t *wide = lsm_utf8_to_wide(path);
     if (wide) {
         if (directory) {
             (void)RemoveDirectoryW(wide);
@@ -155,7 +155,7 @@ static void private_lock_windows_remove(const char *path, bool directory) {
 #endif
 
 static void private_lock_fixture_finish(private_lock_fixture_t *fixture) {
-    cbm_private_lock_directory_close(fixture->directory);
+    lsm_private_lock_directory_close(fixture->directory);
     char path[PRIVATE_LOCK_TEST_PATH_CAP];
     static const char *const files[] = {"matrix.lock",
                                         "payload.lock",
@@ -205,44 +205,44 @@ TEST(private_file_lock_payload_requires_exclusive_write_and_survives_reopen) {
     };
     unsigned char readback[sizeof(payload)] = {0};
     size_t readback_length = 0;
-    cbm_private_file_lock_t *writer = NULL;
-    cbm_private_file_lock_t *reader = NULL;
-    cbm_private_file_lock_status_t writer_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t write_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t reader_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t read_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t shared_write_status = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *writer = NULL;
+    lsm_private_file_lock_t *reader = NULL;
+    lsm_private_file_lock_status_t writer_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t write_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t reader_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t read_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t shared_write_status = LSM_PRIVATE_FILE_LOCK_IO;
     if (started) {
-        writer_status = cbm_private_file_lock_try_acquire(fixture.directory, "payload.lock",
-                                                          CBM_PRIVATE_FILE_LOCK_EX, &writer);
+        writer_status = lsm_private_file_lock_try_acquire(fixture.directory, "payload.lock",
+                                                          LSM_PRIVATE_FILE_LOCK_EX, &writer);
     }
-    if (writer_status == CBM_PRIVATE_FILE_LOCK_OK) {
-        write_status = cbm_private_file_lock_payload_write(writer, payload, sizeof(payload));
-        (void)cbm_private_file_lock_release(&writer);
-        reader_status = cbm_private_file_lock_try_acquire(fixture.directory, "payload.lock",
-                                                          CBM_PRIVATE_FILE_LOCK_SH, &reader);
+    if (writer_status == LSM_PRIVATE_FILE_LOCK_OK) {
+        write_status = lsm_private_file_lock_payload_write(writer, payload, sizeof(payload));
+        (void)lsm_private_file_lock_release(&writer);
+        reader_status = lsm_private_file_lock_try_acquire(fixture.directory, "payload.lock",
+                                                          LSM_PRIVATE_FILE_LOCK_SH, &reader);
     }
-    if (reader_status == CBM_PRIVATE_FILE_LOCK_OK) {
-        read_status = cbm_private_file_lock_payload_read(reader, readback, sizeof(readback),
+    if (reader_status == LSM_PRIVATE_FILE_LOCK_OK) {
+        read_status = lsm_private_file_lock_payload_read(reader, readback, sizeof(readback),
                                                          &readback_length);
-        shared_write_status = cbm_private_file_lock_payload_write(reader, payload, sizeof(payload));
+        shared_write_status = lsm_private_file_lock_payload_write(reader, payload, sizeof(payload));
     }
     if (reader) {
-        (void)cbm_private_file_lock_release(&reader);
+        (void)lsm_private_file_lock_release(&reader);
     }
     if (writer) {
-        (void)cbm_private_file_lock_release(&writer);
+        (void)lsm_private_file_lock_release(&writer);
     }
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(writer_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(write_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(reader_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(read_status, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(writer_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(write_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(reader_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(read_status, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_EQ(readback_length, sizeof(payload));
     ASSERT_TRUE(memcmp(readback, payload, sizeof(payload)) == 0);
-    ASSERT_EQ(shared_write_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(shared_write_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     PASS();
 }
 
@@ -267,63 +267,63 @@ static bool private_lock_fd_read_byte(int fd, char *value_out) {
 TEST(private_file_lock_shared_and_exclusive_matrix) {
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    cbm_private_file_lock_t *first_reader = NULL;
-    cbm_private_file_lock_t *second_reader = NULL;
-    cbm_private_file_lock_t *writer = NULL;
-    cbm_private_file_lock_status_t first_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t second_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t blocked_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t one_reader_blocked_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t writer_status = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t reader_blocked_status = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *first_reader = NULL;
+    lsm_private_file_lock_t *second_reader = NULL;
+    lsm_private_file_lock_t *writer = NULL;
+    lsm_private_file_lock_status_t first_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t second_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t blocked_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t one_reader_blocked_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t writer_status = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t reader_blocked_status = LSM_PRIVATE_FILE_LOCK_IO;
     bool stable_file = false;
 #ifdef _WIN32
     bool noninheritable = false;
-    cbm_private_file_lock_status_t device_name_status = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t device_name_status = LSM_PRIVATE_FILE_LOCK_IO;
 #endif
     if (started) {
-        first_status = cbm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
-                                                         CBM_PRIVATE_FILE_LOCK_SH, &first_reader);
+        first_status = lsm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
+                                                         LSM_PRIVATE_FILE_LOCK_SH, &first_reader);
 #ifdef _WIN32
-        noninheritable = cbm_private_file_lock_is_cloexec_for_test(first_reader);
-        cbm_private_file_lock_t *device_lock = NULL;
-        device_name_status = cbm_private_file_lock_try_acquire(
-            fixture.directory, "nul.lock", CBM_PRIVATE_FILE_LOCK_EX, &device_lock);
+        noninheritable = lsm_private_file_lock_is_cloexec_for_test(first_reader);
+        lsm_private_file_lock_t *device_lock = NULL;
+        device_name_status = lsm_private_file_lock_try_acquire(
+            fixture.directory, "nul.lock", LSM_PRIVATE_FILE_LOCK_EX, &device_lock);
         if (device_lock) {
-            (void)cbm_private_file_lock_release(&device_lock);
+            (void)lsm_private_file_lock_release(&device_lock);
         }
 #endif
-        second_status = cbm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
-                                                          CBM_PRIVATE_FILE_LOCK_SH, &second_reader);
-        blocked_status = cbm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
-                                                           CBM_PRIVATE_FILE_LOCK_EX, &writer);
+        second_status = lsm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
+                                                          LSM_PRIVATE_FILE_LOCK_SH, &second_reader);
+        blocked_status = lsm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
+                                                           LSM_PRIVATE_FILE_LOCK_EX, &writer);
     }
     if (second_reader) {
-        (void)cbm_private_file_lock_release(&second_reader);
+        (void)lsm_private_file_lock_release(&second_reader);
     }
     if (started) {
-        one_reader_blocked_status = cbm_private_file_lock_try_acquire(
-            fixture.directory, "matrix.lock", CBM_PRIVATE_FILE_LOCK_EX, &writer);
+        one_reader_blocked_status = lsm_private_file_lock_try_acquire(
+            fixture.directory, "matrix.lock", LSM_PRIVATE_FILE_LOCK_EX, &writer);
     }
     if (first_reader) {
-        (void)cbm_private_file_lock_release(&first_reader);
+        (void)lsm_private_file_lock_release(&first_reader);
     }
     if (started) {
-        writer_status = cbm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
-                                                          CBM_PRIVATE_FILE_LOCK_EX, &writer);
-        reader_blocked_status = cbm_private_file_lock_try_acquire(
-            fixture.directory, "matrix.lock", CBM_PRIVATE_FILE_LOCK_SH, &first_reader);
+        writer_status = lsm_private_file_lock_try_acquire(fixture.directory, "matrix.lock",
+                                                          LSM_PRIVATE_FILE_LOCK_EX, &writer);
+        reader_blocked_status = lsm_private_file_lock_try_acquire(
+            fixture.directory, "matrix.lock", LSM_PRIVATE_FILE_LOCK_SH, &first_reader);
     }
     if (first_reader) {
-        (void)cbm_private_file_lock_release(&first_reader);
+        (void)lsm_private_file_lock_release(&first_reader);
     }
     if (writer) {
-        (void)cbm_private_file_lock_release(&writer);
+        (void)lsm_private_file_lock_release(&writer);
     }
     char matrix_path[PRIVATE_LOCK_TEST_PATH_CAP];
 #ifdef _WIN32
     bool matrix_path_ok = private_lock_path(matrix_path, &fixture, "matrix.lock");
-    wchar_t *wide_matrix = matrix_path_ok ? cbm_utf8_to_wide(matrix_path) : NULL;
+    wchar_t *wide_matrix = matrix_path_ok ? lsm_utf8_to_wide(matrix_path) : NULL;
     DWORD matrix_attributes =
         wide_matrix ? GetFileAttributesW(wide_matrix) : INVALID_FILE_ATTRIBUTES;
     stable_file =
@@ -338,16 +338,16 @@ TEST(private_file_lock_shared_and_exclusive_matrix) {
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(first_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(second_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(blocked_status, CBM_PRIVATE_FILE_LOCK_BUSY);
-    ASSERT_EQ(one_reader_blocked_status, CBM_PRIVATE_FILE_LOCK_BUSY);
-    ASSERT_EQ(writer_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(reader_blocked_status, CBM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(first_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(second_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(blocked_status, LSM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(one_reader_blocked_status, LSM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(writer_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(reader_blocked_status, LSM_PRIVATE_FILE_LOCK_BUSY);
     ASSERT_TRUE(stable_file);
 #ifdef _WIN32
     ASSERT_TRUE(noninheritable);
-    ASSERT_EQ(device_name_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(device_name_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
 #endif
     PASS();
 }
@@ -355,39 +355,39 @@ TEST(private_file_lock_shared_and_exclusive_matrix) {
 TEST(private_file_lock_unlock_failure_retains_retryable_lock) {
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t acquired =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "release-unlock.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    bool fault_set = cbm_private_file_lock_fail_next_release_step_for_test(
-        lock, CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
-    cbm_private_file_lock_status_t first_release =
-        fault_set ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t acquired =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "release-unlock.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    bool fault_set = lsm_private_file_lock_fail_next_release_step_for_test(
+        lock, LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
+    lsm_private_file_lock_status_t first_release =
+        fault_set ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
     bool retained = lock != NULL;
 
-    cbm_private_file_lock_t *contender = NULL;
-    cbm_private_file_lock_status_t while_failed =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "release-unlock.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &contender)
-                : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *contender = NULL;
+    lsm_private_file_lock_status_t while_failed =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "release-unlock.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &contender)
+                : LSM_PRIVATE_FILE_LOCK_IO;
     if (contender) {
-        (void)cbm_private_file_lock_release(&contender);
+        (void)lsm_private_file_lock_release(&contender);
     }
-    cbm_private_file_lock_status_t retry =
-        lock ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t retry =
+        lock ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(acquired, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(acquired, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(fault_set);
-    ASSERT_EQ(first_release, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(first_release, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(retained);
-    ASSERT_EQ(while_failed, CBM_PRIVATE_FILE_LOCK_BUSY);
-    ASSERT_EQ(retry, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(while_failed, LSM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(retry, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_NULL(lock);
     PASS();
 }
@@ -395,48 +395,48 @@ TEST(private_file_lock_unlock_failure_retains_retryable_lock) {
 TEST(private_file_lock_close_failure_retries_without_duplicate_unlock) {
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t acquired =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "release-close.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    bool close_fault_set = cbm_private_file_lock_fail_next_release_step_for_test(
-        lock, CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE);
-    cbm_private_file_lock_status_t first_release =
-        close_fault_set ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t acquired =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "release-close.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    bool close_fault_set = lsm_private_file_lock_fail_next_release_step_for_test(
+        lock, LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE);
+    lsm_private_file_lock_status_t first_release =
+        close_fault_set ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
     bool retained = lock != NULL;
-    unsigned int unlock_attempts = cbm_private_file_lock_release_step_attempts_for_test(
-        lock, CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
-    unsigned int close_attempts = cbm_private_file_lock_release_step_attempts_for_test(
-        lock, CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE);
+    unsigned int unlock_attempts = lsm_private_file_lock_release_step_attempts_for_test(
+        lock, LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
+    unsigned int close_attempts = lsm_private_file_lock_release_step_attempts_for_test(
+        lock, LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE);
 
-    cbm_private_file_lock_t *contender = NULL;
-    cbm_private_file_lock_status_t after_unlock =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "release-close.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &contender)
-                : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *contender = NULL;
+    lsm_private_file_lock_status_t after_unlock =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "release-close.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &contender)
+                : LSM_PRIVATE_FILE_LOCK_IO;
     if (contender) {
-        (void)cbm_private_file_lock_release(&contender);
+        (void)lsm_private_file_lock_release(&contender);
     }
-    bool duplicate_unlock_fault_set = cbm_private_file_lock_fail_next_release_step_for_test(
-        lock, CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
-    cbm_private_file_lock_status_t retry =
-        lock ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
+    bool duplicate_unlock_fault_set = lsm_private_file_lock_fail_next_release_step_for_test(
+        lock, LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK);
+    lsm_private_file_lock_status_t retry =
+        lock ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(acquired, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(acquired, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(close_fault_set);
-    ASSERT_EQ(first_release, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(first_release, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(retained);
     ASSERT_EQ(unlock_attempts, 1);
     ASSERT_EQ(close_attempts, 1);
-    ASSERT_EQ(after_unlock, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(after_unlock, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(duplicate_unlock_fault_set);
-    ASSERT_EQ(retry, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(retry, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_NULL(lock);
     PASS();
 }
@@ -447,21 +447,21 @@ TEST(private_file_lock_consumed_close_error_never_retries_recycled_fd) {
 #else
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t acquired =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "consumed-close.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    int consumed_fd = cbm_private_file_lock_native_fd_for_test(lock);
-    bool fault_set = cbm_private_file_lock_fail_close_after_consuming_for_test(lock);
-    cbm_private_file_lock_status_t first_release =
-        fault_set ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t acquired =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "consumed-close.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    int consumed_fd = lsm_private_file_lock_native_fd_for_test(lock);
+    bool fault_set = lsm_private_file_lock_fail_close_after_consuming_for_test(lock);
+    lsm_private_file_lock_status_t first_release =
+        fault_set ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
     bool terminally_cleared = lock == NULL;
 
     int replacement_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
     bool descriptor_reused = replacement_fd >= 0 && replacement_fd == consumed_fd;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
     bool replacement_alive = replacement_fd >= 0 && fcntl(replacement_fd, F_GETFD) >= 0;
     if (replacement_alive) {
@@ -470,9 +470,9 @@ TEST(private_file_lock_consumed_close_error_never_retries_recycled_fd) {
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(acquired, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(acquired, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(fault_set);
-    ASSERT_EQ(first_release, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(first_release, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(terminally_cleared);
     ASSERT_TRUE(descriptor_reused);
     ASSERT_TRUE(replacement_alive);
@@ -483,52 +483,52 @@ TEST(private_file_lock_consumed_close_error_never_retries_recycled_fd) {
 TEST(private_file_lock_post_acquire_failure_returns_cleanup_owner) {
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    bool fault_set = started && cbm_private_lock_directory_fail_post_acquire_cleanup_for_test(
+    bool fault_set = started && lsm_private_lock_directory_fail_post_acquire_cleanup_for_test(
                                     fixture.directory, true, true);
-    cbm_private_file_lock_t *cleanup = NULL;
-    cbm_private_file_lock_status_t acquire_status =
+    lsm_private_file_lock_t *cleanup = NULL;
+    lsm_private_file_lock_status_t acquire_status =
         fault_set
-            ? cbm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
-                                                CBM_PRIVATE_FILE_LOCK_EX, &cleanup)
-            : CBM_PRIVATE_FILE_LOCK_IO;
+            ? lsm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
+                                                LSM_PRIVATE_FILE_LOCK_EX, &cleanup)
+            : LSM_PRIVATE_FILE_LOCK_IO;
     bool cleanup_retained = cleanup != NULL;
 
-    cbm_private_file_lock_t *contender = NULL;
-    cbm_private_file_lock_status_t while_unlock_pending =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &contender)
-                : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *contender = NULL;
+    lsm_private_file_lock_status_t while_unlock_pending =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &contender)
+                : LSM_PRIVATE_FILE_LOCK_IO;
     if (contender) {
-        (void)cbm_private_file_lock_release(&contender);
+        (void)lsm_private_file_lock_release(&contender);
     }
-    cbm_private_file_lock_status_t first_cleanup =
-        cleanup ? cbm_private_file_lock_release(&cleanup) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t first_cleanup =
+        cleanup ? lsm_private_file_lock_release(&cleanup) : LSM_PRIVATE_FILE_LOCK_IO;
     bool retained_close_pending = cleanup != NULL;
-    cbm_private_file_lock_status_t second_cleanup =
-        cleanup ? cbm_private_file_lock_release(&cleanup) : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_t *after = NULL;
-    cbm_private_file_lock_status_t after_status =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &after)
-                : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t second_cleanup =
+        cleanup ? lsm_private_file_lock_release(&cleanup) : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *after = NULL;
+    lsm_private_file_lock_status_t after_status =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "post-acquire-cleanup.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &after)
+                : LSM_PRIVATE_FILE_LOCK_IO;
     if (after) {
-        (void)cbm_private_file_lock_release(&after);
+        (void)lsm_private_file_lock_release(&after);
     }
     if (cleanup) {
-        (void)cbm_private_file_lock_release(&cleanup);
+        (void)lsm_private_file_lock_release(&cleanup);
     }
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
     ASSERT_TRUE(fault_set);
-    ASSERT_EQ(acquire_status, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(acquire_status, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(cleanup_retained);
-    ASSERT_EQ(while_unlock_pending, CBM_PRIVATE_FILE_LOCK_BUSY);
-    ASSERT_EQ(first_cleanup, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(while_unlock_pending, LSM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(first_cleanup, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(retained_close_pending);
-    ASSERT_EQ(second_cleanup, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(second_cleanup, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_NULL(cleanup);
-    ASSERT_EQ(after_status, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(after_status, LSM_PRIVATE_FILE_LOCK_OK);
     PASS();
 }
 
@@ -539,33 +539,33 @@ TEST(private_file_lock_windows_lock_attempt_failure_returns_cleanup_owner) {
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
     bool fault_set =
-        started && cbm_private_lock_directory_fail_lock_attempt_cleanup_for_test(fixture.directory);
-    cbm_private_file_lock_t *cleanup = NULL;
-    cbm_private_file_lock_status_t acquire_status =
+        started && lsm_private_lock_directory_fail_lock_attempt_cleanup_for_test(fixture.directory);
+    lsm_private_file_lock_t *cleanup = NULL;
+    lsm_private_file_lock_status_t acquire_status =
         fault_set
-            ? cbm_private_file_lock_try_acquire(fixture.directory, "lock-attempt-cleanup.lock",
-                                                CBM_PRIVATE_FILE_LOCK_EX, &cleanup)
-            : CBM_PRIVATE_FILE_LOCK_IO;
+            ? lsm_private_file_lock_try_acquire(fixture.directory, "lock-attempt-cleanup.lock",
+                                                LSM_PRIVATE_FILE_LOCK_EX, &cleanup)
+            : LSM_PRIVATE_FILE_LOCK_IO;
     bool retained = cleanup != NULL;
-    cbm_private_file_lock_status_t cleanup_release =
-        cleanup ? cbm_private_file_lock_release(&cleanup) : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_t *after = NULL;
-    cbm_private_file_lock_status_t after_status =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "lock-attempt-cleanup.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &after)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t after_release =
-        after ? cbm_private_file_lock_release(&after) : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t cleanup_release =
+        cleanup ? lsm_private_file_lock_release(&cleanup) : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *after = NULL;
+    lsm_private_file_lock_status_t after_status =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "lock-attempt-cleanup.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &after)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t after_release =
+        after ? lsm_private_file_lock_release(&after) : LSM_PRIVATE_FILE_LOCK_IO;
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
     ASSERT_TRUE(fault_set);
-    ASSERT_EQ(acquire_status, CBM_PRIVATE_FILE_LOCK_IO);
+    ASSERT_EQ(acquire_status, LSM_PRIVATE_FILE_LOCK_IO);
     ASSERT_TRUE(retained);
-    ASSERT_EQ(cleanup_release, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(cleanup_release, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_NULL(cleanup);
-    ASSERT_EQ(after_status, CBM_PRIVATE_FILE_LOCK_OK);
-    ASSERT_EQ(after_release, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(after_status, LSM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(after_release, LSM_PRIVATE_FILE_LOCK_OK);
     PASS();
 #endif
 }
@@ -599,38 +599,38 @@ TEST(private_file_lock_rejects_unsafe_entries_and_replaced_root) {
     fixtures_ok = fixtures_ok && special_mode_fd >= 0 && fchmod(special_mode_fd, 01600) == 0 &&
                   close(special_mode_fd) == 0 && mkfifo(fifo_path, 0600) == 0;
 
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t symlink_status =
-        fixtures_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "symlink.lock",
-                                                        CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                    : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t hardlink_status =
-        fixtures_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "hardlink.lock",
-                                                        CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                    : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t mode_status =
-        fixtures_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "mode.lock",
-                                                        CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                    : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t special_mode_status =
-        fixtures_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "special-mode.lock",
-                                                        CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                    : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t symlink_status =
+        fixtures_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "symlink.lock",
+                                                        LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                    : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t hardlink_status =
+        fixtures_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "hardlink.lock",
+                                                        LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                    : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t mode_status =
+        fixtures_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "mode.lock",
+                                                        LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                    : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t special_mode_status =
+        fixtures_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "special-mode.lock",
+                                                        LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                    : LSM_PRIVATE_FILE_LOCK_IO;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
-    cbm_private_file_lock_status_t fifo_status =
-        fixtures_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "fifo.lock",
-                                                        CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                    : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t fifo_status =
+        fixtures_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "fifo.lock",
+                                                        LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                    : LSM_PRIVATE_FILE_LOCK_IO;
 
     bool special_root_set = fixtures_ok && chmod(fixture.root, 01700) == 0;
-    cbm_private_file_lock_status_t special_root_status =
-        special_root_set ? cbm_private_file_lock_try_acquire(fixture.directory, "special-root.lock",
-                                                             CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                         : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t special_root_status =
+        special_root_set ? lsm_private_file_lock_try_acquire(fixture.directory, "special-root.lock",
+                                                             LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                         : LSM_PRIVATE_FILE_LOCK_IO;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
     bool special_root_restored = special_root_set && chmod(fixture.root, 0700) == 0;
 
@@ -649,12 +649,12 @@ TEST(private_file_lock_rejects_unsafe_entries_and_replaced_root) {
     int moved_written = snprintf(moved_root, sizeof(moved_root), "%s-old", fixture.root);
     bool replaced = fixtures_ok && moved_written > 0 && moved_written < (int)sizeof(moved_root) &&
                     rename(fixture.root, moved_root) == 0 && mkdir(fixture.root, 0700) == 0;
-    cbm_private_file_lock_status_t replaced_status =
-        replaced ? cbm_private_file_lock_try_acquire(fixture.directory, "replaced.lock",
-                                                     CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                 : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t replaced_status =
+        replaced ? lsm_private_file_lock_try_acquire(fixture.directory, "replaced.lock",
+                                                     LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                 : LSM_PRIVATE_FILE_LOCK_IO;
 
-    cbm_private_lock_directory_close(fixture.directory);
+    lsm_private_lock_directory_close(fixture.directory);
     fixture.directory = NULL;
     if (replaced) {
         (void)rmdir(fixture.root);
@@ -666,16 +666,16 @@ TEST(private_file_lock_rejects_unsafe_entries_and_replaced_root) {
 
     ASSERT_TRUE(started);
     ASSERT_TRUE(fixtures_ok);
-    ASSERT_EQ(symlink_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
-    ASSERT_EQ(hardlink_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
-    ASSERT_EQ(mode_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
-    ASSERT_EQ(special_mode_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
-    ASSERT_EQ(fifo_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(symlink_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(hardlink_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(mode_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(special_mode_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(fifo_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     ASSERT_TRUE(special_root_set);
-    ASSERT_EQ(special_root_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(special_root_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     ASSERT_TRUE(special_root_restored);
     ASSERT_TRUE(replaced);
-    ASSERT_EQ(replaced_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(replaced_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     PASS();
 #endif
 }
@@ -696,17 +696,17 @@ TEST(private_file_lock_macos_rejects_directory_acl_added_after_adoption) {
                                S_ISDIR(root_status.st_mode) &&
                                (root_status.st_mode & 07777) == 0700;
 
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t acquire_status =
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t acquire_status =
         mode_stayed_private
-            ? cbm_private_file_lock_try_acquire(fixture.directory, "acl-directory.lock",
-                                                CBM_PRIVATE_FILE_LOCK_EX, &lock)
-            : CBM_PRIVATE_FILE_LOCK_IO;
+            ? lsm_private_file_lock_try_acquire(fixture.directory, "acl-directory.lock",
+                                                LSM_PRIVATE_FILE_LOCK_EX, &lock)
+            : LSM_PRIVATE_FILE_LOCK_IO;
     struct stat unexpected = {0};
     errno = 0;
     bool file_was_not_created = lstat(lock_path, &unexpected) != 0 && errno == ENOENT;
     if (lock) {
-        (void)cbm_private_file_lock_release(&lock);
+        (void)lsm_private_file_lock_release(&lock);
     }
     private_lock_fixture_finish(&fixture);
 
@@ -714,7 +714,7 @@ TEST(private_file_lock_macos_rejects_directory_acl_added_after_adoption) {
     ASSERT_TRUE(path_ok);
     ASSERT_EQ(acl_fixture, 1);
     ASSERT_TRUE(mode_stayed_private);
-    ASSERT_EQ(acquire_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(acquire_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     ASSERT_NULL(lock);
     ASSERT_TRUE(file_was_not_created);
     PASS();
@@ -725,17 +725,17 @@ TEST(private_file_lock_macos_rejects_file_acl_added_after_acquisition) {
     bool started = private_lock_fixture_start(&fixture);
     char lock_path[PRIVATE_LOCK_TEST_PATH_CAP] = {0};
     bool path_ok = started && private_lock_path(lock_path, &fixture, "acl-file.lock");
-    cbm_private_file_lock_t *lock = NULL;
-    cbm_private_file_lock_status_t acquire_status =
-        path_ok ? cbm_private_file_lock_try_acquire(fixture.directory, "acl-file.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &lock)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    int acl_fixture = acquire_status == CBM_PRIVATE_FILE_LOCK_OK
+    lsm_private_file_lock_t *lock = NULL;
+    lsm_private_file_lock_status_t acquire_status =
+        path_ok ? lsm_private_file_lock_try_acquire(fixture.directory, "acl-file.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &lock)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    int acl_fixture = acquire_status == LSM_PRIVATE_FILE_LOCK_OK
                           ? private_lock_macos_set_mutating_acl(lock_path)
                           : -1;
     if (acl_fixture == 0) {
         if (lock) {
-            (void)cbm_private_file_lock_release(&lock);
+            (void)lsm_private_file_lock_release(&lock);
         }
         private_lock_fixture_finish(&fixture);
         SKIP_PLATFORM("macOS fixture filesystem has no extended ACL support");
@@ -745,28 +745,28 @@ TEST(private_file_lock_macos_rejects_file_acl_added_after_acquisition) {
                                S_ISREG(file_status.st_mode) &&
                                (file_status.st_mode & 07777) == 0600;
     static const unsigned char payload[] = {'a', 'c', 'l'};
-    cbm_private_file_lock_status_t payload_status =
-        mode_stayed_private ? cbm_private_file_lock_payload_write(lock, payload, sizeof(payload))
-                            : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t release_status =
-        lock ? cbm_private_file_lock_release(&lock) : CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_t *reopened = NULL;
-    cbm_private_file_lock_status_t reopen_status = cbm_private_file_lock_try_acquire(
-        fixture.directory, "acl-file.lock", CBM_PRIVATE_FILE_LOCK_EX, &reopened);
+    lsm_private_file_lock_status_t payload_status =
+        mode_stayed_private ? lsm_private_file_lock_payload_write(lock, payload, sizeof(payload))
+                            : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t release_status =
+        lock ? lsm_private_file_lock_release(&lock) : LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *reopened = NULL;
+    lsm_private_file_lock_status_t reopen_status = lsm_private_file_lock_try_acquire(
+        fixture.directory, "acl-file.lock", LSM_PRIVATE_FILE_LOCK_EX, &reopened);
     if (reopened) {
-        (void)cbm_private_file_lock_release(&reopened);
+        (void)lsm_private_file_lock_release(&reopened);
     }
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
     ASSERT_TRUE(path_ok);
-    ASSERT_EQ(acquire_status, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(acquire_status, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_EQ(acl_fixture, 1);
     ASSERT_TRUE(mode_stayed_private);
-    ASSERT_EQ(payload_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
-    ASSERT_EQ(release_status, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(payload_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(release_status, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_NULL(lock);
-    ASSERT_EQ(reopen_status, CBM_PRIVATE_FILE_LOCK_UNSAFE);
+    ASSERT_EQ(reopen_status, LSM_PRIVATE_FILE_LOCK_UNSAFE);
     ASSERT_NULL(reopened);
     PASS();
 }
@@ -778,22 +778,22 @@ TEST(private_file_lock_fork_child_cannot_unlock_or_retain_parent_lock) {
 #else
     private_lock_fixture_t fixture;
     bool started = private_lock_fixture_start(&fixture);
-    cbm_private_file_lock_t *parent_lock = NULL;
-    cbm_private_file_lock_status_t acquired =
-        started ? cbm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
-                                                    CBM_PRIVATE_FILE_LOCK_EX, &parent_lock)
-                : CBM_PRIVATE_FILE_LOCK_IO;
-    bool cloexec = cbm_private_file_lock_is_cloexec_for_test(parent_lock);
+    lsm_private_file_lock_t *parent_lock = NULL;
+    lsm_private_file_lock_status_t acquired =
+        started ? lsm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
+                                                    LSM_PRIVATE_FILE_LOCK_EX, &parent_lock)
+                : LSM_PRIVATE_FILE_LOCK_IO;
+    bool cloexec = lsm_private_file_lock_is_cloexec_for_test(parent_lock);
     int command_pipe[2] = {-1, -1};
     int result_pipe[2] = {-1, -1};
     bool pipes_ok =
-        acquired == CBM_PRIVATE_FILE_LOCK_OK && pipe(command_pipe) == 0 && pipe(result_pipe) == 0;
+        acquired == LSM_PRIVATE_FILE_LOCK_OK && pipe(command_pipe) == 0 && pipe(result_pipe) == 0;
     pid_t child = pipes_ok ? fork() : -1;
     if (child == 0) {
         (void)close(command_pipe[1]);
         (void)close(result_pipe[0]);
-        cbm_private_file_lock_status_t child_release = cbm_private_file_lock_release(&parent_lock);
-        char report = child_release == CBM_PRIVATE_FILE_LOCK_OK ? 'R' : 'E';
+        lsm_private_file_lock_status_t child_release = lsm_private_file_lock_release(&parent_lock);
+        char report = child_release == LSM_PRIVATE_FILE_LOCK_OK ? 'R' : 'E';
         bool reported = private_lock_fd_write_byte(result_pipe[1], report);
         char command = 0;
         bool commanded = private_lock_fd_read_byte(command_pipe[0], &command);
@@ -804,9 +804,9 @@ TEST(private_file_lock_fork_child_cannot_unlock_or_retain_parent_lock) {
 
     char child_report = 0;
     bool child_released = false;
-    cbm_private_file_lock_t *contender = NULL;
-    cbm_private_file_lock_status_t while_parent = CBM_PRIVATE_FILE_LOCK_IO;
-    cbm_private_file_lock_status_t after_parent = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *contender = NULL;
+    lsm_private_file_lock_status_t while_parent = LSM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t after_parent = LSM_PRIVATE_FILE_LOCK_IO;
     bool parent_released = false;
     bool child_commanded = false;
     int child_status = -1;
@@ -815,13 +815,13 @@ TEST(private_file_lock_fork_child_cannot_unlock_or_retain_parent_lock) {
         (void)close(result_pipe[1]);
         child_released =
             private_lock_fd_read_byte(result_pipe[0], &child_report) && child_report == 'R';
-        while_parent = cbm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
-                                                         CBM_PRIVATE_FILE_LOCK_EX, &contender);
-        parent_released = cbm_private_file_lock_release(&parent_lock) == CBM_PRIVATE_FILE_LOCK_OK;
-        after_parent = cbm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
-                                                         CBM_PRIVATE_FILE_LOCK_EX, &contender);
+        while_parent = lsm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
+                                                         LSM_PRIVATE_FILE_LOCK_EX, &contender);
+        parent_released = lsm_private_file_lock_release(&parent_lock) == LSM_PRIVATE_FILE_LOCK_OK;
+        after_parent = lsm_private_file_lock_try_acquire(fixture.directory, "fork.lock",
+                                                         LSM_PRIVATE_FILE_LOCK_EX, &contender);
         if (contender) {
-            (void)cbm_private_file_lock_release(&contender);
+            (void)lsm_private_file_lock_release(&contender);
         }
         child_commanded = private_lock_fd_write_byte(command_pipe[1], 'X');
         (void)close(command_pipe[1]);
@@ -829,7 +829,7 @@ TEST(private_file_lock_fork_child_cannot_unlock_or_retain_parent_lock) {
         (void)waitpid(child, &child_status, 0);
     }
     if (parent_lock) {
-        (void)cbm_private_file_lock_release(&parent_lock);
+        (void)lsm_private_file_lock_release(&parent_lock);
     }
     if (command_pipe[0] >= 0 && child <= 0) {
         (void)close(command_pipe[0]);
@@ -842,14 +842,14 @@ TEST(private_file_lock_fork_child_cannot_unlock_or_retain_parent_lock) {
     private_lock_fixture_finish(&fixture);
 
     ASSERT_TRUE(started);
-    ASSERT_EQ(acquired, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(acquired, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(cloexec);
     ASSERT_TRUE(pipes_ok);
     ASSERT_GT(child, 0);
     ASSERT_TRUE(child_released);
-    ASSERT_EQ(while_parent, CBM_PRIVATE_FILE_LOCK_BUSY);
+    ASSERT_EQ(while_parent, LSM_PRIVATE_FILE_LOCK_BUSY);
     ASSERT_TRUE(parent_released);
-    ASSERT_EQ(after_parent, CBM_PRIVATE_FILE_LOCK_OK);
+    ASSERT_EQ(after_parent, LSM_PRIVATE_FILE_LOCK_OK);
     ASSERT_TRUE(child_commanded);
     ASSERT_TRUE(WIFEXITED(child_status));
     ASSERT_EQ(WEXITSTATUS(child_status), 0);

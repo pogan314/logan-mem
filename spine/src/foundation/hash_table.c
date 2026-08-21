@@ -1,5 +1,5 @@
 /*
- * hash_table.c — CBMHashTable backed by Verstable.
+ * hash_table.c — LSMHashTable backed by Verstable.
  *
  * Public API in hash_table.h is unchanged. Internals are a Verstable
  * template instantiation (const char* → void*). Verstable is a 2024
@@ -9,7 +9,7 @@
  * in vendored/verstable/verstable.h.
  *
  * Why swap the prior Robin Hood implementation: cumulative profiling
- * showed cbm_ht_get is a hot path in resolve_file_calls's per-call
+ * showed lsm_ht_get is a hot path in resolve_file_calls's per-call
  * registry resolution. Verstable's 4-bit hash-fragment metadata
  * sidesteps most key comparisons during chain walks, which the prior
  * implementation could not.
@@ -24,33 +24,33 @@
 #include <string.h>
 
 /* Instantiate a Verstable map of (const char* → void*). The single
- * include below generates static inline functions named cbm_vt_init,
- * cbm_vt_cleanup, cbm_vt_get, cbm_vt_insert, etc., plus the cbm_vt
+ * include below generates static inline functions named lsm_vt_init,
+ * lsm_vt_cleanup, lsm_vt_get, lsm_vt_insert, etc., plus the lsm_vt
  * struct itself. */
-#define NAME cbm_vt
+#define NAME lsm_vt
 #define KEY_TY const char *
 #define VAL_TY void *
 #define HASH_FN vt_hash_string
 #define CMPR_FN vt_cmpr_string
-#include "../../internal/cbm/vendored/verstable/verstable.h"
+#include "../../internal/lsm/vendored/verstable/verstable.h"
 
-/* The opaque CBMHashTable struct holds the Verstable instance + a
+/* The opaque LSMHashTable struct holds the Verstable instance + a
  * count cache (Verstable's _size traversal is O(buckets) so we keep
  * our own atomic-free counter). */
-struct CBMHashTable {
-    cbm_vt vt;
+struct LSMHashTable {
+    lsm_vt vt;
 };
 
-CBMHashTable *cbm_ht_create(uint32_t initial_capacity) {
-    CBMHashTable *ht = (CBMHashTable *)calloc(CBM_ALLOC_ONE, sizeof(*ht));
+LSMHashTable *lsm_ht_create(uint32_t initial_capacity) {
+    LSMHashTable *ht = (LSMHashTable *)calloc(LSM_ALLOC_ONE, sizeof(*ht));
     if (!ht)
         return NULL;
-    cbm_vt_init(&ht->vt);
+    lsm_vt_init(&ht->vt);
     if (initial_capacity > 0) {
         /* Reserve enough buckets for the requested entries. Verstable
          * computes the minimum bucket count internally. */
-        if (!cbm_vt_reserve(&ht->vt, (size_t)initial_capacity)) {
-            cbm_vt_cleanup(&ht->vt);
+        if (!lsm_vt_reserve(&ht->vt, (size_t)initial_capacity)) {
+            lsm_vt_cleanup(&ht->vt);
             free(ht);
             return NULL;
         }
@@ -58,14 +58,14 @@ CBMHashTable *cbm_ht_create(uint32_t initial_capacity) {
     return ht;
 }
 
-void cbm_ht_free(CBMHashTable *ht) {
+void lsm_ht_free(LSMHashTable *ht) {
     if (!ht)
         return;
-    cbm_vt_cleanup(&ht->vt);
+    lsm_vt_cleanup(&ht->vt);
     free(ht);
 }
 
-void *cbm_ht_set(CBMHashTable *ht, const char *key, void *value) {
+void *lsm_ht_set(LSMHashTable *ht, const char *key, void *value) {
     if (!ht || !key)
         return NULL;
     /* Capture previous value (if any) before overwriting.
@@ -73,66 +73,66 @@ void *cbm_ht_set(CBMHashTable *ht, const char *key, void *value) {
      * to the (now updated) entry — we have to peek first to surface
      * the prior value to the caller (back-compat with our API). */
     void *prev = NULL;
-    cbm_vt_itr itr = cbm_vt_get(&ht->vt, key);
-    if (!cbm_vt_is_end(itr)) {
+    lsm_vt_itr itr = lsm_vt_get(&ht->vt, key);
+    if (!lsm_vt_is_end(itr)) {
         prev = itr.data->val;
     }
-    (void)cbm_vt_insert(&ht->vt, key, value);
+    (void)lsm_vt_insert(&ht->vt, key, value);
     return prev;
 }
 
-void *cbm_ht_get(const CBMHashTable *ht, const char *key) {
+void *lsm_ht_get(const LSMHashTable *ht, const char *key) {
     if (!ht || !key)
         return NULL;
-    cbm_vt_itr itr = cbm_vt_get(&ht->vt, key);
-    if (cbm_vt_is_end(itr))
+    lsm_vt_itr itr = lsm_vt_get(&ht->vt, key);
+    if (lsm_vt_is_end(itr))
         return NULL;
     return itr.data->val;
 }
 
-bool cbm_ht_has(const CBMHashTable *ht, const char *key) {
+bool lsm_ht_has(const LSMHashTable *ht, const char *key) {
     if (!ht || !key)
         return false;
-    cbm_vt_itr itr = cbm_vt_get(&ht->vt, key);
-    return !cbm_vt_is_end(itr);
+    lsm_vt_itr itr = lsm_vt_get(&ht->vt, key);
+    return !lsm_vt_is_end(itr);
 }
 
-const char *cbm_ht_get_key(const CBMHashTable *ht, const char *key) {
+const char *lsm_ht_get_key(const LSMHashTable *ht, const char *key) {
     if (!ht || !key)
         return NULL;
-    cbm_vt_itr itr = cbm_vt_get(&ht->vt, key);
-    if (cbm_vt_is_end(itr))
+    lsm_vt_itr itr = lsm_vt_get(&ht->vt, key);
+    if (lsm_vt_is_end(itr))
         return NULL;
     return itr.data->key;
 }
 
-void *cbm_ht_delete(CBMHashTable *ht, const char *key) {
+void *lsm_ht_delete(LSMHashTable *ht, const char *key) {
     if (!ht || !key)
         return NULL;
-    cbm_vt_itr itr = cbm_vt_get(&ht->vt, key);
-    if (cbm_vt_is_end(itr))
+    lsm_vt_itr itr = lsm_vt_get(&ht->vt, key);
+    if (lsm_vt_is_end(itr))
         return NULL;
     void *prev = itr.data->val;
-    (void)cbm_vt_erase(&ht->vt, key);
+    (void)lsm_vt_erase(&ht->vt, key);
     return prev;
 }
 
-uint32_t cbm_ht_count(const CBMHashTable *ht) {
+uint32_t lsm_ht_count(const LSMHashTable *ht) {
     if (!ht)
         return 0;
-    return (uint32_t)cbm_vt_size(&ht->vt);
+    return (uint32_t)lsm_vt_size(&ht->vt);
 }
 
-void cbm_ht_foreach(const CBMHashTable *ht, cbm_ht_iter_fn fn, void *userdata) {
+void lsm_ht_foreach(const LSMHashTable *ht, lsm_ht_iter_fn fn, void *userdata) {
     if (!ht || !fn)
         return;
-    for (cbm_vt_itr itr = cbm_vt_first(&ht->vt); !cbm_vt_is_end(itr); itr = cbm_vt_next(itr)) {
+    for (lsm_vt_itr itr = lsm_vt_first(&ht->vt); !lsm_vt_is_end(itr); itr = lsm_vt_next(itr)) {
         fn(itr.data->key, itr.data->val, userdata);
     }
 }
 
-void cbm_ht_clear(CBMHashTable *ht) {
+void lsm_ht_clear(LSMHashTable *ht) {
     if (!ht)
         return;
-    cbm_vt_clear(&ht->vt);
+    lsm_vt_clear(&ht->vt);
 }

@@ -46,10 +46,10 @@ Make passthrough (VAR=VAL, forwarded verbatim):
                  (empty) for a plain build when debugging a trap.
 
 Environment:
-  CBM_TEST_SEQUENTIAL=1   Single-process runner instead of the parallel harness.
-  CBM_RUN_HANG_TEST=1     Opt-in C++ index-hang regression (#410, needs prod).
-  CBM_NO_CCACHE=1         Disable the content-verified compiler cache.
-  CBM_TEST_SHARD/_LEG     Set by CI's sharded legs; leave unset locally.
+  LSM_TEST_SEQUENTIAL=1   Single-process runner instead of the parallel harness.
+  LSM_RUN_HANG_TEST=1     Opt-in C++ index-hang regression (#410, needs prod).
+  LSM_NO_CCACHE=1         Disable the content-verified compiler cache.
+  LSM_TEST_SHARD/_LEG     Set by CI's sharded legs; leave unset locally.
 
 Examples:
   scripts/test.sh                          # the full venue leg (what CI runs)
@@ -98,7 +98,7 @@ for arg in "$@"; do
         --tsan) TSAN=1 ;;
         arm64|x86_64)
             if [[ "${prev_arg2:-}" == "--arch" ]]; then
-                export CBM_ARCH="$arg"
+                export LSM_ARCH="$arg"
             fi
             ;;
         *)
@@ -126,7 +126,7 @@ prev_arg=""
 # Also support --arch=value
 for arg in "$@"; do
     case "$arg" in
-        --arch=*) export CBM_ARCH="${arg#--arch=}" ;;
+        --arch=*) export LSM_ARCH="${arg#--arch=}" ;;
     esac
 done
 
@@ -181,8 +181,8 @@ print_env "test.sh"
 # both run this instead of carrying their own make invocation.
 if [ "$TSAN" -eq 1 ]; then
     echo "=== test.sh: TSan leg (make test-tsan) ==="
-    make -j"$NPROC" -f Makefile.cbm "$BUILD_DIR/test-runner-tsan" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
-    make -f Makefile.cbm test-tsan ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+    make -j"$NPROC" -f Makefile.lsm "$BUILD_DIR/test-runner-tsan" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+    make -f Makefile.lsm test-tsan ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
     exit "$?"
 fi
 
@@ -191,7 +191,7 @@ fi
 # guards — those all still gate every merge through the default full run.
 if [ -n "$SUITES" ]; then
     echo "=== test.sh: ITERATION mode — suites: $SUITES (incremental build) ==="
-    make -j"$NPROC" -f Makefile.cbm "$BUILD_DIR/test-runner" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+    make -j"$NPROC" -f Makefile.lsm "$BUILD_DIR/test-runner" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
     # shellcheck disable=SC2086  # suite list is deliberately word-split
     "$BUILD_DIR/test-runner" $SUITES
     exit "$?"
@@ -273,19 +273,19 @@ BUILD_DIR="$BUILD_DIR" scripts/clean.sh
 # gate quality — see the ZERO-LOSS CONTRACT in scripts/run-tests-parallel.sh:
 # the suite set is enumerated from the runner itself and union-guarded, and
 # pass/fail/skip totals aggregate to the same numbers as the sequential run).
-# CBM_TEST_SEQUENTIAL=1 restores the single-process runner.
-make -j"$NPROC" -f Makefile.cbm "$BUILD_DIR/test-runner" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
-if [ "${CBM_TEST_SEQUENTIAL:-0}" = "1" ]; then
-    make -f Makefile.cbm test ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+# LSM_TEST_SEQUENTIAL=1 restores the single-process runner.
+make -j"$NPROC" -f Makefile.lsm "$BUILD_DIR/test-runner" ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+if [ "${LSM_TEST_SEQUENTIAL:-0}" = "1" ]; then
+    make -f Makefile.lsm test ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
 else
-    make -f Makefile.cbm test-par ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+    make -f Makefile.lsm test-par ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
 fi
 
 # Step 4: C++ large-TU index-hang regression guard (#410). Runs the PROD binary
 # in a subprocess with a wall-clock timeout — a hang must fail, not block the run.
-# Opt-in via CBM_RUN_HANG_TEST=1 (it needs the prod binary, which the ASan unit
+# Opt-in via LSM_RUN_HANG_TEST=1 (it needs the prod binary, which the ASan unit
 # run above does not build). Skipped by default so the fast unit run stays fast.
-if [ "${CBM_RUN_HANG_TEST:-0}" = "1" ]; then
+if [ "${LSM_RUN_HANG_TEST:-0}" = "1" ]; then
     echo "=== Step 4: C++ index-hang regression (#410) ==="
     bash "$ROOT/tests/test_cpp_index_hang.sh"
 fi
@@ -299,26 +299,26 @@ fi
 # release artifacts free of it; scripts/ci/check-binary-composition.sh proves
 # they stay that way.
 echo "=== Step 5: parent-death watchdog regression (#406/#407) ==="
-make -j"$NPROC" -f Makefile.cbm cbm TEST_SEAMS=1 ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
-WATCHDOG_BINARY="$ROOT/$BUILD_DIR/codebase-memory-mcp"
-CBM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_parent_watchdog.sh"
+make -j"$NPROC" -f Makefile.lsm lsm TEST_SEAMS=1 ${MAKE_ARGS[@]+"${MAKE_ARGS[@]}"}
+WATCHDOG_BINARY="$ROOT/$BUILD_DIR/logan-spine-mcp"
+LSM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_parent_watchdog.sh"
 
 # Step 5b: worker-mode parent-death watchdog (#845). A supervised index worker
 # (`cli --index-worker …`) whose supervisor dies must self-exit instead of
 # indexing on as an orphan. Reuses the prod binary built in Step 5.
 echo "=== Step 5b: worker-mode watchdog regression (#845) ==="
-CBM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_worker_watchdog.sh"
+LSM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_worker_watchdog.sh"
 
 # Step 5c: a worker-delivered MCP error is transport success. The outer CLI
 # still exits nonzero for the user-facing tool error, but the supervisor must
 # preserve that response instead of misreporting exit_nonzero as a file crash.
 echo "=== Step 5c: worker error-response transport regression ==="
-CBM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_worker_error_response.sh"
+LSM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_worker_error_response.sh"
 
 # Step 5d (#1388) is DELIBERATELY NOT GATING HERE — see
 # tests/test_hook_conflict_notice.sh for the full what-was-tried record.
 # Summary: the test forces a client/daemon build mismatch via the
-# CBM_TEST_HOOK_CLIENT_BUILD seam and asserts the stdout systemMessage. It is
+# LSM_TEST_HOOK_CLIENT_BUILD seam and asserts the stdout systemMessage. It is
 # reliably green locally against a seam-bearing binary, but on every CI leg the
 # forced mismatch raises no cohort conflict at all: the seam is present (the
 # test asserts that up front), the forced fingerprint is well-formed (64 hex),
@@ -326,7 +326,7 @@ CBM_TEST_BINARY="$WATCHDOG_BINARY" bash "$ROOT/tests/test_worker_error_response.
 # client joins silently. Until that local-vs-CI divergence in the cohort
 # admission path is understood, gating on it would make an unexplained red, and
 # skipping it silently would hide the gap. Run it by hand:
-#   make -f Makefile.cbm cbm TEST_SEAMS=1 && bash tests/test_hook_conflict_notice.sh
+#   make -f Makefile.lsm lsm TEST_SEAMS=1 && bash tests/test_hook_conflict_notice.sh
 
 # Step 6: security-strings URL allow-list regression. The MSYS2 CLANG64 toolchain
 # bakes its package-tracker URL into the static Windows .exe; the binary string

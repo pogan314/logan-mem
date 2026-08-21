@@ -46,7 +46,7 @@ MANIFEST="${3:-}"
 test -d "$OBJECTS_DIR" || { echo "error: no objects directory: $OBJECTS_DIR" >&2; exit 1; }
 test -s "$SELECTION" || { echo "error: no selection evidence: $SELECTION" >&2; exit 1; }
 
-head -n 1 "$SELECTION" | grep -qx '# cbm-release-selection-v1' || {
+head -n 1 "$SELECTION" | grep -qx '# lsm-release-selection-v1' || {
   echo "error: wrong evidence marker in $SELECTION" >&2; exit 1; }
 
 # selected_sha256 is the 4th column; skip the '#' metadata block and the header.
@@ -90,7 +90,7 @@ fi
 
 if [ -n "$MANIFEST" ]; then
   {
-    echo "# cbm-virustotal-withheld-v1"
+    echo "# lsm-virustotal-withheld-v1"
     echo "# reason=already-scanned-as-candidate"
     echo "# evidence=virustotal-candidate-results.tsv"
     printf 'sha256\tobject\n'

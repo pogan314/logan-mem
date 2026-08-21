@@ -1,5 +1,5 @@
 /*
- * test_route_canon.c — Unit tests for cbm_route_canon_path().
+ * test_route_canon.c — Unit tests for lsm_route_canon_path().
  *
  * Verifies that framework-specific route-parameter placeholder syntaxes
  * (":id", "{id}", "<id>", "${id}") collapse to a single "{}" token so that a
@@ -14,20 +14,20 @@
 
 TEST(route_canon_static_unchanged) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/products/categories", b, sizeof(b)),
+    ASSERT_STR_EQ(lsm_route_canon_path("/products/categories", b, sizeof(b)),
                   "/products/categories");
     PASS();
 }
 
 TEST(route_canon_colon_param) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/players/:id", b, sizeof(b)), "/players/{}");
+    ASSERT_STR_EQ(lsm_route_canon_path("/players/:id", b, sizeof(b)), "/players/{}");
     PASS();
 }
 
 TEST(route_canon_brace_param) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/players/{id}", b, sizeof(b)), "/players/{}");
+    ASSERT_STR_EQ(lsm_route_canon_path("/players/{id}", b, sizeof(b)), "/players/{}");
     PASS();
 }
 
@@ -35,8 +35,8 @@ TEST(route_canon_brace_param) {
 TEST(route_canon_colon_and_brace_converge) {
     char a[128];
     char c[128];
-    cbm_route_canon_path("/clients/{id}/authorized-users", a, sizeof(a));
-    cbm_route_canon_path("/clients/:clientId/authorized-users", c, sizeof(c));
+    lsm_route_canon_path("/clients/{id}/authorized-users", a, sizeof(a));
+    lsm_route_canon_path("/clients/:clientId/authorized-users", c, sizeof(c));
     ASSERT_STR_EQ(a, c);
     ASSERT_STR_EQ(a, "/clients/{}/authorized-users");
     PASS();
@@ -46,27 +46,27 @@ TEST(route_canon_colon_and_brace_converge) {
 TEST(route_canon_param_name_agnostic) {
     char a[128];
     char c[128];
-    cbm_route_canon_path("/link-requests/{id}/status", a, sizeof(a));
-    cbm_route_canon_path("/link-requests/:requestId/status", c, sizeof(c));
+    lsm_route_canon_path("/link-requests/{id}/status", a, sizeof(a));
+    lsm_route_canon_path("/link-requests/:requestId/status", c, sizeof(c));
     ASSERT_STR_EQ(a, c);
     PASS();
 }
 
 TEST(route_canon_angle_param) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/users/<int:id>", b, sizeof(b)), "/users/{}");
+    ASSERT_STR_EQ(lsm_route_canon_path("/users/<int:id>", b, sizeof(b)), "/users/{}");
     PASS();
 }
 
 TEST(route_canon_template_interpolation) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/players/${playerId}", b, sizeof(b)), "/players/{}");
+    ASSERT_STR_EQ(lsm_route_canon_path("/players/${playerId}", b, sizeof(b)), "/players/{}");
     PASS();
 }
 
 TEST(route_canon_multiple_params) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/orders/{id}/items/{itemIndex}", b, sizeof(b)),
+    ASSERT_STR_EQ(lsm_route_canon_path("/orders/{id}/items/{itemIndex}", b, sizeof(b)),
                   "/orders/{}/items/{}");
     PASS();
 }
@@ -74,21 +74,21 @@ TEST(route_canon_multiple_params) {
 /* A ':' that is not at a segment start is literal, not a route parameter. */
 TEST(route_canon_colon_mid_segment_is_literal) {
     char b[128];
-    ASSERT_STR_EQ(cbm_route_canon_path("/a/b:c", b, sizeof(b)), "/a/b:c");
+    ASSERT_STR_EQ(lsm_route_canon_path("/a/b:c", b, sizeof(b)), "/a/b:c");
     PASS();
 }
 
 TEST(route_canon_null_and_empty) {
     char b[8];
-    ASSERT_STR_EQ(cbm_route_canon_path("", b, sizeof(b)), "");
-    ASSERT_STR_EQ(cbm_route_canon_path(NULL, b, sizeof(b)), "");
+    ASSERT_STR_EQ(lsm_route_canon_path("", b, sizeof(b)), "");
+    ASSERT_STR_EQ(lsm_route_canon_path(NULL, b, sizeof(b)), "");
     PASS();
 }
 
 /* A tight output buffer must still yield a bounded, NUL-terminated string. */
 TEST(route_canon_truncation_safe) {
     char b[6];
-    const char *r = cbm_route_canon_path("/players/:id", b, sizeof(b));
+    const char *r = lsm_route_canon_path("/players/:id", b, sizeof(b));
     ASSERT(strlen(r) < sizeof(b));
     PASS();
 }

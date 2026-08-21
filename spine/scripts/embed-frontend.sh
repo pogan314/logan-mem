@@ -120,7 +120,7 @@ for file in "${FILES[@]}"; do
 done
 
 echo "" >> "$ASSETS_C"
-echo "cbm_embedded_file_t CBM_EMBEDDED_FILES[] = {" >> "$ASSETS_C"
+echo "lsm_embedded_file_t LSM_EMBEDDED_FILES[] = {" >> "$ASSETS_C"
 
 for file in "${FILES[@]}"; do
     rel="${file#$DIST_DIR/}"
@@ -139,7 +139,7 @@ for file in "${FILES[@]}"; do
 done
 
 echo "};" >> "$ASSETS_C"
-echo "const int CBM_EMBEDDED_FILE_COUNT = ${#FILES[@]};" >> "$ASSETS_C"
+echo "const int LSM_EMBEDDED_FILE_COUNT = ${#FILES[@]};" >> "$ASSETS_C"
 
 # Generate size fixup
 if $IS_LINUX; then
@@ -147,7 +147,7 @@ if $IS_LINUX; then
     cat >> "$ASSETS_C" <<'SIZEINIT'
 
 static void __attribute__((constructor)) init_embedded_sizes(void) {
-    cbm_embedded_file_t *files = CBM_EMBEDDED_FILES;
+    lsm_embedded_file_t *files = LSM_EMBEDDED_FILES;
 SIZEINIT
 
     for i in "${!FILES[@]}"; do
@@ -163,7 +163,7 @@ else
     cat >> "$ASSETS_C" <<'SIZEINIT'
 
 static void __attribute__((constructor)) init_embedded_sizes(void) {
-    cbm_embedded_file_t *files = CBM_EMBEDDED_FILES;
+    lsm_embedded_file_t *files = LSM_EMBEDDED_FILES;
 SIZEINIT
 
     for i in "${!FILES[@]}"; do
@@ -179,10 +179,10 @@ fi
 # Add lookup function
 cat >> "$ASSETS_C" <<'LOOKUP'
 
-const cbm_embedded_file_t *cbm_embedded_lookup(const char *path) {
-    for (int i = 0; i < CBM_EMBEDDED_FILE_COUNT; i++) {
-        if (strcmp(CBM_EMBEDDED_FILES[i].path, path) == 0) {
-            return &CBM_EMBEDDED_FILES[i];
+const lsm_embedded_file_t *lsm_embedded_lookup(const char *path) {
+    for (int i = 0; i < LSM_EMBEDDED_FILE_COUNT; i++) {
+        if (strcmp(LSM_EMBEDDED_FILES[i].path, path) == 0) {
+            return &LSM_EMBEDDED_FILES[i];
         }
     }
     return NULL;

@@ -8,24 +8,24 @@
  * function). The shared single_file_battery() + pipeline_battery() helpers
  * below are a direct mirror of those in repro_grammar_core.c.
  *
- * Languages covered (13) and the CBM_LANG_* enum each uses:
- *   Haskell      -> CBM_LANG_HASKELL
- *   OCaml        -> CBM_LANG_OCAML
- *   F#           -> CBM_LANG_FSHARP
- *   Elixir       -> CBM_LANG_ELIXIR
- *   Erlang       -> CBM_LANG_ERLANG
- *   Elm          -> CBM_LANG_ELM
- *   Clojure      -> CBM_LANG_CLOJURE
- *   Scheme       -> CBM_LANG_SCHEME
- *   Racket       -> CBM_LANG_RACKET
- *   Common Lisp  -> CBM_LANG_COMMONLISP
- *   Emacs Lisp   -> CBM_LANG_EMACSLISP   (note: not ELISP)
- *   Lean 4       -> CBM_LANG_LEAN
- *   Gleam        -> CBM_LANG_GLEAM
+ * Languages covered (13) and the LSM_LANG_* enum each uses:
+ *   Haskell      -> LSM_LANG_HASKELL
+ *   OCaml        -> LSM_LANG_OCAML
+ *   F#           -> LSM_LANG_FSHARP
+ *   Elixir       -> LSM_LANG_ELIXIR
+ *   Erlang       -> LSM_LANG_ERLANG
+ *   Elm          -> LSM_LANG_ELM
+ *   Clojure      -> LSM_LANG_CLOJURE
+ *   Scheme       -> LSM_LANG_SCHEME
+ *   Racket       -> LSM_LANG_RACKET
+ *   Common Lisp  -> LSM_LANG_COMMONLISP
+ *   Emacs Lisp   -> LSM_LANG_EMACSLISP   (note: not ELISP)
+ *   Lean 4       -> LSM_LANG_LEAN
+ *   Gleam        -> LSM_LANG_GLEAM
  *
  * BATTERY DIMENSIONS (mirror of repro_grammar_core.c)
  * -----------------------------------------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *   2. labels-valid    : inv_count_bad_labels(r) == 0
  *   3. fqn-wellformed  : inv_count_bad_fqns(r) == 0
@@ -33,7 +33,7 @@
  *   5. defs-present    : inv_count_label(r, expect_label) > 0
  *   6. calls-extracted : inv_has_call(r, callee) == 1
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : module_sourced == 0 AND callable_sourced >= 1
  *   8. no-dangling       : inv_count_dangling_edges(store, project, "CALLS") == 0
  *
@@ -43,8 +43,8 @@
  * not yield a call name for Elm's function_call nodes on current code.
  *
  * Dimension 7 (callable-sourcing) is RED for all functional languages on current
- * code. cbm_enclosing_func_qn falls back to the module QN when
- * cbm_find_enclosing_func cannot match tree-sitter node types to
+ * code. lsm_enclosing_func_qn falls back to the module QN when
+ * lsm_find_enclosing_func cannot match tree-sitter node types to
  * func_kinds_for_lang for the language (the same gap documented in
  * QUALITY_ANALYSIS.md section 6 / enclosing-func drift). Only ~3.69% of CALLS
  * edges are callable-sourced in the real graph; functional languages are not in
@@ -73,7 +73,7 @@
  * appear in the extracted calls.
  */
 static int single_file_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file,
+                               LSMLanguage lang, const char *file,
                                const char *expect_label,
                                const char *callee) {
     const char *RED = tf_red();
@@ -87,7 +87,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -133,7 +133,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -154,7 +154,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -210,7 +210,7 @@ TEST(repro_grammar_functional_haskell) {
         "\n"
         "compute :: Int -> Int\n"
         "compute x = add x 1\n";
-    if (single_file_battery("Haskell", src, CBM_LANG_HASKELL, "Calc.hs",
+    if (single_file_battery("Haskell", src, LSM_LANG_HASKELL, "Calc.hs",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Haskell", "Calc.hs", src);
@@ -227,7 +227,7 @@ TEST(repro_grammar_functional_ocaml) {
         "let add a b = a + b\n"
         "\n"
         "let compute x = add x 1\n";
-    if (single_file_battery("OCaml", src, CBM_LANG_OCAML, "calc.ml",
+    if (single_file_battery("OCaml", src, LSM_LANG_OCAML, "calc.ml",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("OCaml", "calc.ml", src);
@@ -246,7 +246,7 @@ TEST(repro_grammar_functional_fsharp) {
         "let add a b = a + b\n"
         "\n"
         "let compute x = add x 1\n";
-    if (single_file_battery("F#", src, CBM_LANG_FSHARP, "Calc.fs",
+    if (single_file_battery("F#", src, LSM_LANG_FSHARP, "Calc.fs",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("F#", "Calc.fs", src);
@@ -268,7 +268,7 @@ TEST(repro_grammar_functional_elixir) {
         "    add(x, 1)\n"
         "  end\n"
         "end\n";
-    if (single_file_battery("Elixir", src, CBM_LANG_ELIXIR, "calc.ex",
+    if (single_file_battery("Elixir", src, LSM_LANG_ELIXIR, "calc.ex",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Elixir", "calc.ex", src);
@@ -291,7 +291,7 @@ TEST(repro_grammar_functional_erlang) {
         "\n"
         "compute(X) ->\n"
         "    add(X, 1).\n";
-    if (single_file_battery("Erlang", src, CBM_LANG_ERLANG, "calc.erl",
+    if (single_file_battery("Erlang", src, LSM_LANG_ERLANG, "calc.erl",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Erlang", "calc.erl", src);
@@ -318,7 +318,7 @@ TEST(repro_grammar_functional_elm) {
         "compute : Int -> Int\n"
         "compute x =\n"
         "    add x 1\n";
-    if (single_file_battery("Elm", src, CBM_LANG_ELM, "Calc.elm",
+    if (single_file_battery("Elm", src, LSM_LANG_ELM, "Calc.elm",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Elm", "Calc.elm", src);
@@ -338,7 +338,7 @@ TEST(repro_grammar_functional_clojure) {
         "\n"
         "(defn compute [x]\n"
         "  (add x 1))\n";
-    if (single_file_battery("Clojure", src, CBM_LANG_CLOJURE, "calc.clj",
+    if (single_file_battery("Clojure", src, LSM_LANG_CLOJURE, "calc.clj",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Clojure", "calc.clj", src);
@@ -348,7 +348,7 @@ TEST(repro_grammar_functional_clojure) {
  * Idiomatic: two `define` forms; the second's body calls the first. In
  * tree-sitter-scheme both forms are `list` nodes; `extract_lisp_def` (triggered
  * by SCHEME in walk_defs) labels them "Function".
- * NOTE: CBM_LANG_SCHEME has func_types = empty_types, so extract_func_def is
+ * NOTE: LSM_LANG_SCHEME has func_types = empty_types, so extract_func_def is
  * never triggered; definitions only appear via extract_lisp_def. The callee
  * is extracted by extract_lisp_callee (SCHEME is in the lisp group).
  * Expected: dims 1-6 + 8 GREEN, dim 7 RED (enclosing-func gap -- SCHEME not
@@ -361,7 +361,7 @@ TEST(repro_grammar_functional_scheme) {
         "\n"
         "(define (compute x)\n"
         "  (add x 1))\n";
-    if (single_file_battery("Scheme", src, CBM_LANG_SCHEME, "calc.scm",
+    if (single_file_battery("Scheme", src, LSM_LANG_SCHEME, "calc.scm",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Scheme", "calc.scm", src);
@@ -371,7 +371,7 @@ TEST(repro_grammar_functional_scheme) {
  * Idiomatic: a `#lang racket` reader directive, two `define` forms; the
  * second's body calls the first. tree-sitter-racket emits `list` nodes;
  * `extract_lisp_def` (triggered by RACKET in walk_defs) labels them "Function".
- * NOTE: CBM_LANG_RACKET has func_types = empty_types, so definitions only
+ * NOTE: LSM_LANG_RACKET has func_types = empty_types, so definitions only
  * appear via extract_lisp_def. extract_lisp_callee handles RACKET.
  * Expected: dims 1-6 + 8 GREEN, dim 7 RED (enclosing-func gap -- RACKET not
  * in the known-GREEN callable-sourcing set).
@@ -385,7 +385,7 @@ TEST(repro_grammar_functional_racket) {
         "\n"
         "(define (compute x)\n"
         "  (add x 1))\n";
-    if (single_file_battery("Racket", src, CBM_LANG_RACKET, "calc.rkt",
+    if (single_file_battery("Racket", src, LSM_LANG_RACKET, "calc.rkt",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Racket", "calc.rkt", src);
@@ -406,7 +406,7 @@ TEST(repro_grammar_functional_commonlisp) {
         "\n"
         "(defun compute (x)\n"
         "  (add x 1))\n";
-    if (single_file_battery("Common Lisp", src, CBM_LANG_COMMONLISP, "calc.lisp",
+    if (single_file_battery("Common Lisp", src, LSM_LANG_COMMONLISP, "calc.lisp",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Common Lisp", "calc.lisp", src);
@@ -417,7 +417,7 @@ TEST(repro_grammar_functional_commonlisp) {
  * tree-sitter-elisp `defun` is a `list` node with head "defun";
  * `elisp_func_types = {"function_definition", "macro_definition"}` triggers
  * extract_func_def. extract_lisp_callee handles EMACSLISP (in the lisp group).
- * Note: the enum is CBM_LANG_EMACSLISP (not ELISP).
+ * Note: the enum is LSM_LANG_EMACSLISP (not ELISP).
  * Expected: dims 1-6 + 8 GREEN, dim 7 RED (enclosing-func gap -- EMACSLISP
  * not in the known-GREEN callable-sourcing set).
  */
@@ -428,7 +428,7 @@ TEST(repro_grammar_functional_emacslisp) {
         "\n"
         "(defun compute (x)\n"
         "  (add x 1))\n";
-    if (single_file_battery("Emacs Lisp", src, CBM_LANG_EMACSLISP, "calc.el",
+    if (single_file_battery("Emacs Lisp", src, LSM_LANG_EMACSLISP, "calc.el",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Emacs Lisp", "calc.el", src);
@@ -448,7 +448,7 @@ TEST(repro_grammar_functional_lean) {
         "\n"
         "def compute (x : Nat) : Nat :=\n"
         "  add x 1\n";
-    if (single_file_battery("Lean", src, CBM_LANG_LEAN, "Calc.lean",
+    if (single_file_battery("Lean", src, LSM_LANG_LEAN, "Calc.lean",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Lean", "Calc.lean", src);
@@ -472,7 +472,7 @@ TEST(repro_grammar_functional_gleam) {
         "fn compute(x: Int) -> Int {\n"
         "  add(x, 1)\n"
         "}\n";
-    if (single_file_battery("Gleam", src, CBM_LANG_GLEAM, "calc.gleam",
+    if (single_file_battery("Gleam", src, LSM_LANG_GLEAM, "calc.gleam",
                             "Function", "add") != 0)
         return 1;
     return pipeline_battery("Gleam", "calc.gleam", src);

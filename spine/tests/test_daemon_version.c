@@ -35,8 +35,8 @@ static const char BUILD_A[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 static const char BUILD_B[] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 static const char BUILD_C[] = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-static cbm_daemon_build_identity_t version_test_identity(const char *version, const char *build) {
-    cbm_daemon_build_identity_t identity = {
+static lsm_daemon_build_identity_t version_test_identity(const char *version, const char *build) {
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = version,
         .build_fingerprint = build,
         .protocol_abi = 3,
@@ -48,8 +48,8 @@ static cbm_daemon_build_identity_t version_test_identity(const char *version, co
 
 static bool version_test_temp_dir(char out[VERSION_TEST_PATH_CAP], const char *tag) {
     int written =
-        snprintf(out, VERSION_TEST_PATH_CAP, "%s/cbm-daemon-%s-XXXXXX", cbm_tmpdir(), tag);
-    return written > 0 && written < VERSION_TEST_PATH_CAP && cbm_mkdtemp(out) != NULL;
+        snprintf(out, VERSION_TEST_PATH_CAP, "%s/lsm-daemon-%s-XXXXXX", lsm_tmpdir(), tag);
+    return written > 0 && written < VERSION_TEST_PATH_CAP && lsm_mkdtemp(out) != NULL;
 }
 
 static bool version_test_child_path(char out[VERSION_TEST_PATH_CAP], const char *dir,
@@ -59,7 +59,7 @@ static bool version_test_child_path(char out[VERSION_TEST_PATH_CAP], const char 
 }
 
 static long version_test_file_size(const char *path) {
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file) {
         return -1;
     }
@@ -73,7 +73,7 @@ static long version_test_file_size(const char *path) {
 }
 
 static bool version_test_read_file(const char *path, char out[VERSION_TEST_FILE_CAP]) {
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file) {
         return false;
     }
@@ -85,7 +85,7 @@ static bool version_test_read_file(const char *path, char out[VERSION_TEST_FILE_
 }
 
 static bool version_test_write_file(const char *path, const char *contents) {
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     if (!file) {
         return false;
     }
@@ -96,10 +96,10 @@ static bool version_test_write_file(const char *path, const char *contents) {
 }
 
 static bool version_test_is_sha256(const char *value) {
-    if (!value || strlen(value) != CBM_DAEMON_BUILD_FINGERPRINT_SIZE - 1) {
+    if (!value || strlen(value) != LSM_DAEMON_BUILD_FINGERPRINT_SIZE - 1) {
         return false;
     }
-    for (size_t i = 0; i < CBM_DAEMON_BUILD_FINGERPRINT_SIZE - 1; i++) {
+    for (size_t i = 0; i < LSM_DAEMON_BUILD_FINGERPRINT_SIZE - 1; i++) {
         char ch = value[i];
         if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) {
             return false;
@@ -114,20 +114,20 @@ static void version_test_cleanup(const char *dir, const char *path, const char *
     if (path) {
         int written = snprintf(lock_path, sizeof(lock_path), "%s.lock", path);
         if (written > 0 && written < (int)sizeof(lock_path)) {
-            (void)cbm_unlink(lock_path);
+            (void)lsm_unlink(lock_path);
         }
     }
     if (path) {
-        (void)cbm_unlink(path);
+        (void)lsm_unlink(path);
     }
     if (rotated) {
-        (void)cbm_unlink(rotated);
+        (void)lsm_unlink(rotated);
     }
     if (victim) {
-        (void)cbm_unlink(victim);
+        (void)lsm_unlink(victim);
     }
     if (dir) {
-        (void)cbm_rmdir(dir);
+        (void)lsm_rmdir(dir);
     }
 }
 
@@ -139,7 +139,7 @@ typedef struct {
 
 typedef struct {
     const char *path;
-    const cbm_daemon_conflict_t *conflict;
+    const lsm_daemon_conflict_t *conflict;
     size_t cap_bytes;
     bool result;
 } version_test_append_call_t;
@@ -150,44 +150,44 @@ static bool version_test_wait_atomic_bool(atomic_bool *value) {
         if (atomic_load_explicit(value, memory_order_acquire)) {
             return true;
         }
-        (void)cbm_nanosleep(&pause, NULL);
+        (void)lsm_nanosleep(&pause, NULL);
     }
     return atomic_load_explicit(value, memory_order_acquire);
 }
 
 static void version_test_rotation_race_hook(void *opaque,
-                                            cbm_daemon_conflict_log_test_stage_t stage) {
+                                            lsm_daemon_conflict_log_test_stage_t stage) {
     version_test_rotation_race_t *race = opaque;
-    if (stage == CBM_DAEMON_CONFLICT_LOG_BEFORE_SERIALIZATION_LOCK) {
+    if (stage == LSM_DAEMON_CONFLICT_LOG_BEFORE_SERIALIZATION_LOCK) {
         (void)atomic_fetch_add_explicit(&race->lock_attempts, 1, memory_order_acq_rel);
         return;
     }
-    if (stage != CBM_DAEMON_CONFLICT_LOG_AFTER_SERIALIZATION_LOCK ||
+    if (stage != LSM_DAEMON_CONFLICT_LOG_AFTER_SERIALIZATION_LOCK ||
         atomic_exchange_explicit(&race->first_lock_acquired, true, memory_order_acq_rel)) {
         return;
     }
     struct timespec pause = {.tv_sec = 0, .tv_nsec = 1000000};
     for (int i = 0;
          i < 2000 && atomic_load_explicit(&race->lock_attempts, memory_order_acquire) < 2; i++) {
-        (void)cbm_nanosleep(&pause, NULL);
+        (void)lsm_nanosleep(&pause, NULL);
     }
 }
 
 static void *version_test_append_thread(void *opaque) {
     version_test_append_call_t *call = opaque;
-    call->result = cbm_daemon_conflict_log_append(call->path, call->conflict, call->cap_bytes);
+    call->result = lsm_daemon_conflict_log_append(call->path, call->conflict, call->cap_bytes);
     return NULL;
 }
 #endif
 
-static cbm_daemon_hello_status_t version_test_compare(const cbm_daemon_build_identity_t *active,
-                                                      const cbm_daemon_build_identity_t *requested,
-                                                      cbm_daemon_conflict_t *conflict) {
+static lsm_daemon_hello_status_t version_test_compare(const lsm_daemon_build_identity_t *active,
+                                                      const lsm_daemon_build_identity_t *requested,
+                                                      lsm_daemon_conflict_t *conflict) {
     memset(conflict, 0, sizeof(*conflict));
-    return cbm_daemon_hello_compare(active, requested, conflict);
+    return lsm_daemon_hello_compare(active, requested, conflict);
 }
 
-static bool version_test_conflict_identity_matches(const cbm_daemon_conflict_t *conflict,
+static bool version_test_conflict_identity_matches(const lsm_daemon_conflict_t *conflict,
                                                    const char *active_version,
                                                    const char *active_build,
                                                    const char *requested_version,
@@ -199,16 +199,16 @@ static bool version_test_conflict_identity_matches(const cbm_daemon_conflict_t *
 }
 
 TEST(daemon_rendezvous_key_is_stable_and_version_independent) {
-    char first[CBM_DAEMON_KEY_SIZE];
-    char after_upgrade[CBM_DAEMON_KEY_SIZE];
+    char first[LSM_DAEMON_KEY_SIZE];
+    char after_upgrade[LSM_DAEMON_KEY_SIZE];
 
     /* Version, executable path, build fingerprint, cache directory, and ABI
      * values are deliberately absent from this API. Every build and cache
      * domain must rendezvous at the same product endpoint before HELLO decides
      * whether it may proceed. The IPC layer supplies the trusted OS-account
      * scope through its owner-only runtime directory / current-user ACL. */
-    ASSERT_TRUE(cbm_daemon_rendezvous_key(first));
-    ASSERT_TRUE(cbm_daemon_rendezvous_key(after_upgrade));
+    ASSERT_TRUE(lsm_daemon_rendezvous_key(first));
+    ASSERT_TRUE(lsm_daemon_rendezvous_key(after_upgrade));
 
     ASSERT_STR_EQ(first, after_upgrade);
     PASS();
@@ -218,9 +218,9 @@ TEST(daemon_build_fingerprint_hashes_exact_executable_bytes) {
     char dir[VERSION_TEST_PATH_CAP] = {0};
     char first_path[VERSION_TEST_PATH_CAP] = {0};
     char second_path[VERSION_TEST_PATH_CAP] = {0};
-    char first[CBM_DAEMON_BUILD_FINGERPRINT_SIZE];
-    char repeated[CBM_DAEMON_BUILD_FINGERPRINT_SIZE];
-    char second[CBM_DAEMON_BUILD_FINGERPRINT_SIZE];
+    char first[LSM_DAEMON_BUILD_FINGERPRINT_SIZE];
+    char repeated[LSM_DAEMON_BUILD_FINGERPRINT_SIZE];
+    char second[LSM_DAEMON_BUILD_FINGERPRINT_SIZE];
     bool setup_ok = version_test_temp_dir(dir, "fingerprint") &&
                     version_test_child_path(first_path, dir, "build-a.bin") &&
                     version_test_child_path(second_path, dir, "build-b.bin") &&
@@ -231,9 +231,9 @@ TEST(daemon_build_fingerprint_hashes_exact_executable_bytes) {
         FAIL("could not create fingerprint fixtures");
     }
 
-    ASSERT_TRUE(cbm_daemon_build_fingerprint_file(first_path, first));
-    ASSERT_TRUE(cbm_daemon_build_fingerprint_file(first_path, repeated));
-    ASSERT_TRUE(cbm_daemon_build_fingerprint_file(second_path, second));
+    ASSERT_TRUE(lsm_daemon_build_fingerprint_file(first_path, first));
+    ASSERT_TRUE(lsm_daemon_build_fingerprint_file(first_path, repeated));
+    ASSERT_TRUE(lsm_daemon_build_fingerprint_file(second_path, second));
     ASSERT_TRUE(version_test_is_sha256(first));
     ASSERT_TRUE(version_test_is_sha256(second));
     ASSERT_STR_EQ(first, repeated);
@@ -244,30 +244,30 @@ TEST(daemon_build_fingerprint_hashes_exact_executable_bytes) {
 }
 
 TEST(daemon_hello_accepts_only_the_exact_active_build_identity) {
-    cbm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
-    cbm_daemon_build_identity_t exact = version_test_identity("2.4.0", BUILD_A);
-    cbm_daemon_conflict_t conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
+    lsm_daemon_build_identity_t exact = version_test_identity("2.4.0", BUILD_A);
+    lsm_daemon_conflict_t conflict;
 
-    ASSERT_EQ(version_test_compare(&active, &exact, &conflict), CBM_DAEMON_HELLO_COMPATIBLE);
+    ASSERT_EQ(version_test_compare(&active, &exact, &conflict), LSM_DAEMON_HELLO_COMPATIBLE);
 
-    cbm_daemon_build_identity_t rebuilt = version_test_identity("2.4.0", BUILD_B);
-    ASSERT_EQ(version_test_compare(&active, &rebuilt, &conflict), CBM_DAEMON_HELLO_BUILD_CONFLICT);
+    lsm_daemon_build_identity_t rebuilt = version_test_identity("2.4.0", BUILD_B);
+    ASSERT_EQ(version_test_compare(&active, &rebuilt, &conflict), LSM_DAEMON_HELLO_BUILD_CONFLICT);
     ASSERT_TRUE(
         version_test_conflict_identity_matches(&conflict, "2.4.0", BUILD_A, "2.4.0", BUILD_B));
     PASS();
 }
 
 TEST(daemon_hello_version_conflict_exposes_active_and_requested_builds) {
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_conflict_t conflict;
-    char visible[CBM_DAEMON_CONFLICT_MESSAGE_SIZE];
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_conflict_t conflict;
+    char visible[LSM_DAEMON_CONFLICT_MESSAGE_SIZE];
 
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_VERSION_CONFLICT);
+              LSM_DAEMON_HELLO_VERSION_CONFLICT);
     ASSERT_TRUE(
         version_test_conflict_identity_matches(&conflict, "2.3.1", BUILD_A, "2.4.0", BUILD_B));
-    ASSERT_TRUE(cbm_daemon_conflict_format(&conflict, visible, sizeof(visible)));
+    ASSERT_TRUE(lsm_daemon_conflict_format(&conflict, visible, sizeof(visible)));
     ASSERT_NOT_NULL(strstr(visible, "could not start"));
     ASSERT_NOT_NULL(strstr(visible, "conflicting"));
     ASSERT_NOT_NULL(strstr(visible, "2.3.1"));
@@ -278,40 +278,40 @@ TEST(daemon_hello_version_conflict_exposes_active_and_requested_builds) {
 }
 
 TEST(daemon_hello_rejects_each_abi_mismatch) {
-    cbm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
-    cbm_daemon_build_identity_t requested = active;
-    cbm_daemon_conflict_t conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
+    lsm_daemon_build_identity_t requested = active;
+    lsm_daemon_conflict_t conflict;
 
     requested.protocol_abi++;
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_PROTOCOL_ABI_CONFLICT);
+              LSM_DAEMON_HELLO_PROTOCOL_ABI_CONFLICT);
     ASSERT_TRUE(
         version_test_conflict_identity_matches(&conflict, "2.4.0", BUILD_A, "2.4.0", BUILD_A));
 
     requested = active;
     requested.store_abi++;
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_STORE_ABI_CONFLICT);
+              LSM_DAEMON_HELLO_STORE_ABI_CONFLICT);
     ASSERT_TRUE(
         version_test_conflict_identity_matches(&conflict, "2.4.0", BUILD_A, "2.4.0", BUILD_A));
 
     requested = active;
     requested.feature_abi++;
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_FEATURE_ABI_CONFLICT);
+              LSM_DAEMON_HELLO_FEATURE_ABI_CONFLICT);
     ASSERT_TRUE(
         version_test_conflict_identity_matches(&conflict, "2.4.0", BUILD_A, "2.4.0", BUILD_A));
     PASS();
 }
 
 TEST(daemon_hello_fails_closed_without_an_exact_build_fingerprint) {
-    cbm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
-    cbm_daemon_build_identity_t missing = version_test_identity("2.4.0", NULL);
-    cbm_daemon_build_identity_t malformed = version_test_identity("2.4.0", "not-a-sha256");
-    cbm_daemon_conflict_t conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.4.0", BUILD_A);
+    lsm_daemon_build_identity_t missing = version_test_identity("2.4.0", NULL);
+    lsm_daemon_build_identity_t malformed = version_test_identity("2.4.0", "not-a-sha256");
+    lsm_daemon_conflict_t conflict;
 
-    ASSERT_EQ(version_test_compare(&active, &missing, &conflict), CBM_DAEMON_HELLO_INVALID);
-    ASSERT_EQ(version_test_compare(&active, &malformed, &conflict), CBM_DAEMON_HELLO_INVALID);
+    ASSERT_EQ(version_test_compare(&active, &missing, &conflict), LSM_DAEMON_HELLO_INVALID);
+    ASSERT_EQ(version_test_compare(&active, &malformed, &conflict), LSM_DAEMON_HELLO_INVALID);
     PASS();
 }
 
@@ -322,11 +322,11 @@ TEST(daemon_conflict_log_is_durable_private_and_rotates) {
     char lock_path[VERSION_TEST_PATH_CAP] = {0};
     char current_data[VERSION_TEST_FILE_CAP];
     char rotated_data[VERSION_TEST_FILE_CAP];
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t first_requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_build_identity_t second_requested = version_test_identity("2.5.0", BUILD_C);
-    cbm_daemon_conflict_t first_conflict;
-    cbm_daemon_conflict_t second_conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t first_requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_build_identity_t second_requested = version_test_identity("2.5.0", BUILD_C);
+    lsm_daemon_conflict_t first_conflict;
+    lsm_daemon_conflict_t second_conflict;
     bool setup_ok = version_test_temp_dir(dir, "log") &&
                     version_test_child_path(path, dir, "daemon.log") &&
                     version_test_child_path(rotated, dir, "daemon.log.1") &&
@@ -337,8 +337,8 @@ TEST(daemon_conflict_log_is_durable_private_and_rotates) {
     }
 
     ASSERT_EQ(version_test_compare(&active, &first_requested, &first_conflict),
-              CBM_DAEMON_HELLO_VERSION_CONFLICT);
-    ASSERT_TRUE(cbm_daemon_conflict_log_append(path, &first_conflict, 4096));
+              LSM_DAEMON_HELLO_VERSION_CONFLICT);
+    ASSERT_TRUE(lsm_daemon_conflict_log_append(path, &first_conflict, 4096));
     long first_size = version_test_file_size(path);
     ASSERT_GT(first_size, 0);
 
@@ -356,8 +356,8 @@ TEST(daemon_conflict_log_is_durable_private_and_rotates) {
     /* The second complete record would cross this cap, so the old complete
      * generation moves to .1 and the new record becomes the active log. */
     ASSERT_EQ(version_test_compare(&active, &second_requested, &second_conflict),
-              CBM_DAEMON_HELLO_VERSION_CONFLICT);
-    ASSERT_TRUE(cbm_daemon_conflict_log_append(path, &second_conflict, (size_t)first_size + 1));
+              LSM_DAEMON_HELLO_VERSION_CONFLICT);
+    ASSERT_TRUE(lsm_daemon_conflict_log_append(path, &second_conflict, (size_t)first_size + 1));
     ASSERT_TRUE(version_test_read_file(path, current_data));
     ASSERT_TRUE(version_test_read_file(rotated, rotated_data));
 
@@ -381,18 +381,18 @@ TEST(daemon_conflict_log_rotation_serializes_on_stable_sidecar) {
     char rotated[VERSION_TEST_PATH_CAP] = {0};
     char padded[PADDED_LOG_SIZE + 1];
     char current_data[VERSION_TEST_FILE_CAP] = {0};
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t seed_requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_build_identity_t first_requested = version_test_identity("2.5.0", BUILD_B);
-    cbm_daemon_build_identity_t second_requested = version_test_identity("2.6.0", BUILD_C);
-    cbm_daemon_conflict_t seed_conflict;
-    cbm_daemon_conflict_t first_conflict;
-    cbm_daemon_conflict_t second_conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t seed_requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_build_identity_t first_requested = version_test_identity("2.5.0", BUILD_B);
+    lsm_daemon_build_identity_t second_requested = version_test_identity("2.6.0", BUILD_C);
+    lsm_daemon_conflict_t seed_conflict;
+    lsm_daemon_conflict_t first_conflict;
+    lsm_daemon_conflict_t second_conflict;
     version_test_rotation_race_t race = {0};
     version_test_append_call_t first_call = {0};
     version_test_append_call_t second_call = {0};
-    cbm_thread_t first_thread;
-    cbm_thread_t second_thread;
+    lsm_thread_t first_thread;
+    lsm_thread_t second_thread;
     bool first_started = false;
     bool second_started = false;
 
@@ -400,12 +400,12 @@ TEST(daemon_conflict_log_rotation_serializes_on_stable_sidecar) {
                     version_test_child_path(path, dir, "daemon.log") &&
                     version_test_child_path(rotated, dir, "daemon.log.1") &&
                     version_test_compare(&active, &seed_requested, &seed_conflict) ==
-                        CBM_DAEMON_HELLO_VERSION_CONFLICT &&
+                        LSM_DAEMON_HELLO_VERSION_CONFLICT &&
                     version_test_compare(&active, &first_requested, &first_conflict) ==
-                        CBM_DAEMON_HELLO_VERSION_CONFLICT &&
+                        LSM_DAEMON_HELLO_VERSION_CONFLICT &&
                     version_test_compare(&active, &second_requested, &second_conflict) ==
-                        CBM_DAEMON_HELLO_VERSION_CONFLICT &&
-                    cbm_daemon_conflict_log_append(path, &seed_conflict, 8192);
+                        LSM_DAEMON_HELLO_VERSION_CONFLICT &&
+                    lsm_daemon_conflict_log_append(path, &seed_conflict, 8192);
     memset(padded, 'x', PADDED_LOG_SIZE);
     padded[PADDED_LOG_SIZE - 1] = '\n';
     padded[PADDED_LOG_SIZE] = '\0';
@@ -422,21 +422,21 @@ TEST(daemon_conflict_log_rotation_serializes_on_stable_sidecar) {
     second_call.conflict = &second_conflict;
     second_call.cap_bytes = ROTATION_CAP;
 
-    cbm_daemon_conflict_log_set_test_hook(version_test_rotation_race_hook, &race);
+    lsm_daemon_conflict_log_set_test_hook(version_test_rotation_race_hook, &race);
     first_started =
-        cbm_thread_create(&first_thread, 0, version_test_append_thread, &first_call) == 0;
+        lsm_thread_create(&first_thread, 0, version_test_append_thread, &first_call) == 0;
     bool first_locked = first_started && version_test_wait_atomic_bool(&race.first_lock_acquired);
     if (first_locked) {
         second_started =
-            cbm_thread_create(&second_thread, 0, version_test_append_thread, &second_call) == 0;
+            lsm_thread_create(&second_thread, 0, version_test_append_thread, &second_call) == 0;
     }
     if (first_started) {
-        (void)cbm_thread_join(&first_thread);
+        (void)lsm_thread_join(&first_thread);
     }
     if (second_started) {
-        (void)cbm_thread_join(&second_thread);
+        (void)lsm_thread_join(&second_thread);
     }
-    cbm_daemon_conflict_log_set_test_hook(NULL, NULL);
+    lsm_daemon_conflict_log_set_test_hook(NULL, NULL);
 
     bool complete = version_test_read_file(path, current_data);
     bool first_present = strstr(current_data, "\"requested_version\":\"2.5.0\"") != NULL;
@@ -459,9 +459,9 @@ TEST(daemon_conflict_log_rejects_symlink_destination) {
     char path[VERSION_TEST_PATH_CAP] = {0};
     char victim[VERSION_TEST_PATH_CAP] = {0};
     char victim_data[VERSION_TEST_FILE_CAP];
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_conflict_t conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_conflict_t conflict;
     bool setup_ok = version_test_temp_dir(dir, "log-link") &&
                     version_test_child_path(path, dir, "daemon.log") &&
                     version_test_child_path(victim, dir, "victim.txt");
@@ -470,7 +470,7 @@ TEST(daemon_conflict_log_rejects_symlink_destination) {
         FAIL("could not create isolated symlink-test directory");
     }
 
-    FILE *file = cbm_fopen(victim, "wb");
+    FILE *file = lsm_fopen(victim, "wb");
     bool victim_written = false;
     if (file) {
         victim_written = fputs("must-remain-unchanged", file) >= 0 && fclose(file) == 0;
@@ -489,8 +489,8 @@ TEST(daemon_conflict_log_rejects_symlink_destination) {
     }
 
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_VERSION_CONFLICT);
-    ASSERT_FALSE(cbm_daemon_conflict_log_append(path, &conflict, 4096));
+              LSM_DAEMON_HELLO_VERSION_CONFLICT);
+    ASSERT_FALSE(lsm_daemon_conflict_log_append(path, &conflict, 4096));
     ASSERT_TRUE(version_test_read_file(victim, victim_data));
     ASSERT_STR_EQ(victim_data, "must-remain-unchanged");
 
@@ -504,9 +504,9 @@ TEST(daemon_conflict_log_rejects_symlink_sidecar) {
     char lock_path[VERSION_TEST_PATH_CAP] = {0};
     char victim[VERSION_TEST_PATH_CAP] = {0};
     char victim_data[VERSION_TEST_FILE_CAP];
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_conflict_t conflict;
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_conflict_t conflict;
     bool setup_ok = version_test_temp_dir(dir, "log-lock-link") &&
                     version_test_child_path(path, dir, "daemon.log") &&
                     version_test_child_path(lock_path, dir, "daemon.log.lock") &&
@@ -519,8 +519,8 @@ TEST(daemon_conflict_log_rejects_symlink_sidecar) {
     }
 
     ASSERT_EQ(version_test_compare(&active, &requested, &conflict),
-              CBM_DAEMON_HELLO_VERSION_CONFLICT);
-    ASSERT_FALSE(cbm_daemon_conflict_log_append(path, &conflict, 4096));
+              LSM_DAEMON_HELLO_VERSION_CONFLICT);
+    ASSERT_FALSE(lsm_daemon_conflict_log_append(path, &conflict, 4096));
     ASSERT_TRUE(version_test_read_file(victim, victim_data));
     ASSERT_STR_EQ(victim_data, "must-remain-unchanged");
 
@@ -532,7 +532,7 @@ TEST(daemon_conflict_log_rejects_symlink_sidecar) {
 #ifdef _WIN32
 typedef struct {
     const char *path;
-    const cbm_daemon_conflict_t *conflict;
+    const lsm_daemon_conflict_t *conflict;
     atomic_bool *start;
     bool result;
 } version_test_windows_append_t;
@@ -541,9 +541,9 @@ static void *version_test_windows_append_thread(void *opaque) {
     version_test_windows_append_t *call = opaque;
     struct timespec pause = {.tv_sec = 0, .tv_nsec = 1000000};
     while (!atomic_load_explicit(call->start, memory_order_acquire)) {
-        (void)cbm_nanosleep(&pause, NULL);
+        (void)lsm_nanosleep(&pause, NULL);
     }
-    call->result = cbm_daemon_conflict_log_append(call->path, call->conflict, 64U * 1024U);
+    call->result = lsm_daemon_conflict_log_append(call->path, call->conflict, 64U * 1024U);
     return NULL;
 }
 
@@ -553,10 +553,10 @@ TEST(daemon_conflict_log_windows_concurrent_appends_are_not_dropped) {
     char path[VERSION_TEST_PATH_CAP] = {0};
     char rotated[VERSION_TEST_PATH_CAP] = {0};
     char current_data[VERSION_TEST_FILE_CAP] = {0};
-    cbm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
-    cbm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
-    cbm_daemon_conflict_t conflict;
-    cbm_thread_t threads[APPEND_COUNT];
+    lsm_daemon_build_identity_t active = version_test_identity("2.3.1", BUILD_A);
+    lsm_daemon_build_identity_t requested = version_test_identity("2.4.0", BUILD_B);
+    lsm_daemon_conflict_t conflict;
+    lsm_thread_t threads[APPEND_COUNT];
     version_test_windows_append_t calls[APPEND_COUNT];
     atomic_bool start = false;
     size_t started = 0;
@@ -565,7 +565,7 @@ TEST(daemon_conflict_log_windows_concurrent_appends_are_not_dropped) {
         version_test_temp_dir(dir, "log-windows-concurrent") &&
         version_test_child_path(path, dir, "daemon.log") &&
         version_test_child_path(rotated, dir, "daemon.log.1") &&
-        version_test_compare(&active, &requested, &conflict) == CBM_DAEMON_HELLO_VERSION_CONFLICT;
+        version_test_compare(&active, &requested, &conflict) == LSM_DAEMON_HELLO_VERSION_CONFLICT;
     if (!setup_ok) {
         version_test_cleanup(dir, path, rotated, NULL);
         FAIL("could not create Windows concurrent-log fixture");
@@ -576,14 +576,14 @@ TEST(daemon_conflict_log_windows_concurrent_appends_are_not_dropped) {
         calls[started].path = path;
         calls[started].conflict = &conflict;
         calls[started].start = &start;
-        if (cbm_thread_create(&threads[started], 0, version_test_windows_append_thread,
+        if (lsm_thread_create(&threads[started], 0, version_test_windows_append_thread,
                               &calls[started]) != 0) {
             break;
         }
     }
     atomic_store_explicit(&start, true, memory_order_release);
     for (size_t i = 0; i < started; i++) {
-        (void)cbm_thread_join(&threads[i]);
+        (void)lsm_thread_join(&threads[i]);
     }
 
     bool complete = version_test_read_file(path, current_data);

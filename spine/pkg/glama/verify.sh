@@ -4,11 +4,11 @@
 # Glama's directory check does. Used locally and by the CI smoke suite.
 #
 # Env:
-#   IMAGE        image tag to build (default: cbm-glama-check)
+#   IMAGE        image tag to build (default: lsm-glama-check)
 #   DOCKER_BUILD_ARGS  extra args for `docker build` (e.g. --platform linux/amd64)
 set -euo pipefail
 
-IMAGE="${IMAGE:-cbm-glama-check}"
+IMAGE="${IMAGE:-lsm-glama-check}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 run_with_timeout() {

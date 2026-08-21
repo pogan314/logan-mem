@@ -91,10 +91,10 @@ CLIENT_HOME_OVERRIDES = (
     "VIBE_HOME",
     "GLAB_CONFIG_DIR",
     "KIMI_CODE_HOME",
-    "CBM_CONTINUE_CONFIG_PATH",
-    "CBM_TRAE_CONFIG_PATH",
-    "CBM_ROO_CONFIG_PATH",
-    "CBM_CODY_CONFIG_PATH",
+    "LSM_CONTINUE_CONFIG_PATH",
+    "LSM_TRAE_CONFIG_PATH",
+    "LSM_ROO_CONFIG_PATH",
+    "LSM_CODY_CONFIG_PATH",
 )
 
 # The C suite exercises the same install/uninstall paths as the shell fixtures,
@@ -127,7 +127,7 @@ for relative, source in (
         'wait "$SERVER_PID"' in source,
         f"{relative} cleanup must reap the fixture-server process",
     )
-    for variable in CLIENT_HOME_OVERRIDES + ("CBM_TEST_WINDOWS_USER_PATH_RUN_ID",):
+    for variable in CLIENT_HOME_OVERRIDES + ("LSM_TEST_WINDOWS_USER_PATH_RUN_ID",):
         require(
             f"-u {variable}" in source,
             f"{relative} must neutralize ambient {variable}",
@@ -166,21 +166,21 @@ require(
             'for extracted_member in "$ARCHIVE_BINARY" LICENSE "$ARCHIVE_INSTALLER"',
         )
     )
-    and "cbm-integrations.json" not in install_script,
+    and "lsm-integrations.json" not in install_script,
     "install.sh must validate and accept the exact four-member release archive layout",
 )
 # One composition ships, so there is one archive name and no variant alias.
 require(
-    "codebase-memory-mcp-${OS}-${ARCH}.tar.gz" in smoke_local
+    "logan-spine-mcp-${OS}-${ARCH}.tar.gz" in smoke_local
     and "${SUFFIX}" not in smoke_local,
     "smoke-local.sh must create the single canonical archive with no variant alias",
 )
 require(
-    "codebase-memory-mcp-${OS}-${ARCH}-portable.tar.gz" in smoke_local,
+    "logan-spine-mcp-${OS}-${ARCH}-portable.tar.gz" in smoke_local,
     "smoke-local.sh must create the Linux portable update alias",
 )
 require(
-    'CBM_CACHE_DIR="$WORK_DIR/cache"' in smoke_local
+    'LSM_CACHE_DIR="$WORK_DIR/cache"' in smoke_local
     and 'SMOKE_TEMP_ROOT="$SMOKE_TEMP_DIR"' in smoke_local,
     "smoke-local.sh must isolate daemon/cache and temporary state from live user sessions",
 )
@@ -199,14 +199,14 @@ require(
 # binary, like every other platform), then runs the full smoke from a protected
 # profile-rooted directory/cache.
 for name in (
-    "codebase-memory-mcp.exe",
+    "logan-spine-mcp.exe",
     "LICENSE",
     "install.ps1",
     "THIRD_PARTY_NOTICES.md",
 ):
     require(name in vm_smoke, f"vm-smoke.sh archive must include {name}")
 require(
-    "codebase-memory-mcp.payload.exe" not in vm_smoke,
+    "logan-spine-mcp.payload.exe" not in vm_smoke,
     "vm-smoke.sh must not stage a Windows launcher/payload pair",
 )
 require("checksums.txt" in vm_smoke, "vm-smoke.sh must generate checksums.txt")
@@ -219,7 +219,7 @@ require(
 require(
     "PROFILE_ROOT=" in vm_smoke
     and 'SMOKE_TEMP_ROOT="$SMOKE_DIR"' in vm_smoke
-    and 'CBM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")"' in vm_smoke,
+    and 'LSM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")"' in vm_smoke,
     "vm-smoke.sh must isolate smoke temp/cache below the protected user profile",
 )
 require(
@@ -234,7 +234,7 @@ require(
     "vm-smoke.sh must prepare, verify, and clean up an isolated Windows PATH key",
 )
 require(
-    'CBM_TEST_WINDOWS_USER_PATH_RUN_ID="$PATH_RUN_ID"' in vm_smoke
+    'LSM_TEST_WINDOWS_USER_PATH_RUN_ID="$PATH_RUN_ID"' in vm_smoke
     and 'SMOKE_DOWNLOAD_URL="http://127.0.0.1:$PORT"' in vm_smoke
     and vm_smoke.find("-Mode verify") > vm_smoke.find("scripts/smoke-test.sh"),
     "vm-smoke.sh must pass the run ID and loopback gate through the full smoke, then verify it",
@@ -246,18 +246,18 @@ require(
     "Windows PATH guard must compare the live raw value and registry kind without expanding it",
 )
 require(
-    'Software\\CodebaseMemoryMCP\\Smoke\\$RunId' in windows_path_guard
+    'Software\\LoganSpineMCP\\Smoke\\$RunId' in windows_path_guard
     and "Assert-SmokePathValue" in windows_path_guard
     and "DeleteSubKeyTree" in windows_path_guard
     and "restore" not in windows_path_guard.lower(),
     "Windows PATH smoke must mutate and delete only its GUID-scoped scratch registry leaf",
 )
 require(
-    "CBM_TEST_WINDOWS_USER_PATH_RUN_ID" in cli_source
+    "LSM_TEST_WINDOWS_USER_PATH_RUN_ID" in cli_source
     and 'L"SMOKE_DOWNLOAD_URL"' in cli_source
-    and 'L"Software\\\\CodebaseMemoryMCP\\\\Smoke\\\\%ls"' in cli_source
+    and 'L"Software\\\\LoganSpineMCP\\\\Smoke\\\\%ls"' in cli_source
     and "cli_windows_smoke_download_url_valid" in cli_source
-    and "CbmSmokeRunId" in cli_source,
+    and "LsmSmokeRunId" in cli_source,
     "the Windows PATH test seam must be run-ID-only, sentinel-bound, and loopback-gated",
 )
 
@@ -281,19 +281,19 @@ for service in ("smoke-windows:",):
     )
     section = match.group("body") if match else ""
     require(
-        "codebase-memory-mcp-launcher" not in section
-        and "codebase-memory-mcp.payload.exe" not in section.replace(
-            "test ! -e build/win-cross/codebase-memory-mcp.payload.exe", ""
+        "logan-spine-mcp-launcher" not in section
+        and "logan-spine-mcp.payload.exe" not in section.replace(
+            "test ! -e build/win-cross/logan-spine-mcp.payload.exe", ""
         ),
         f"docker-compose {service[:-1]} must build ONE Windows binary, not a launcher/payload pair",
     )
     require(
-        "test ! -e build/win-cross/codebase-memory-mcp.payload.exe" in section,
+        "test ! -e build/win-cross/logan-spine-mcp.payload.exe" in section,
         f"docker-compose {service[:-1]} must assert no payload sibling is produced",
     )
 require(
-    "wine64 ./build/win-cross/codebase-memory-mcp.exe --version" in compose
-    and "wine64 cmd /c build/win-cross/codebase-memory-mcp.exe --version" in compose,
+    "wine64 ./build/win-cross/logan-spine-mcp.exe --version" in compose
+    and "wine64 cmd /c build/win-cross/logan-spine-mcp.exe --version" in compose,
     "docker-compose Windows cross-smoke must execute the single binary through Wine and through a "
     "Wine Windows parent",
 )
@@ -364,12 +364,12 @@ require(
     + "; ".join(unproxied_curls[:3]),
 )
 require(
-    "/tmp/cbm-curl12a.err" not in smoke_test
+    "/tmp/lsm-curl12a.err" not in smoke_test
     and 'CURL12_ERR="$DL_DIR/curl12a.err"' in smoke_test,
     "curl diagnostics must stay inside the per-smoke download directory",
 )
 require(
-    "CBM_TEST_WINDOWS_USER_PATH_RUN_ID=invalid" in smoke_test
+    "LSM_TEST_WINDOWS_USER_PATH_RUN_ID=invalid" in smoke_test
     and "invalid Windows PATH smoke seam fell back" in smoke_test,
     "Windows release smoke must prove malformed PATH-test gating fails closed",
 )
@@ -387,7 +387,7 @@ require(
 # command and touches nothing. Phase 14 now drives from the installed binary
 # everywhere, and 14a asserts the binary is byte-identical afterwards.
 require(
-    'UPDATE_DRIVER="$UPDATE_HOME/.local/bin/codebase-memory-mcp"' in smoke_test
+    'UPDATE_DRIVER="$UPDATE_HOME/.local/bin/logan-spine-mcp"' in smoke_test
     and 'STALE_CMD="$UPDATE_DRIVER"' in smoke_test,
     "Phase 14 must drive update from the installed binary on every platform",
 )
@@ -416,7 +416,7 @@ require(
 # Functional check: the helper must publish a live kernel-assigned port and
 # serve the exact expected artifact. This is intentionally build-free.
 if helper.is_file():
-    with tempfile.TemporaryDirectory(prefix="cbm-fixture-contract-") as temp:
+    with tempfile.TemporaryDirectory(prefix="lsm-fixture-contract-") as temp:
         temp_path = pathlib.Path(temp)
         fixture = temp_path / "fixture"
         fixture.mkdir()
@@ -519,7 +519,7 @@ if helper.is_file():
 # resolver to hang and require the port anyway, so the dependency cannot
 # return without turning this gate red on every platform.
 if helper.is_file():
-    with tempfile.TemporaryDirectory(prefix="cbm-fixture-dns-") as dns_temp:
+    with tempfile.TemporaryDirectory(prefix="lsm-fixture-dns-") as dns_temp:
         dns_root = pathlib.Path(dns_temp)
         dns_fixture = dns_root / "fixture"
         dns_fixture.mkdir()

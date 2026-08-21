@@ -9,7 +9,7 @@
  *   enclosing-function walk failed.
  *
  * ROOT CAUSE (verified against the tree, 2026-06-26):
- *   helpers.c  cbm_find_enclosing_func() (helpers.c:700) walks a call node's
+ *   helpers.c  lsm_find_enclosing_func() (helpers.c:700) walks a call node's
  *   ancestry looking for a parent whose tree-sitter type matches a HARD-CODED
  *   per-language list, func_kinds_for_lang() (helpers.c:644). Languages NOT in
  *   that switch fall through to:
@@ -18,8 +18,8 @@
  *   But lang_specs.c defines `*_func_types[]` (the grammar function node types)
  *   for 100+ languages. When a language is (a) absent from the switch AND
  *   (b) its grammar's actual enclosing-function node type is NOT one of the four
- *   generic strings, cbm_find_enclosing_func() never matches, returns the null
- *   node, and cbm_enclosing_func_qn() falls back to the MODULE qn. Every call
+ *   generic strings, lsm_find_enclosing_func() never matches, returns the null
+ *   node, and lsm_enclosing_func_qn() falls back to the MODULE qn. Every call
  *   inside such a function is then attributed to Module. The LSP rescue path
  *   (pass_lsp_cross.c) joins on exact caller_qn equality, so a Module qn from
  *   tree-sitter can never be reconciled with a Function qn from the LSP — the
@@ -78,12 +78,12 @@
  *
  * FIX (single root cause for the FULLY/PARTIAL-drifted set):
  *   Replace the hard-coded func_kinds_for_lang switch with a lookup of the
- *   language's spec->func_types (lang_specs.c) so cbm_find_enclosing_func uses
+ *   language's spec->func_types (lang_specs.c) so lsm_find_enclosing_func uses
  *   the SAME node-type list the definition walker uses. Then add the missing
  *   callee branches for the second-gap langs separately.
  *
  * ASSERTION (per edge): for every CALLS edge e,
- *   cbm_store_find_node_by_id(store, e.source_id, &src) == CBM_STORE_OK AND
+ *   lsm_store_find_node_by_id(store, e.source_id, &src) == LSM_STORE_OK AND
  *   (src.label == "Function" || src.label == "Method"); i.e. module_sourced == 0.
  *   PLUS: at least one CALLS edge must exist (zero edges is a no-signal fixture).
  *
@@ -100,7 +100,7 @@
 /* ── Table-driven model ─────────────────────────────────────────────────── */
 
 typedef struct {
-    CBMLanguage lang;
+    LSMLanguage lang;
     const char *name; /* human-readable tag for failure messages */
     const char *file; /* fixture filename (extension drives language detection) */
     const char *src;  /* fixture source: a call strictly inside a drifted function */
@@ -125,17 +125,17 @@ static int run_parity_case(const parity_case_t *c) {
 
     RFile  files[1] = {{c->file, c->src}};
     RProj  lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] rh_index_files returned NULL\n", RED, RST, c->name);
         return 1;
     }
 
-    cbm_edge_t *edges  = NULL;
+    lsm_edge_t *edges  = NULL;
     int         nedges = 0;
-    int rc = cbm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &nedges);
-    if (rc != CBM_STORE_OK) {
-        printf("  %sFAIL%s  [%s] cbm_store_find_edges_by_type rc=%d\n", RED, RST, c->name, rc);
+    int rc = lsm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &nedges);
+    if (rc != LSM_STORE_OK) {
+        printf("  %sFAIL%s  [%s] lsm_store_find_edges_by_type rc=%d\n", RED, RST, c->name, rc);
         rh_cleanup(&lp, store);
         return 1;
     }
@@ -147,15 +147,15 @@ static int run_parity_case(const parity_case_t *c) {
         printf("  %sFAIL%s  [%s] no CALLS edges (callee-resolution gap; gap #3 fix "
                "alone will not flip this)\n",
                RED, RST, c->name);
-        cbm_store_free_edges(edges, nedges);
+        lsm_store_free_edges(edges, nedges);
         rh_cleanup(&lp, store);
         return 1;
     }
 
     int module_sourced = 0;
     for (int i = 0; i < nedges; i++) {
-        cbm_node_t src;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &src) != CBM_STORE_OK) {
+        lsm_node_t src;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &src) != LSM_STORE_OK) {
             continue; /* dangling edge — not this invariant's concern */
         }
         const char *lbl = src.label ? src.label : "(null)";
@@ -164,7 +164,7 @@ static int run_parity_case(const parity_case_t *c) {
         }
     }
 
-    cbm_store_free_edges(edges, nedges);
+    lsm_store_free_edges(edges, nedges);
     rh_cleanup(&lp, store);
 
     if (module_sourced > 0) {
@@ -184,7 +184,7 @@ static int run_parity_case(const parity_case_t *c) {
  * form: this is the CLEANEST pure-#3 reproduction — the edge is Module-sourced.
  */
 static const parity_case_t case_fortran = {
-    CBM_LANG_FORTRAN, "Fortran", "a.f90",
+    LSM_LANG_FORTRAN, "Fortran", "a.f90",
     "function helper(x) result(y)\n"
     "    integer, intent(in) :: x\n"
     "    integer :: y\n"
@@ -202,7 +202,7 @@ static const parity_case_t case_fortran = {
  * absent from switch. The call (`double(...)`) sits inside an @function body.
  */
 static const parity_case_t case_scss = {
-    CBM_LANG_SCSS, "SCSS", "a.scss",
+    LSM_LANG_SCSS, "SCSS", "a.scss",
     "@function double($x) {\n"
     "  @return $x * 2;\n"
     "}\n"
@@ -216,7 +216,7 @@ static const parity_case_t case_scss = {
  * call to helper() lives inside the CREATE FUNCTION body.
  */
 static const parity_case_t case_sql = {
-    CBM_LANG_SQL, "SQL", "a.sql",
+    LSM_LANG_SQL, "SQL", "a.sql",
     "CREATE FUNCTION helper(x INTEGER) RETURNS INTEGER AS $$\n"
     "  SELECT x + 1;\n"
     "$$ LANGUAGE sql;\n"
@@ -228,10 +228,10 @@ static const parity_case_t case_sql = {
 /*
  * VERILOG — PARTIAL DRIFT. task_declaration is the missing (DRIFT) form. The
  * call to the subroutine `do_log` sits inside a `task` body. (.sv routes to
- * CBM_LANG_VERILOG via EXT_TABLE.)
+ * LSM_LANG_VERILOG via EXT_TABLE.)
  */
 static const parity_case_t case_verilog = {
-    CBM_LANG_VERILOG, "Verilog", "a.sv",
+    LSM_LANG_VERILOG, "Verilog", "a.sv",
     "module m;\n"
     "  task do_log(input int v);\n"
     "    $display(\"v=%0d\", v);\n"
@@ -248,7 +248,7 @@ static const parity_case_t case_verilog = {
  * `function_definition`. The call to helper() is in the short-form body.
  */
 static const parity_case_t case_julia = {
-    CBM_LANG_JULIA, "Julia", "a.jl",
+    LSM_LANG_JULIA, "Julia", "a.jl",
     "helper(x) = x + 1\n"
     "run(n) = helper(n)\n"};
 
@@ -261,7 +261,7 @@ static const parity_case_t case_julia = {
  * in-function-drift invariant.
  */
 static const parity_case_t case_nix = {
-    CBM_LANG_NIX, "Nix", "a.nix",
+    LSM_LANG_NIX, "Nix", "a.nix",
     "let\n"
     "  double = x: x * 2;\n"
     "  run = n: double n;\n"
@@ -275,7 +275,7 @@ static const parity_case_t case_nix = {
  * gap #3 fix alone will not flip it.
  */
 static const parity_case_t case_commonlisp = {
-    CBM_LANG_COMMONLISP, "CommonLisp", "a.lisp",
+    LSM_LANG_COMMONLISP, "CommonLisp", "a.lisp",
     "(defun helper (x)\n"
     "  (* x 2))\n"
     "\n"
@@ -290,7 +290,7 @@ static const parity_case_t case_commonlisp = {
  * body. Expect RED via the no-edge guard.
  */
 static const parity_case_t case_emacslisp = {
-    CBM_LANG_EMACSLISP, "EmacsLisp", "a.el",
+    LSM_LANG_EMACSLISP, "EmacsLisp", "a.el",
     "(defmacro run (n)\n"
     "  \"Expand to a helper call.\"\n"
     "  (helper n))\n"};
@@ -302,7 +302,7 @@ static const parity_case_t case_emacslisp = {
  * if no edge forms this REDs via the no-edge guard, otherwise via Module-source.
  */
 static const parity_case_t case_dart = {
-    CBM_LANG_DART, "Dart", "a.dart",
+    LSM_LANG_DART, "Dart", "a.dart",
     "void helper() {\n"
     "  print('helper');\n"
     "}\n"
@@ -316,7 +316,7 @@ static const parity_case_t case_dart = {
  * lives inside the PROCEDURE DIVISION of a program_definition body.
  */
 static const parity_case_t case_cobol = {
-    CBM_LANG_COBOL, "COBOL", "a.cob",
+    LSM_LANG_COBOL, "COBOL", "a.cob",
     "       IDENTIFICATION DIVISION.\n"
     "       PROGRAM-ID. RUNPROG.\n"
     "       PROCEDURE DIVISION.\n"
@@ -331,8 +331,8 @@ TEST(repro_enclosing_parity_sql)        { return run_parity_case(&case_sql); }
 /* DISABLED — GRAMMAR ISSUE (maintainer-approved, 2026-06-28): tree-sitter-verilog
  * mis-parses the SystemVerilog task call `do_log(n);` as a data_declaration
  * (variable decl: type `do_log`, instance `(n)`), not a subroutine call, so no
- * CALLS edge ever forms. Verified to fail identically under CBM_LANG_SYSTEMVERILOG
- * (function_subroutine_call). This is a tree-sitter grammar defect, not a cbm
+ * CALLS edge ever forms. Verified to fail identically under LSM_LANG_SYSTEMVERILOG
+ * (function_subroutine_call). This is a tree-sitter grammar defect, not a lsm
  * extraction bug; re-enable when the grammar is fixed/replaced. */
 TEST(repro_enclosing_parity_verilog) {
     (void)&case_verilog;

@@ -22,14 +22,14 @@ seconds-fast local loop with full stderr/debugger visibility.
 | `vm-run-tests.sh`       | inside the VM | provisioning wrapper (protected TEMP root + completion guard) around the canonical test/soak entries |
 | `vm-smoke.sh`           | inside the VM / CI msys2 | THE canonical Windows smoke (also run verbatim by PR CI and `_smoke.yml`) |
 
-Host-local config (never committed): `~/.claude/cbm-vm/config` with
-`CBM_VM_HOST=<ip>`, `CBM_VM_USER=<user>`, and the
-`CBM_VM_HOST_KEY_SHA256=<SHA256:...>` fingerprint printed by the bootstrap.
-`CBM_VM_BRANCH=<branch>` is optional; both drivers otherwise use the current
+Host-local config (never committed): `~/.claude/lsm-vm/config` with
+`LSM_VM_HOST=<ip>`, `LSM_VM_USER=<user>`, and the
+`LSM_VM_HOST_KEY_SHA256=<SHA256:...>` fingerprint printed by the bootstrap.
+`LSM_VM_BRANCH=<branch>` is optional; both drivers otherwise use the current
 local Git branch, falling back to `main` only for a detached worktree.
 The drivers verify that fingerprint before every connection. The ssh keypair is at
-`~/.claude/cbm-vm/id_ed25519` (generate: `ssh-keygen -t ed25519 -N "" -C
-claude-cbm-vm -f ~/.claude/cbm-vm/id_ed25519`; include the public half beside
+`~/.claude/lsm-vm/id_ed25519` (generate: `ssh-keygen -t ed25519 -N "" -C
+claude-lsm-vm -f ~/.claude/lsm-vm/id_ed25519`; include the public half beside
 `windows-bootstrap.ps1` on the setup ISO as documented in that script).
 
 ### One-time VM creation (~30 min interactive, do it once, snapshot it)
@@ -55,7 +55,7 @@ claude-cbm-vm -f ~/.claude/cbm-vm/id_ed25519`; include the public half beside
 7. Get `windows-bootstrap.ps1` into the VM via the ISO trick in its header
    (clipboard and shared folders DO NOT work on Windows-ARM guests — the
    SPICE vdagent/webdavd services don't exist there; don't chase them),
-   run it, note the printed ip/user, write `~/.claude/cbm-vm/config`,
+   run it, note the printed ip/user, write `~/.claude/lsm-vm/config`,
    reboot the VM once (owner policy).
 8. From the host: `test-infrastructure/vm/provision-windows.sh` — installs
    msys2 + both toolchains, clones the repo, builds everything, smoke-checks.
@@ -70,8 +70,8 @@ vm/win.sh test cli daemon_ipc         # run suites natively, seconds
 vm/win.sh guards                      # the Windows guard scripts
 vm/win.sh smoke-install               # managed-install E2E, stderr VISIBLE
 vm/win.sh soak 10                     # native daemon endurance gate
-vm/win.sh sh "cd /c/cbm && gdb ..."   # anything, interactively
-vm/win.sh push-file src/cli/cli.c /c/cbm/src/cli/cli.c   # WIP iteration
+vm/win.sh sh "cd /c/lsm && gdb ..."   # anything, interactively
+vm/win.sh push-file src/cli/cli.c /c/lsm/src/cli/cli.c   # WIP iteration
 ```
 
 `sync` requires the VM to already have the exact pushed base commit (`update`

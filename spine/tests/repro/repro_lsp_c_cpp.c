@@ -1,6 +1,6 @@
 /*
  * repro_lsp_c_cpp.c — EXHAUSTIVE per-LSP-pass invariant suite for the C/C++
- * hybrid LSP (internal/cbm/lsp/c_lsp.c).
+ * hybrid LSP (internal/lsm/lsp/c_lsp.c).
  *
  * WHAT THIS ASSERTS — the LSP RESOLUTION CONTRACT, one invariant per strategy.
  *   The C/C++ cross resolver resolves each call via a specific STRATEGY and tags
@@ -28,7 +28,7 @@
  *                the exact gap for the eventual fixer.
  *
  * TIE TO repro_invariant_lsp_rescue.c — that file pins the MECHANISM by which
- *   these can silently fail: cbm_pipeline_find_lsp_resolution
+ *   these can silently fail: lsm_pipeline_find_lsp_resolution
  *   (src/pipeline/lsp_resolve.h:65) joins each LSP-resolved call to the
  *   tree-sitter call by EXACT caller-QN string equality. When tree-sitter's
  *   enclosing-func walk falls back to the MODULE QN (common for out-of-line
@@ -41,7 +41,7 @@
  *   method fixture triggers it).
  *
  * STRATEGY INVENTORY — every literal "lsp_..." emitted by c_lsp.c, grepped from
- *   the source (grep '"lsp_' internal/cbm/lsp/c_lsp.c), with its keying site:
+ *   the source (grep '"lsp_' internal/lsm/lsp/c_lsp.c), with its keying site:
  *     lsp_direct                (c_lsp.c:3650)  free/global function call f()
  *     lsp_implicit_this         (c_lsp.c:3655)  member calls sibling member, no this->
  *     lsp_scoped                (c_lsp.c:3489/3509/3525)  Ns::f() / Class::g()
@@ -90,7 +90,7 @@
 static int assert_lsp_strategy(const char *filename, const char *src,
                                const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -148,7 +148,7 @@ static int assert_lsp_strategy(const char *filename, const char *src,
 static int assert_no_resolvable_edge(const char *filename, const char *src,
                                      const char *callee_substr) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for no-edge callee %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, callee_substr);

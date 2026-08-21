@@ -18,8 +18,8 @@
  *     Haskell, Zig, OCaml, Erlang, Groovy, Nim, GDScript): functions + a
  *     class/module + intra-file call.  ~3-6 cases each.
  *
- * How languages were confirmed supported: each uses a CBM_LANG_* constant
- * from cbm.h (the canonical enum); the label-golden table in
+ * How languages were confirmed supported: each uses a LSM_LANG_* constant
+ * from lsm.h (the canonical enum); the label-golden table in
  * test_grammar_labels.c provides the expected histogram per grammar.
  *
  * Known expected-RED cases (document the gap, keep for fix-phase):
@@ -31,7 +31,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -53,7 +53,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } NcpLangProj;
 
 typedef struct {
@@ -68,33 +68,33 @@ static void ncp_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *ncp_open_indexed(NcpLangProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *ncp_open_indexed(NcpLangProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project)
         return NULL;
     const char *home = getenv("HOME");
     if (!home)
         home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv)
         return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp)
         free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *ncp_index_files(NcpLangProj *lp, const NcpLangFile *files, int nfiles) {
+static lsm_store_t *ncp_index_files(NcpLangProj *lp, const NcpLangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_ncp_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir))
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_ncp_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir))
         return NULL;
     ncp_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
@@ -103,7 +103,7 @@ static cbm_store_t *ncp_index_files(NcpLangProj *lp, const NcpLangFile *files, i
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -115,11 +115,11 @@ static cbm_store_t *ncp_index_files(NcpLangProj *lp, const NcpLangFile *files, i
     return ncp_open_indexed(lp);
 }
 
-static void ncp_cleanup(NcpLangProj *lp, cbm_store_t *store) {
+static void ncp_cleanup(NcpLangProj *lp, lsm_store_t *store) {
     if (store)
-        cbm_store_close(store);
+        lsm_store_close(store);
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -134,17 +134,17 @@ static void ncp_cleanup(NcpLangProj *lp, cbm_store_t *store) {
 }
 
 /* Count nodes with a given label. Returns -1 on error. */
-static int ncp_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int ncp_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Sum type-like nodes (Class + Struct + Interface + Enum + Trait + Type). */
-static int ncp_type_nodes(cbm_store_t *store, const char *project) {
+static int ncp_type_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class", "Struct", "Interface", "Enum", "Trait", "Type", NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -156,20 +156,20 @@ static int ncp_type_nodes(cbm_store_t *store, const char *project) {
 }
 
 /* Callable nodes (Function + Method) with >=1 outbound edge. */
-static int ncp_callables_with_outbound(cbm_store_t *store, const char *project) {
+static int ncp_callables_with_outbound(lsm_store_t *store, const char *project) {
     static const char *callable_labels[] = {"Function", "Method", NULL};
     int total = 0;
     for (int i = 0; callable_labels[i]; i++) {
-        cbm_search_params_t p = {0};
+        lsm_search_params_t p = {0};
         p.project = project;
         p.label = callable_labels[i];
         p.min_degree = 1;
         p.max_degree = -1;
         p.limit = 100;
-        cbm_search_output_t out = {0};
-        if (cbm_store_search(store, &p, &out) == CBM_STORE_OK)
+        lsm_search_output_t out = {0};
+        if (lsm_store_search(store, &p, &out) == LSM_STORE_OK)
             total += out.count;
-        cbm_store_search_free(&out);
+        lsm_store_search_free(&out);
     }
     return total;
 }
@@ -193,11 +193,11 @@ typedef struct {
 
 static NcpMetrics ncp_metrics_files(const NcpLangFile *files, int nfiles) {
     NcpLangProj lp;
-    cbm_store_t *store = ncp_index_files(&lp, files, nfiles);
+    lsm_store_t *store = ncp_index_files(&lp, files, nfiles);
     NcpMetrics m = {0};
     if (store) {
         m.ok = 1;
-        m.total_nodes = cbm_store_count_nodes(store, lp.project);
+        m.total_nodes = lsm_store_count_nodes(store, lp.project);
         m.functions = ncp_count_label(store, lp.project, "Function");
         m.methods = ncp_count_label(store, lp.project, "Method");
         m.classes = ncp_count_label(store, lp.project, "Class");
@@ -206,9 +206,9 @@ static NcpMetrics ncp_metrics_files(const NcpLangFile *files, int nfiles) {
         m.interfaces = ncp_count_label(store, lp.project, "Interface");
         m.traits = ncp_count_label(store, lp.project, "Trait");
         m.types = ncp_type_nodes(store, lp.project);
-        m.calls = cbm_store_count_edges_by_type(store, lp.project, "CALLS");
+        m.calls = lsm_store_count_edges_by_type(store, lp.project, "CALLS");
         m.callers = ncp_callables_with_outbound(store, lp.project);
-        m.imports = cbm_store_count_edges_by_type(store, lp.project, "IMPORTS");
+        m.imports = lsm_store_count_edges_by_type(store, lp.project, "IMPORTS");
     }
     ncp_cleanup(&lp, store);
     return m;

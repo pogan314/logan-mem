@@ -8,10 +8,10 @@
  *   In a Yarn/Lerna-style JS/TS monorepo, `packages/b` imports a sibling by
  *   its declared package name (`import { x } from '@org/a'`).  pass_pkgmap.c
  *   is supposed to:
- *     1. Walk the repo filesystem for package.json manifests (cbm_pkgmap_scan_repo).
+ *     1. Walk the repo filesystem for package.json manifests (lsm_pkgmap_scan_repo).
  *     2. Parse each sibling package.json, mapping its `"name"` field to its
  *        entry-point QN (parse_package_json → pkg_entries_push).
- *     3. On import resolution (cbm_pipeline_resolve_module), perform an exact
+ *     3. On import resolution (lsm_pipeline_resolve_module), perform an exact
  *        lookup of `"@org/a"` in the pkgmap hash table to obtain the sibling's
  *        QN, then produce an IMPORTS edge to that node.
  *
@@ -19,11 +19,11 @@
  *   pass never emits any `pkgmap.*` log lines:
  *       pipeline.done nodes=12 edges=9 elapsed_ms=71
  *   — zero IMPORTS edges despite a bare-specifier workspace import.  The
- *   maintainer confirmed: on macOS/Linux cbm_pkgmap_scan_repo may resolve
- *   workspace names at the manifest-parse level (cbm_pkgmap_try_parse), but
+ *   maintainer confirmed: on macOS/Linux lsm_pkgmap_scan_repo may resolve
+ *   workspace names at the manifest-parse level (lsm_pkgmap_try_parse), but
  *   the resolved entry-QN is never matched against the in-graph node produced
  *   by indexing `packages/a/index.js`.  The mismatch means the exact-lookup
- *   in cbm_pipeline_resolve_module (step 3) silently falls through to
+ *   in lsm_pipeline_resolve_module (step 3) silently falls through to
  *   default (unresolved) QN resolution, and no cross-package IMPORTS edge is
  *   ever produced.
  *
@@ -87,7 +87,7 @@
  */
 TEST(repro_issue408_workspace_crosspkg_import) {
     /*
-     * Fixture layout mirrors the reporter's /tmp/cbm-issue408-repro tree
+     * Fixture layout mirrors the reporter's /tmp/lsm-issue408-repro tree
      * (issue #408 comment, macOS arm64 canonical repro).  Five files:
      *
      *   package.json             — root workspace manifest; workspaces glob
@@ -140,7 +140,7 @@ TEST(repro_issue408_workspace_crosspkg_import) {
     };
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 5);
+    lsm_store_t *store = rh_index_files(&lp, files, 5);
     ASSERT_NOT_NULL(store);
 
     /*
@@ -153,7 +153,7 @@ TEST(repro_issue408_workspace_crosspkg_import) {
      *     0  → workspace resolution is broken            (bug #408, RED)
      *
      * On current (unfixed) code, pass_pkgmap resolves "@org/a" to a QN that
-     * does not match any graph node, so cbm_pipeline_resolve_import_node
+     * does not match any graph node, so lsm_pipeline_resolve_import_node
      * falls through to default resolution, producing zero IMPORTS edges.
      * This assertion therefore FAILS → RED.
      */

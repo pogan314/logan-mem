@@ -10,8 +10,8 @@
 
 /* ── Helper ──────────────────────────────────────────────────────── */
 
-static cbm_ast_profile_t make_profile(void) {
-    cbm_ast_profile_t p;
+static lsm_ast_profile_t make_profile(void) {
+    lsm_ast_profile_t p;
     memset(&p, 0, sizeof(p));
     p.if_count = 5;
     p.for_count = 3;
@@ -44,12 +44,12 @@ static cbm_ast_profile_t make_profile(void) {
 /* ── to_str + from_str round-trip ────────────────────────────────── */
 
 TEST(ast_profile_roundtrip) {
-    cbm_ast_profile_t original = make_profile();
+    lsm_ast_profile_t original = make_profile();
     char buf[200];
-    cbm_ast_profile_to_str(&original, buf, sizeof(buf));
+    lsm_ast_profile_to_str(&original, buf, sizeof(buf));
 
-    cbm_ast_profile_t decoded;
-    ASSERT_TRUE(cbm_ast_profile_from_str(buf, &decoded));
+    lsm_ast_profile_t decoded;
+    ASSERT_TRUE(lsm_ast_profile_from_str(buf, &decoded));
 
     ASSERT_EQ(original.if_count, decoded.if_count);
     ASSERT_EQ(original.for_count, decoded.for_count);
@@ -81,44 +81,44 @@ TEST(ast_profile_roundtrip) {
 
 TEST(ast_profile_to_str_null) {
     char buf[200];
-    cbm_ast_profile_to_str(NULL, buf, sizeof(buf)); /* should not crash */
+    lsm_ast_profile_to_str(NULL, buf, sizeof(buf)); /* should not crash */
     PASS();
 }
 
 TEST(ast_profile_to_str_small_buf) {
-    cbm_ast_profile_t p = make_profile();
+    lsm_ast_profile_t p = make_profile();
     /* buf too small: should write empty string */
     char buf[1] = {'X'};
-    cbm_ast_profile_to_str(&p, buf, 0);
+    lsm_ast_profile_to_str(&p, buf, 0);
     /* 0-length buffer: function should handle gracefully */
     PASS();
 }
 
 TEST(ast_profile_from_str_null) {
-    ASSERT_FALSE(cbm_ast_profile_from_str(NULL, NULL));
+    ASSERT_FALSE(lsm_ast_profile_from_str(NULL, NULL));
     PASS();
 }
 
 TEST(ast_profile_from_str_invalid) {
-    cbm_ast_profile_t out;
-    ASSERT_FALSE(cbm_ast_profile_from_str("not,a,valid,string", &out));
-    ASSERT_FALSE(cbm_ast_profile_from_str("", &out));
+    lsm_ast_profile_t out;
+    ASSERT_FALSE(lsm_ast_profile_from_str("not,a,valid,string", &out));
+    ASSERT_FALSE(lsm_ast_profile_from_str("", &out));
     PASS();
 }
 
 TEST(ast_profile_from_str_too_few_fields) {
-    cbm_ast_profile_t out;
+    lsm_ast_profile_t out;
     /* Only 5 fields instead of 25 */
-    ASSERT_FALSE(cbm_ast_profile_from_str("1,2,3,4,5", &out));
+    ASSERT_FALSE(lsm_ast_profile_from_str("1,2,3,4,5", &out));
     PASS();
 }
 
 /* ── to_vector ───────────────────────────────────────────────────── */
 
 TEST(ast_profile_to_vector_range) {
-    cbm_ast_profile_t p = make_profile();
+    lsm_ast_profile_t p = make_profile();
     float vec[25];
-    cbm_ast_profile_to_vector(&p, vec);
+    lsm_ast_profile_to_vector(&p, vec);
     /* All values should be in [0, 1] range (normalized) */
     for (int i = 0; i < 25; i++) {
         ASSERT_GTE(vec[i], 0.0f);
@@ -128,10 +128,10 @@ TEST(ast_profile_to_vector_range) {
 }
 
 TEST(ast_profile_to_vector_zero) {
-    cbm_ast_profile_t p;
+    lsm_ast_profile_t p;
     memset(&p, 0, sizeof(p));
     float vec[25];
-    cbm_ast_profile_to_vector(&p, vec);
+    lsm_ast_profile_to_vector(&p, vec);
     /* All zeros should produce all-zero vector */
     for (int i = 0; i < 25; i++) {
         ASSERT_FLOAT_EQ(vec[i], 0.0f, 0.001f);
@@ -142,20 +142,20 @@ TEST(ast_profile_to_vector_zero) {
 TEST(ast_profile_to_vector_null) {
     float vec[25];
     memset(vec, 0xFF, sizeof(vec));
-    cbm_ast_profile_to_vector(NULL, vec); /* should not crash or write */
+    lsm_ast_profile_to_vector(NULL, vec); /* should not crash or write */
     PASS();
 }
 
 /* ── to_vector extremes (saturation) ─────────────────────────────── */
 
 TEST(ast_profile_to_vector_saturates) {
-    cbm_ast_profile_t p;
+    lsm_ast_profile_t p;
     memset(&p, 0, sizeof(p));
     /* count / MAX_COUNT (100) → can exceed 1.0; body_tokens / MAX_TOKENS (2000) = 2.5 */
     p.if_count = 500;
     p.body_tokens = 5000;
     float vec[25];
-    cbm_ast_profile_to_vector(&p, vec);
+    lsm_ast_profile_to_vector(&p, vec);
     ASSERT_TRUE(vec[0] > 1.0f);
     ASSERT_TRUE(vec[24] > 1.0f);
     PASS();

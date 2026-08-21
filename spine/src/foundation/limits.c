@@ -7,13 +7,13 @@
 #include <limits.h>
 #include <stdlib.h>
 
-long cbm_max_file_bytes(void) {
+long lsm_max_file_bytes(void) {
     /* 512 MiB — generous: real source files never approach it, but a
      * pathological / vendored blob degrades to a reported "oversized" skip
      * instead of a silent drop or an unbounded read. */
     const long default_cap = 512L * 1024 * 1024;
 
-    const char *raw = getenv("CBM_MAX_FILE_BYTES");
+    const char *raw = getenv("LSM_MAX_FILE_BYTES");
     if (raw && raw[0]) {
         errno = 0;
         char *end = NULL;
@@ -27,7 +27,7 @@ long cbm_max_file_bytes(void) {
 }
 
 /* Shared env-int parser: a positive integer in [1, INT_MAX], else the fallback.
- * Read fresh each call (see cbm_max_file_bytes rationale — cheap, test-friendly,
+ * Read fresh each call (see lsm_max_file_bytes rationale — cheap, test-friendly,
  * no stale memoized copy across runs). */
 static int env_positive_int(const char *name, int fallback) {
     const char *raw = getenv(name);
@@ -43,14 +43,14 @@ static int env_positive_int(const char *name, int fallback) {
     return fallback;
 }
 
-int cbm_cypher_max_depth(void) {
+int lsm_cypher_max_depth(void) {
     /* 10 — generous for a code call/def graph; an explicit `*1..N` above this is
      * WARN-capped, never an unbounded (cyclic-graph DoS) traversal. */
-    return env_positive_int("CBM_CYPHER_MAX_DEPTH", 10);
+    return env_positive_int("LSM_CYPHER_MAX_DEPTH", 10);
 }
 
-int cbm_mcp_max_depth(void) {
+int lsm_mcp_max_depth(void) {
     /* 15 — ceiling for client-driven MCP graph traversals (trace_call_path,
      * detect_changes); the caller's `depth` is WARN-clamped to this. */
-    return env_positive_int("CBM_MCP_MAX_DEPTH", 15);
+    return env_positive_int("LSM_MCP_MAX_DEPTH", 15);
 }

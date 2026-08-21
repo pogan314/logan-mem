@@ -5,7 +5,7 @@
  *
  * ROOT CAUSE (extraction layer):
  *   extract_func_def() computes:
- *     def.qualified_name = cbm_fqn_compute(project, rel_path, name)
+ *     def.qualified_name = lsm_fqn_compute(project, rel_path, name)
  *   for every Rust function_item it visits.  Two same-named functions
  *   guarded by mutually-exclusive #[cfg(...)] attributes both parse as
  *   distinct function_item nodes and both pass through extract_func_def,
@@ -45,21 +45,21 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-/* Extract a Rust source string and return the raw CBMFileResult.
- * Caller must cbm_free_result() the returned pointer. */
-static CBMFileResult *rx(const char *src, const char *proj, const char *path) {
-    return cbm_extract_file(src, (int)strlen(src), CBM_LANG_RUST, proj, path, 0, NULL, NULL);
+/* Extract a Rust source string and return the raw LSMFileResult.
+ * Caller must lsm_free_result() the returned pointer. */
+static LSMFileResult *rx(const char *src, const char *proj, const char *path) {
+    return lsm_extract_file(src, (int)strlen(src), LSM_LANG_RUST, proj, path, 0, NULL, NULL);
 }
 
 /* Count how many defs in r have exactly this label AND name. */
-static int count_defs_named(CBMFileResult *r, const char *label, const char *name) {
+static int count_defs_named(LSMFileResult *r, const char *label, const char *name) {
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (label && (!d->label || strcmp(d->label, label) != 0))
             continue;
         if (name && (!d->name || strcmp(d->name, name) != 0))
@@ -70,10 +70,10 @@ static int count_defs_named(CBMFileResult *r, const char *label, const char *nam
 }
 
 /* Return the Nth (0-based) def matching label + name, or NULL. */
-static CBMDefinition *nth_def_named(CBMFileResult *r, const char *label, const char *name, int nth) {
+static LSMDefinition *nth_def_named(LSMFileResult *r, const char *label, const char *name, int nth) {
     int seen = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (label && (!d->label || strcmp(d->label, label) != 0))
             continue;
         if (name && (!d->name || strcmp(d->name, name) != 0))
@@ -115,7 +115,7 @@ TEST(repro_issue495_cfg_gated_twins_distinct) {
         "#[cfg(not(feature = \"rag-pdf\"))]\n"
         "fn try_extract_pdf_text(_bytes: &[u8]) -> Option<String> { None }\n";
 
-    CBMFileResult *r = rx(src, "t", "src.rs");
+    LSMFileResult *r = rx(src, "t", "src.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -133,8 +133,8 @@ TEST(repro_issue495_cfg_gated_twins_distinct) {
     /* Retrieve the two defs.  On buggy code both have the same QN, so
      * even picking them by index 0 and 1 is meaningful: the pair MUST
      * carry two DIFFERENT qualified_name strings. */
-    CBMDefinition *d0 = nth_def_named(r, "Function", "try_extract_pdf_text", 0);
-    CBMDefinition *d1 = nth_def_named(r, "Function", "try_extract_pdf_text", 1);
+    LSMDefinition *d0 = nth_def_named(r, "Function", "try_extract_pdf_text", 0);
+    LSMDefinition *d1 = nth_def_named(r, "Function", "try_extract_pdf_text", 1);
     ASSERT_NOT_NULL(d0);
     ASSERT_NOT_NULL(d1);
     ASSERT_NOT_NULL(d0->qualified_name);
@@ -163,11 +163,11 @@ TEST(repro_issue495_cfg_gated_twins_distinct) {
      * in Part 2 already failed.  Parts 2 and 3 together pin the root
      * cause at extract_func_def() failing to fold the cfg predicate into
      * the qualified_name. */
-    CBMDefinition *real_def = NULL;  /* #[cfg(feature = "rag-pdf")]     */
-    CBMDefinition *stub_def = NULL;  /* #[cfg(not(feature = "rag-pdf"))] */
+    LSMDefinition *real_def = NULL;  /* #[cfg(feature = "rag-pdf")]     */
+    LSMDefinition *stub_def = NULL;  /* #[cfg(not(feature = "rag-pdf"))] */
 
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (!d->name || strcmp(d->name, "try_extract_pdf_text") != 0)
             continue;
         if (!d->qualified_name)
@@ -202,7 +202,7 @@ TEST(repro_issue495_cfg_gated_twins_distinct) {
     ASSERT_TRUE(real_def->end_line   < stub_def->start_line ||
                 stub_def->end_line   < real_def->start_line);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

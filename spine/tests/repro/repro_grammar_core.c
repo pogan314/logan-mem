@@ -8,23 +8,23 @@
  * its body, a class/struct where the language has one, and an idiomatic
  * import/include). The shared single-file + pipeline runners keep this DRY.
  *
- * Languages covered (12) and the CBM_LANG_* enum each uses:
- *   C       -> CBM_LANG_C
- *   C++     -> CBM_LANG_CPP
- *   CUDA    -> CBM_LANG_CUDA
- *   Rust    -> CBM_LANG_RUST
- *   Go      -> CBM_LANG_GO
- *   Java    -> CBM_LANG_JAVA
- *   C#      -> CBM_LANG_CSHARP
- *   Kotlin  -> CBM_LANG_KOTLIN
- *   Scala   -> CBM_LANG_SCALA
- *   Swift   -> CBM_LANG_SWIFT
- *   Obj-C   -> CBM_LANG_OBJC
- *   D       -> CBM_LANG_DLANG
+ * Languages covered (12) and the LSM_LANG_* enum each uses:
+ *   C       -> LSM_LANG_C
+ *   C++     -> LSM_LANG_CPP
+ *   CUDA    -> LSM_LANG_CUDA
+ *   Rust    -> LSM_LANG_RUST
+ *   Go      -> LSM_LANG_GO
+ *   Java    -> LSM_LANG_JAVA
+ *   C#      -> LSM_LANG_CSHARP
+ *   Kotlin  -> LSM_LANG_KOTLIN
+ *   Scala   -> LSM_LANG_SCALA
+ *   Swift   -> LSM_LANG_SWIFT
+ *   Obj-C   -> LSM_LANG_OBJC
+ *   D       -> LSM_LANG_DLANG
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error;
  *                        a hard crash would not return at all).
@@ -39,7 +39,7 @@
  *   6. calls-extracted : inv_has_call(r, "<callee>") == 1 (the in-body call was
  *                        captured).
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call);
  *                          assert mod == 0 -- every in-body call must be sourced
  *                          at a Function/Method node, NEVER at a Module node.
@@ -49,8 +49,8 @@
  * KNOWN GAP (the point of this file): dimension 7 (callable-sourcing) is RED for
  * most of the compiled/OOP languages on current code. Per QUALITY_ANALYSIS.md
  * (2026-06-24) only ~3.69% of CALLS edges in the real graph are callable-sourced;
- * the dominant failure is cbm_enclosing_func_qn falling back to the module QN when
- * cbm_find_enclosing_func cannot walk the TSNode ancestry to a function node
+ * the dominant failure is lsm_enclosing_func_qn falling back to the module QN when
+ * lsm_find_enclosing_func cannot walk the TSNode ancestry to a function node
  * (func_kinds_for_lang in helpers.c not matching the grammar's emitted node
  * types), and the LSP rescue cannot compensate because it joins on exact caller_qn
  * equality. So dimensions 1-6 and 8 are expected GREEN for these idiomatic
@@ -79,7 +79,7 @@
  * the in-body callee name that must appear in the extracted calls.
  */
 static int single_file_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file,
+                               LSMLanguage lang, const char *file,
                                const char *expect_label,
                                const char *expect_label2, const char *callee) {
     const char *RED = tf_red();
@@ -93,7 +93,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -143,7 +143,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -164,7 +164,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -220,7 +220,7 @@ TEST(repro_grammar_core_c) {
         "int compute(int x) {\n"
         "    return add(x, 1);\n"
         "}\n";
-    if (single_file_battery("C", src, CBM_LANG_C, "main.c",
+    if (single_file_battery("C", src, LSM_LANG_C, "main.c",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("C", "main.c", src);
@@ -245,7 +245,7 @@ TEST(repro_grammar_core_cpp) {
         "        return helper(v);\n"
         "    }\n"
         "};\n";
-    if (single_file_battery("C++", src, CBM_LANG_CPP, "main.cpp",
+    if (single_file_battery("C++", src, LSM_LANG_CPP, "main.cpp",
                             "Method", "Class", "helper") != 0)
         return 1;
     return pipeline_battery("C++", "main.cpp", src);
@@ -265,7 +265,7 @@ TEST(repro_grammar_core_cuda) {
         "__global__ void run(int *out) {\n"
         "    out[0] = helper(21);\n"
         "}\n";
-    if (single_file_battery("CUDA", src, CBM_LANG_CUDA, "k.cu",
+    if (single_file_battery("CUDA", src, LSM_LANG_CUDA, "k.cu",
                             "Function", NULL, "helper") != 0)
         return 1;
     return pipeline_battery("CUDA", "k.cu", src);
@@ -273,8 +273,8 @@ TEST(repro_grammar_core_cuda) {
 
 /* ── Rust ─────────────────────────────────────────────────────────────────────
  * Idiomatic: a `use` import, a struct + impl method, a free fn, in-body call.
- * Expected: dims 1-6 + 8 GREEN, dim 7 RED (cbm_pxc_has_cross_lsp is false for
- * CBM_LANG_RUST, so the cross-LSP rescue never runs; tree-sitter enclosing-func
+ * Expected: dims 1-6 + 8 GREEN, dim 7 RED (lsm_pxc_has_cross_lsp is false for
+ * LSM_LANG_RUST, so the cross-LSP rescue never runs; tree-sitter enclosing-func
  * walk alone falls back to Module).
  */
 TEST(repro_grammar_core_rust) {
@@ -294,7 +294,7 @@ TEST(repro_grammar_core_rust) {
         "        add(self.base, x)\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Rust", src, CBM_LANG_RUST, "lib.rs",
+    if (single_file_battery("Rust", src, LSM_LANG_RUST, "lib.rs",
                             "Function", "Struct", "add") != 0)
         return 1;
     return pipeline_battery("Rust", "lib.rs", src);
@@ -324,7 +324,7 @@ TEST(repro_grammar_core_go) {
         "    fmt.Println(\"compute\")\n"
         "    return add(c.base, x)\n"
         "}\n";
-    if (single_file_battery("Go", src, CBM_LANG_GO, "main.go",
+    if (single_file_battery("Go", src, LSM_LANG_GO, "main.go",
                             "Function", "Struct", "add") != 0)
         return 1;
     return pipeline_battery("Go", "main.go", src);
@@ -349,7 +349,7 @@ TEST(repro_grammar_core_java) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Java", src, CBM_LANG_JAVA, "Calculator.java",
+    if (single_file_battery("Java", src, LSM_LANG_JAVA, "Calculator.java",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Java", "Calculator.java", src);
@@ -373,7 +373,7 @@ TEST(repro_grammar_core_csharp) {
         "        return Add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("C#", src, CBM_LANG_CSHARP, "Calculator.cs",
+    if (single_file_battery("C#", src, LSM_LANG_CSHARP, "Calculator.cs",
                             "Method", "Class", "Add") != 0)
         return 1;
     return pipeline_battery("C#", "Calculator.cs", src);
@@ -397,7 +397,7 @@ TEST(repro_grammar_core_kotlin) {
         "        return add(x, 1)\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Kotlin", src, CBM_LANG_KOTLIN, "Calc.kt",
+    if (single_file_battery("Kotlin", src, LSM_LANG_KOTLIN, "Calc.kt",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Kotlin", "Calc.kt", src);
@@ -422,7 +422,7 @@ TEST(repro_grammar_core_scala) {
         "    add(x, 1)\n"
         "  }\n"
         "}\n";
-    if (single_file_battery("Scala", src, CBM_LANG_SCALA, "Calc.scala",
+    if (single_file_battery("Scala", src, LSM_LANG_SCALA, "Calc.scala",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Scala", "Calc.scala", src);
@@ -446,7 +446,7 @@ TEST(repro_grammar_core_swift) {
         "        return add(x, 1)\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Swift", src, CBM_LANG_SWIFT, "Calc.swift",
+    if (single_file_battery("Swift", src, LSM_LANG_SWIFT, "Calc.swift",
                             "Method", "Struct", "add") != 0)
         return 1;
     return pipeline_battery("Swift", "Calc.swift", src);
@@ -474,7 +474,7 @@ TEST(repro_grammar_core_objc) {
         "    return helper(x);\n"
         "}\n"
         "@end\n";
-    if (single_file_battery("Obj-C", src, CBM_LANG_OBJC, "Calc.m",
+    if (single_file_battery("Obj-C", src, LSM_LANG_OBJC, "Calc.m",
                             "Method", NULL, "helper") != 0)
         return 1;
     return pipeline_battery("Obj-C", "Calc.m", src);
@@ -483,7 +483,7 @@ TEST(repro_grammar_core_objc) {
 /* ── D ─────────────────────────────────────────────────────────────────────────
  * Idiomatic: import, a struct + method, a free function, in-body call.
  * Expected GREEN across the battery including dim 7 (D is a listed GREEN in the
- * breadth callable-sourcing table). Uses CBM_LANG_DLANG.
+ * breadth callable-sourcing table). Uses LSM_LANG_DLANG.
  */
 TEST(repro_grammar_core_dlang) {
     static const char src[] =
@@ -502,7 +502,7 @@ TEST(repro_grammar_core_dlang) {
         "        return add(base, x);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("D", src, CBM_LANG_DLANG, "calc.d",
+    if (single_file_battery("D", src, LSM_LANG_DLANG, "calc.d",
                             "Function", "Struct", "add") != 0)
         return 1;
     return pipeline_battery("D", "calc.d", src);

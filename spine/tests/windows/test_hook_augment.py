@@ -2,7 +2,7 @@ r"""GREEN regression guard — the PreToolUse hook augmenter fires on Windows.
 
 Guards the fix for issue #618 (landed on main via #619) at the product surface.
 
-`codebase-memory-mcp hook-augment` is the non-blocking Claude Code PreToolUse
+`logan-spine-mcp hook-augment` is the non-blocking Claude Code PreToolUse
 Grep/Glob augmenter: given a hook payload it should emit a `hookSpecificOutput`
 with `additionalContext` listing graph symbols that match the searched token.
 
@@ -10,7 +10,7 @@ Before #619 it emitted nothing for every payload on Windows: `src/cli/hook_augme
 gated on POSIX-style absolute paths (`cwd[0] == '/'` and a walk-up loop over
 `dir[0] == '/'`). A Windows `cwd` is a drive-letter path (`C:\...` / `C:/...`),
 so `cwd[0]` was never `'/'` and the augmenter bailed before querying the graph.
-#619 added `cbm_is_walkable_abs_path` (accepts `X:/` drive-letter roots), so the
+#619 added `lsm_is_walkable_abs_path` (accepts `X:/` drive-letter roots), so the
 augmenter now fires for a drive-letter cwd.
 
 This test indexes a repo with a known symbol, confirms `search_graph` finds it
@@ -22,7 +22,7 @@ Also passes on Linux/macOS (`cwd` starts with `/`).
 Exit code: 0 == augmenter fired (green), 1 == no-op (regression), 2 == setup error.
 
 Usage:
-    python test_hook_augment.py <path-to-codebase-memory-mcp[.exe]>
+    python test_hook_augment.py <path-to-logan-spine-mcp[.exe]>
 """
 import json
 import os
@@ -38,7 +38,7 @@ SRC = "export function %s(a: number): number { return a + 1; }\n" % SYMBOL
 
 def run_cli(binary, cache, args, stdin=None, timeout=120):
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = cache
+    env["LSM_CACHE_DIR"] = cache
     return subprocess.run([binary] + args, capture_output=True, timeout=timeout,
                           env=env, input=stdin)
 
@@ -52,7 +52,7 @@ def main():
         print("FAIL: binary not found: %s" % binary)
         return 2
 
-    work = tempfile.mkdtemp(prefix="cbm_win_hook_")
+    work = tempfile.mkdtemp(prefix="lsm_win_hook_")
     try:
         repo = os.path.join(work, "repo")
         os.makedirs(os.path.join(repo, "src"), exist_ok=True)
@@ -128,7 +128,7 @@ def main():
             return 0
         print("\nREGRESSION (red): hook-augment produced no hookSpecificOutput on "
               "Windows (drive-letter cwd rejected — has the #619 "
-              "cbm_is_walkable_abs_path handling in hook_augment.c regressed?).")
+              "lsm_is_walkable_abs_path handling in hook_augment.c regressed?).")
         return 1
     finally:
         shutil.rmtree(work, ignore_errors=True)

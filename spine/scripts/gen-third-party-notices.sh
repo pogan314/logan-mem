@@ -16,7 +16,7 @@ mkdir -p "$(dirname "$OUT")"
 {
     echo "# Third-Party Notices"
     echo
-    echo "This file accompanies the codebase-memory-mcp binary distribution."
+    echo "This file accompanies the logan-spine-mcp binary distribution."
     echo "It aggregates THIRD_PARTY.md, the vendored grammar provenance"
     echo "manifest, and the verbatim license / notice texts of every vendored"
     echo "component, satisfying binary-redistribution notice requirements"
@@ -28,9 +28,9 @@ mkdir -p "$(dirname "$OUT")"
     echo
     echo "---"
     echo
-    cat "$ROOT/internal/cbm/vendored/grammars/MANIFEST.md"
+    cat "$ROOT/internal/lsm/vendored/grammars/MANIFEST.md"
 
-    find "$ROOT/vendored" "$ROOT/internal/cbm/vendored" -type f \
+    find "$ROOT/vendored" "$ROOT/internal/lsm/vendored" -type f \
         \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -iname 'UNLICENSE*' \) \
         | LC_ALL=C sort | while IFS= read -r f; do
         rel="${f#"$ROOT"/}"

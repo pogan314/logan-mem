@@ -16,12 +16,12 @@
 #   4. ANY suite failing, crashing (nonzero exit), or missing ⇒ exit 1.
 #
 # Usage: run-tests-parallel.sh <path-to-test-runner> [jobs]
-#   jobs defaults to CBM_TEST_PAR_JOBS, then the CPU count.
+#   jobs defaults to LSM_TEST_PAR_JOBS, then the CPU count.
 
 set -uo pipefail
 
 RUNNER="${1:?usage: run-tests-parallel.sh <path-to-test-runner> [jobs]}"
-JOBS="${2:-${CBM_TEST_PAR_JOBS:-}}"
+JOBS="${2:-${LSM_TEST_PAR_JOBS:-}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCHEDULER="$SCRIPT_DIR/run-test-wave.py"
 
@@ -129,7 +129,7 @@ if [ "$NSUITES" -lt 1 ] || grep -qvE '^[a-z0-9_]+$' "$SUITES_FILE"; then
     exit 1
 fi
 
-# CBM_TEST_SHARD="i/N" runs this invocation's deterministic slice of the
+# LSM_TEST_SHARD="i/N" runs this invocation's deterministic slice of the
 # suite list so CI can spread one platform's suites across N runner jobs.
 # Unset (or "1/1") selects everything — the sharding path is inert unless a
 # workflow opts in. The slice is a pure function of (--list-suites, i, N):
@@ -138,16 +138,16 @@ fi
 # proves it ran exactly its slice.
 SHARD_INDEX=1
 SHARD_TOTAL=1
-if [ -n "${CBM_TEST_SHARD:-}" ]; then
-    if ! printf '%s' "$CBM_TEST_SHARD" | grep -qE '^[0-9]+/[0-9]+$'; then
-        echo "FAIL: CBM_TEST_SHARD must be i/N, got '$CBM_TEST_SHARD'" >&2
+if [ -n "${LSM_TEST_SHARD:-}" ]; then
+    if ! printf '%s' "$LSM_TEST_SHARD" | grep -qE '^[0-9]+/[0-9]+$'; then
+        echo "FAIL: LSM_TEST_SHARD must be i/N, got '$LSM_TEST_SHARD'" >&2
         exit 1
     fi
-    SHARD_INDEX="${CBM_TEST_SHARD%%/*}"
-    SHARD_TOTAL="${CBM_TEST_SHARD##*/}"
+    SHARD_INDEX="${LSM_TEST_SHARD%%/*}"
+    SHARD_TOTAL="${LSM_TEST_SHARD##*/}"
     if [ "$SHARD_TOTAL" -lt 1 ] || [ "$SHARD_INDEX" -lt 1 ] ||
         [ "$SHARD_INDEX" -gt "$SHARD_TOTAL" ]; then
-        echo "FAIL: CBM_TEST_SHARD out of range: $CBM_TEST_SHARD" >&2
+        echo "FAIL: LSM_TEST_SHARD out of range: $LSM_TEST_SHARD" >&2
         exit 1
     fi
 fi
@@ -237,13 +237,13 @@ NSHARD=$(wc -l < "$SHARD_EXPECT" | tr -d ' ')
 # Machine-checkable manifest for CI's cross-shard completeness job: it
 # proves at runtime that the shards of one leg agree on N and on the full
 # suite list, and that the union of their slices IS that list — the guard
-# against a mis-plumbed CBM_TEST_SHARD (two jobs running the same slice
+# against a mis-plumbed LSM_TEST_SHARD (two jobs running the same slice
 # passes every per-shard check but silently drops a slice; only a
 # cross-shard view catches it). Written BEFORE any suite runs: the slice is
 # fully determined here, and a red run's manifest is exactly as load-bearing
 # as a green one's — CI uploads it if: always().
 {
-    echo "leg=${CBM_TEST_LEG:-local}"
+    echo "leg=${LSM_TEST_LEG:-local}"
     echo "shard=${SHARD_INDEX}/${SHARD_TOTAL}"
     echo "list_sha256=$(sort "$SUITES_FILE" | { sha256sum 2>/dev/null || shasum -a 256; } | awk '{print $1}')"
     echo "--- slice ---"
@@ -265,8 +265,8 @@ run_wave() {
         --log-dir "$LOGDIR" \
         --results-file "$RESULTS_FILE" \
         --jobs "$jobs" \
-        --timeout "${CBM_SUITE_TIMEOUT:-900}" \
-        --slow-timeout "${CBM_SUITE_TIMEOUT_SLOW:-3600}" \
+        --timeout "${LSM_SUITE_TIMEOUT:-900}" \
+        --slow-timeout "${LSM_SUITE_TIMEOUT_SLOW:-3600}" \
         --kill-grace 15 \
         "$RUNNER"; then
         echo "FAIL: parallel suite scheduler infrastructure failed" >&2
@@ -278,7 +278,7 @@ run_wave "$PAR_FILE" "$JOBS"
 
 # Tail scheduling in two phases. The FLEX suites are timing-shaped but do
 # not rendezvous through the shared per-account daemon runtime namespace,
-# so a small fixed overlap (CBM_TAIL_JOBS, default 2) is safe and converts
+# so a small fixed overlap (LSM_TAIL_JOBS, default 2) is safe and converts
 # idle cores into wall time — the old fully-serial tail ran them one at a
 # time on an idle machine. The EXCL group (daemon-family plus the suites
 # that drive daemon one-shots or supervisor rendezvous) then runs strictly
@@ -311,7 +311,7 @@ done < "$SER_FILE"
 # Re-stamp at the tail boundary so the deadline-sensitive tail — which
 # hosts those suites — always starts from the verified-clean shape.
 stamp_windows_build_dir pre-tail
-run_wave "$FLEX_FILE" "${CBM_TAIL_JOBS:-2}"
+run_wave "$FLEX_FILE" "${LSM_TAIL_JOBS:-2}"
 run_wave "$EXCL_FILE" 1
 
 # ── Union guard: every suite in this shard's slice produced exactly one

@@ -207,7 +207,7 @@ def load_withheld(raw_path: str) -> Dict[str, str]:
     if path.stat().st_size > 1024 * 1024:
         raise GateError(f"withheld manifest is unexpectedly large: {path}")
     lines = path.read_text(encoding="utf-8").splitlines()
-    if not lines or lines[0] != "# cbm-virustotal-withheld-v1":
+    if not lines or lines[0] != "# lsm-virustotal-withheld-v1":
         raise GateError("withheld manifest marker is missing")
     cursor = 1
     metadata: Dict[str, str] = {}
@@ -239,7 +239,7 @@ def load_expected(
 ) -> Tuple[List[ExpectedObject], int]:
     metadata, rows = parse_versioned_tsv(
         path,
-        marker="cbm-release-scan-set-v2",
+        marker="lsm-release-scan-set-v2",
         fields=SCAN_FIELDS,
     )
     expected_count = metadata.get("scan_objects")
@@ -329,7 +329,7 @@ def validate_associations(
 ) -> None:
     metadata, rows = parse_versioned_tsv(
         path,
-        marker="cbm-release-scan-associations-v3",
+        marker="lsm-release-scan-associations-v3",
         fields=ASSOCIATION_FIELDS,
     )
     if (
@@ -662,7 +662,7 @@ def write_results(
     temporary = pathlib.Path(temporary_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
-            handle.write("# cbm-virustotal-results-v2\n")
+            handle.write("# lsm-virustotal-results-v2\n")
             handle.write(f"# scan_objects={len(results)}\n")
             handle.write(f"# associations={associations}\n")
             handle.write(f"# min_engines_policy={min_engines}\n")

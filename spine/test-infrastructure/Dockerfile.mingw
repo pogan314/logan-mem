@@ -59,8 +59,8 @@ WORKDIR /src
 ENTRYPOINT ["/bin/bash", "-c"]
 
 # Default: cross-compile production build
-CMD ["make -j4 -f Makefile.cbm clean-c && \
-     make -j4 -f Makefile.cbm cbm \
+CMD ["make -j4 -f Makefile.lsm clean-c && \
+     make -j4 -f Makefile.lsm lsm \
        CC=x86_64-w64-mingw32-clang \
        CXX=x86_64-w64-mingw32-clang++ \
      && echo '=== Windows cross-compile: OK ==='"]

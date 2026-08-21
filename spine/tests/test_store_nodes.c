@@ -7,7 +7,7 @@
 #include "test_framework.h"
 #include <store/store.h>
 #include <foundation/constants.h>
-#include <cbm.h>
+#include <lsm.h>
 #include <sqlite3.h>
 #include <string.h>
 #include <stdlib.h>
@@ -15,7 +15,7 @@
 
 /* ── Label allowlist / SQL drift guard ──────────────────────────── */
 
-/* CONTRACT PIN. `cbm_label_is_type_like()` is documented in cbm.h as the single
+/* CONTRACT PIN. `lsm_label_is_type_like()` is documented in lsm.h as the single
  * source of truth for type-like labels, "instead of scattering
  * `|| strcmp(label,\"Struct\")==0` across the tree". A SQL string literal cannot
  * call it, so four queries in store.c and the BM25 ranking in mcp.c hardcoded
@@ -30,136 +30,136 @@ TEST(sql_label_allowlists_match_cbm_label_is_type_like) {
     static const char *const type_like[] = {"Class", "Struct", "Interface",
                                             "Enum",  "Type",   "Trait"};
     for (size_t i = 0; i < sizeof(type_like) / sizeof(type_like[0]); i++) {
-        ASSERT_TRUE(cbm_label_is_type_like(type_like[i]));
+        ASSERT_TRUE(lsm_label_is_type_like(type_like[i]));
         char quoted[64];
         snprintf(quoted, sizeof(quoted), "'%s'", type_like[i]);
-        ASSERT_NOT_NULL(strstr(CBM_SQL_TYPE_LIKE_LABELS, quoted));
-        ASSERT_NOT_NULL(strstr(CBM_SQL_CALLABLE_OR_TYPE_LABELS, quoted));
+        ASSERT_NOT_NULL(strstr(LSM_SQL_TYPE_LIKE_LABELS, quoted));
+        ASSERT_NOT_NULL(strstr(LSM_SQL_CALLABLE_OR_TYPE_LABELS, quoted));
     }
     /* And nothing the predicate rejects may be smuggled into the type-like
      * fragment — otherwise the SQL would widen past the C contract. */
     static const char *const not_type_like[] = {"Function", "Method", "Module",
                                                 "File",     "Folder", "Variable"};
     for (size_t i = 0; i < sizeof(not_type_like) / sizeof(not_type_like[0]); i++) {
-        ASSERT_FALSE(cbm_label_is_type_like(not_type_like[i]));
+        ASSERT_FALSE(lsm_label_is_type_like(not_type_like[i]));
         char quoted[64];
         snprintf(quoted, sizeof(quoted), "'%s'", not_type_like[i]);
-        ASSERT_NULL(strstr(CBM_SQL_TYPE_LIKE_LABELS, quoted));
+        ASSERT_NULL(strstr(LSM_SQL_TYPE_LIKE_LABELS, quoted));
     }
     /* The callable fragment carries exactly Function and Method on top. */
-    ASSERT_NOT_NULL(strstr(CBM_SQL_CALLABLE_OR_TYPE_LABELS, "'Function'"));
-    ASSERT_NOT_NULL(strstr(CBM_SQL_CALLABLE_OR_TYPE_LABELS, "'Method'"));
+    ASSERT_NOT_NULL(strstr(LSM_SQL_CALLABLE_OR_TYPE_LABELS, "'Function'"));
+    ASSERT_NOT_NULL(strstr(LSM_SQL_CALLABLE_OR_TYPE_LABELS, "'Method'"));
     PASS();
 }
 
 /* ── Schema / Open / Close ──────────────────────────────────────── */
 
 TEST(store_open_memory) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_close_null) {
-    cbm_store_close(NULL); /* should not crash */
+    lsm_store_close(NULL); /* should not crash */
     PASS();
 }
 
 TEST(store_open_memory_twice) {
-    cbm_store_t *s1 = cbm_store_open_memory();
-    cbm_store_t *s2 = cbm_store_open_memory();
+    lsm_store_t *s1 = lsm_store_open_memory();
+    lsm_store_t *s2 = lsm_store_open_memory();
     ASSERT_NOT_NULL(s1);
     ASSERT_NOT_NULL(s2);
     /* independent databases */
-    cbm_store_close(s1);
-    cbm_store_close(s2);
+    lsm_store_close(s1);
+    lsm_store_close(s2);
     PASS();
 }
 
 /* ── Project CRUD ───────────────────────────────────────────────── */
 
 TEST(store_project_crud) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
 
     /* Create */
-    int rc = cbm_store_upsert_project(s, "myproject", "/home/user/myproject");
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_project(s, "myproject", "/home/user/myproject");
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* Get */
-    cbm_project_t p = {0};
-    rc = cbm_store_get_project(s, "myproject", &p);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_project_t p = {0};
+    rc = lsm_store_get_project(s, "myproject", &p);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(p.name, "myproject");
     ASSERT_STR_EQ(p.root_path, "/home/user/myproject");
     ASSERT_NOT_NULL(p.indexed_at);
-    cbm_project_free_fields(&p);
+    lsm_project_free_fields(&p);
 
     /* List */
-    cbm_project_t *projects = NULL;
+    lsm_project_t *projects = NULL;
     int count = 0;
-    rc = cbm_store_list_projects(s, &projects, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_list_projects(s, &projects, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(projects[0].name, "myproject");
-    cbm_store_free_projects(projects, count);
+    lsm_store_free_projects(projects, count);
 
     /* Get non-existent */
-    cbm_project_t p2 = {0};
-    rc = cbm_store_get_project(s, "nonexistent", &p2);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    lsm_project_t p2 = {0};
+    rc = lsm_store_get_project(s, "nonexistent", &p2);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_project_update) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/old/path");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/old/path");
 
     /* Update root path */
-    cbm_store_upsert_project(s, "test", "/new/path");
+    lsm_store_upsert_project(s, "test", "/new/path");
 
-    cbm_project_t p = {0};
-    cbm_store_get_project(s, "test", &p);
+    lsm_project_t p = {0};
+    lsm_store_get_project(s, "test", &p);
     ASSERT_STR_EQ(p.root_path, "/new/path");
-    cbm_project_free_fields(&p);
+    lsm_project_free_fields(&p);
 
     /* Should still be 1 project */
-    cbm_project_t *projects = NULL;
+    lsm_project_t *projects = NULL;
     int count = 0;
-    cbm_store_list_projects(s, &projects, &count);
+    lsm_store_list_projects(s, &projects, &count);
     ASSERT_EQ(count, 1);
-    cbm_store_free_projects(projects, count);
+    lsm_store_free_projects(projects, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_project_delete) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    int rc = cbm_store_delete_project(s, "test");
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_delete_project(s, "test");
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    cbm_project_t p = {0};
-    rc = cbm_store_get_project(s, "test", &p);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    lsm_project_t p = {0};
+    rc = lsm_store_get_project(s, "test", &p);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Node CRUD ──────────────────────────────────────────────────── */
 
 TEST(store_node_crud) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert node */
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "Foo",
                     .qualified_name = "test.main.Foo",
@@ -167,216 +167,216 @@ TEST(store_node_crud) {
                     .start_line = 10,
                     .end_line = 20,
                     .properties_json = "{\"signature\":\"func Foo(x int) error\"}"};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     ASSERT_GT(id, 0);
 
     /* Find by QN */
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn(s, "test", "test.main.Foo", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn(s, "test", "test.main.Foo", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "Foo");
     ASSERT_STR_EQ(found.label, "Function");
     ASSERT_STR_EQ(found.file_path, "main.go");
     ASSERT_EQ(found.start_line, 10);
     ASSERT_EQ(found.end_line, 20);
     ASSERT_NOT_NULL(found.properties_json);
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
     /* Find by ID */
-    cbm_node_t found2 = {0};
-    rc = cbm_store_find_node_by_id(s, id, &found2);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found2 = {0};
+    rc = lsm_store_find_node_by_id(s, id, &found2);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found2.qualified_name, "test.main.Foo");
-    cbm_node_free_fields(&found2);
+    lsm_node_free_fields(&found2);
 
     /* Find by name */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    rc = cbm_store_find_nodes_by_name(s, "test", "Foo", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_name(s, "test", "Foo", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "Foo");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
     /* Count */
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_dedup) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert same QN twice — should update, not duplicate */
-    cbm_node_t n1 = {
+    lsm_node_t n1 = {
         .project = "test", .label = "Function", .name = "Foo", .qualified_name = "test.main.Foo"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "Foo",
                      .qualified_name = "test.main.Foo",
                      .properties_json = "{\"updated\":true}"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
     /* Verify it was updated */
-    cbm_node_t found = {0};
-    cbm_store_find_node_by_qn(s, "test", "test.main.Foo", &found);
+    lsm_node_t found = {0};
+    lsm_store_find_node_by_qn(s, "test", "test.main.Foo", &found);
     ASSERT_NOT_NULL(found.properties_json);
     /* Should contain "updated" */
     ASSERT(strstr(found.properties_json, "updated") != NULL);
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_find_by_label) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {
+    lsm_node_t n1 = {
         .project = "test", .label = "Function", .name = "A", .qualified_name = "test.A"};
-    cbm_node_t n2 = {.project = "test", .label = "Class", .name = "B", .qualified_name = "test.B"};
-    cbm_node_t n3 = {
+    lsm_node_t n2 = {.project = "test", .label = "Class", .name = "B", .qualified_name = "test.B"};
+    lsm_node_t n3 = {
         .project = "test", .label = "Function", .name = "C", .qualified_name = "test.C"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
-    cbm_store_upsert_node(s, &n3);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n3);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_label(s, "test", "Function", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_label(s, "test", "Function", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 2);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    rc = cbm_store_find_nodes_by_label(s, "test", "Class", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_label(s, "test", "Class", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "B");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_find_by_file) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "A",
                      .qualified_name = "test.A",
                      .file_path = "main.go"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "B",
                      .qualified_name = "test.B",
                      .file_path = "util.go"};
-    cbm_node_t n3 = {.project = "test",
+    lsm_node_t n3 = {.project = "test",
                      .label = "Function",
                      .name = "C",
                      .qualified_name = "test.C",
                      .file_path = "main.go"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
-    cbm_store_upsert_node(s, &n3);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n3);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_file(s, "test", "main.go", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_file(s, "test", "main.go", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 2);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_find_not_found) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn(s, "test", "nonexistent", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn(s, "test", "nonexistent", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    rc = cbm_store_find_node_by_id(s, 99999, &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_id(s, 99999, &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_count_empty) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 0);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_delete_by_file) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "A",
                      .qualified_name = "test.A",
                      .file_path = "main.go"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "B",
                      .qualified_name = "test.B",
                      .file_path = "util.go"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
 
-    cbm_store_delete_nodes_by_file(s, "test", "main.go");
-    int cnt = cbm_store_count_nodes(s, "test");
+    lsm_store_delete_nodes_by_file(s, "test", "main.go");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_delete_by_label) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {
+    lsm_node_t n1 = {
         .project = "test", .label = "Function", .name = "A", .qualified_name = "test.A"};
-    cbm_node_t n2 = {.project = "test", .label = "Class", .name = "B", .qualified_name = "test.B"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
+    lsm_node_t n2 = {.project = "test", .label = "Class", .name = "B", .qualified_name = "test.B"};
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
 
-    cbm_store_delete_nodes_by_label(s, "test", "Function");
-    int cnt = cbm_store_count_nodes(s, "test");
+    lsm_store_delete_nodes_by_label(s, "test", "Function");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Batch operations ───────────────────────────────────────────── */
 
 TEST(store_node_batch_upsert) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Create 150 nodes */
-    cbm_node_t nodes[150];
+    lsm_node_t nodes[150];
     int64_t ids[150];
     char names[150][32];
     char qns[150][64];
@@ -384,7 +384,7 @@ TEST(store_node_batch_upsert) {
     for (int i = 0; i < 150; i++) {
         snprintf(names[i], sizeof(names[i]), "func_%d", i);
         snprintf(qns[i], sizeof(qns[i]), "test.pkg.func_%d", i);
-        nodes[i] = (cbm_node_t){
+        nodes[i] = (lsm_node_t){
             .project = "test",
             .label = "Function",
             .name = names[i],
@@ -395,8 +395,8 @@ TEST(store_node_batch_upsert) {
         };
     }
 
-    int rc = cbm_store_upsert_node_batch(s, nodes, 150, ids);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_node_batch(s, nodes, 150, ids);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* Verify all IDs are non-zero */
     for (int i = 0; i < 150; i++) {
@@ -404,14 +404,14 @@ TEST(store_node_batch_upsert) {
     }
 
     /* Verify count */
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 150);
 
     /* Re-upsert should not duplicate */
     int64_t ids2[150];
-    rc = cbm_store_upsert_node_batch(s, nodes, 150, ids2);
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    cnt = cbm_store_count_nodes(s, "test");
+    rc = lsm_store_upsert_node_batch(s, nodes, 150, ids2);
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 150);
 
     /* IDs should be the same */
@@ -419,106 +419,106 @@ TEST(store_node_batch_upsert) {
         ASSERT_EQ(ids[i], ids2[i]);
     }
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_batch_empty) {
-    cbm_store_t *s = cbm_store_open_memory();
-    int rc = cbm_store_upsert_node_batch(s, NULL, 0, NULL);
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    cbm_store_close(s);
+    lsm_store_t *s = lsm_store_open_memory();
+    int rc = lsm_store_upsert_node_batch(s, NULL, 0, NULL);
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Cascade delete ─────────────────────────────────────────────── */
 
 TEST(store_cascade_delete) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Create nodes and an edge */
-    cbm_node_t n1 = {
+    lsm_node_t n1 = {
         .project = "test", .label = "Function", .name = "A", .qualified_name = "test.A"};
-    cbm_node_t n2 = {
+    lsm_node_t n2 = {
         .project = "test", .label = "Function", .name = "B", .qualified_name = "test.B"};
-    int64_t id1 = cbm_store_upsert_node(s, &n1);
-    int64_t id2 = cbm_store_upsert_node(s, &n2);
+    int64_t id1 = lsm_store_upsert_node(s, &n1);
+    int64_t id2 = lsm_store_upsert_node(s, &n2);
 
-    cbm_edge_t e = {.project = "test", .source_id = id1, .target_id = id2, .type = "CALLS"};
-    cbm_store_insert_edge(s, &e);
+    lsm_edge_t e = {.project = "test", .source_id = id1, .target_id = id2, .type = "CALLS"};
+    lsm_store_insert_edge(s, &e);
 
     /* Delete project — should cascade */
-    cbm_store_delete_project(s, "test");
+    lsm_store_delete_project(s, "test");
 
-    int ncnt = cbm_store_count_nodes(s, "test");
-    int ecnt = cbm_store_count_edges(s, "test");
+    int ncnt = lsm_store_count_nodes(s, "test");
+    int ecnt = lsm_store_count_edges(s, "test");
     ASSERT_EQ(ncnt, 0);
     ASSERT_EQ(ecnt, 0);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── File hashes ────────────────────────────────────────────────── */
 
 TEST(store_file_hash_crud) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Upsert */
-    int rc = cbm_store_upsert_file_hash(s, "test", "main.go", "abc123", 1000000, 512);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_file_hash(s, "test", "main.go", "abc123", 1000000, 512);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* Get */
-    cbm_file_hash_t *hashes = NULL;
+    lsm_file_hash_t *hashes = NULL;
     int count = 0;
-    rc = cbm_store_get_file_hashes(s, "test", &hashes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_get_file_hashes(s, "test", &hashes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(hashes[0].rel_path, "main.go");
     ASSERT_STR_EQ(hashes[0].sha256, "abc123");
     ASSERT_EQ(hashes[0].mtime_ns, 1000000);
     ASSERT_EQ(hashes[0].size, 512);
-    cbm_store_free_file_hashes(hashes, count);
+    lsm_store_free_file_hashes(hashes, count);
 
     /* Update */
-    rc = cbm_store_upsert_file_hash(s, "test", "main.go", "def456", 2000000, 1024);
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    rc = cbm_store_get_file_hashes(s, "test", &hashes, &count);
+    rc = lsm_store_upsert_file_hash(s, "test", "main.go", "def456", 2000000, 1024);
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    rc = lsm_store_get_file_hashes(s, "test", &hashes, &count);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(hashes[0].sha256, "def456");
     ASSERT_EQ(hashes[0].mtime_ns, 2000000);
-    cbm_store_free_file_hashes(hashes, count);
+    lsm_store_free_file_hashes(hashes, count);
 
     /* Delete single */
-    rc = cbm_store_delete_file_hash(s, "test", "main.go");
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    rc = cbm_store_get_file_hashes(s, "test", &hashes, &count);
+    rc = lsm_store_delete_file_hash(s, "test", "main.go");
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    rc = lsm_store_get_file_hashes(s, "test", &hashes, &count);
     ASSERT_EQ(count, 0);
-    cbm_store_free_file_hashes(hashes, count);
+    lsm_store_free_file_hashes(hashes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_lsp_surface_round_trip) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Empty project: OK + zero rows — the "no surface data, route to full
      * rebuild" signal, and the upgrade path for pre-table databases. */
-    cbm_lsp_surface_row_t *rows = NULL;
-    int count = CBM_NOT_FOUND;
-    ASSERT_EQ(cbm_store_get_lsp_surfaces(s, "test", &rows, &count), CBM_STORE_OK);
+    lsm_lsp_surface_row_t *rows = NULL;
+    int count = LSM_NOT_FOUND;
+    ASSERT_EQ(lsm_store_get_lsp_surfaces(s, "test", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_lsp_surfaces(rows, count);
+    lsm_store_free_lsp_surfaces(rows, count);
 
     /* Batch with the field shapes the codec will produce: a real defs array,
      * an empty surface, a binary bloom (with embedded NUL), and no bloom. */
     const unsigned char bloom[] = {0x01, 0x00, 0xfe, 0x7f, 0x00, 0xab};
-    cbm_lsp_surface_row_t in[] = {
+    lsm_lsp_surface_row_t in[] = {
         {.project = "test",
          .rel_path = "pkg/a.go",
          .surface_sha = "sha-a",
@@ -534,9 +534,9 @@ TEST(store_lsp_surface_round_trip) {
          .ref_bloom_len = 0,
          .config_ctx = ""},
     };
-    ASSERT_EQ(cbm_store_upsert_lsp_surface_batch(s, in, 2), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_lsp_surface_batch(s, in, 2), LSM_STORE_OK);
 
-    ASSERT_EQ(cbm_store_get_lsp_surfaces(s, "test", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_lsp_surfaces(s, "test", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 2);
     /* ORDER BY rel_path: a.go before b.go. */
     ASSERT_STR_EQ(rows[0].rel_path, "pkg/a.go");
@@ -549,37 +549,37 @@ TEST(store_lsp_surface_round_trip) {
     ASSERT_STR_EQ(rows[1].defs_json, "[]");
     ASSERT_EQ(rows[1].ref_bloom_len, 0);
     ASSERT_TRUE(rows[1].ref_bloom == NULL);
-    cbm_store_free_lsp_surfaces(rows, count);
+    lsm_store_free_lsp_surfaces(rows, count);
 
     /* Upsert-on-conflict replaces the whole row, including dropping a bloom. */
-    cbm_lsp_surface_row_t update = {.project = "test",
+    lsm_lsp_surface_row_t update = {.project = "test",
                                     .rel_path = "pkg/a.go",
                                     .surface_sha = "sha-a2",
                                     .defs_json = "[]",
                                     .ref_bloom = NULL,
                                     .ref_bloom_len = 0,
                                     .config_ctx = ""};
-    ASSERT_EQ(cbm_store_upsert_lsp_surface_batch(s, &update, 1), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_get_lsp_surfaces(s, "test", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_lsp_surface_batch(s, &update, 1), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_lsp_surfaces(s, "test", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 2);
     ASSERT_STR_EQ(rows[0].surface_sha, "sha-a2");
     ASSERT_EQ(rows[0].ref_bloom_len, 0);
-    cbm_store_free_lsp_surfaces(rows, count);
+    lsm_store_free_lsp_surfaces(rows, count);
 
     /* Project-scoped delete removes everything. */
-    ASSERT_EQ(cbm_store_delete_lsp_surfaces(s, "test"), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_get_lsp_surfaces(s, "test", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_delete_lsp_surfaces(s, "test"), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_lsp_surfaces(s, "test", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_lsp_surfaces(rows, count);
+    lsm_store_free_lsp_surfaces(rows, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_dependent_files_lookup) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* a.py and c.py each call into b.py; b.py also references itself, and
      * d.py sits apart. Dependents of {b.py} must be exactly {a.py, c.py}:
@@ -589,7 +589,7 @@ TEST(store_dependent_files_lookup) {
     for (int i = 0; i < 4; i++) {
         char qn[64];
         snprintf(qn, sizeof(qn), "test.%s.fn", files[i]);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = "fn",
                         .qualified_name = qn,
@@ -597,23 +597,23 @@ TEST(store_dependent_files_lookup) {
                         .start_line = 1,
                         .end_line = 2,
                         .properties_json = "{}"};
-        ids[i] = cbm_store_upsert_node(s, &n);
+        ids[i] = lsm_store_upsert_node(s, &n);
         ASSERT_TRUE(ids[i] > 0);
     }
     const int64_t edge_pairs[][2] = {{ids[0], ids[1]}, {ids[2], ids[1]}, {ids[1], ids[1]}};
     for (int i = 0; i < 3; i++) {
-        cbm_edge_t e = {.project = "test",
+        lsm_edge_t e = {.project = "test",
                         .source_id = edge_pairs[i][0],
                         .target_id = edge_pairs[i][1],
                         .type = "CALLS",
                         .properties_json = "{}"};
-        ASSERT_TRUE(cbm_store_insert_edge(s, &e) > 0);
+        ASSERT_TRUE(lsm_store_insert_edge(s, &e) > 0);
     }
 
     /* Structural container noise: a Folder node (placeholder file_path)
      * with a CONTAINS_FILE edge into b.py must never surface as a
      * dependent — it is not a source file and cannot be re-resolved. */
-    cbm_node_t folder = {.project = "test",
+    lsm_node_t folder = {.project = "test",
                          .label = "Folder",
                          .name = "pkg",
                          .qualified_name = "test.pkg",
@@ -621,20 +621,20 @@ TEST(store_dependent_files_lookup) {
                          .start_line = 0,
                          .end_line = 0,
                          .properties_json = "{}"};
-    int64_t folder_id = cbm_store_upsert_node(s, &folder);
+    int64_t folder_id = lsm_store_upsert_node(s, &folder);
     ASSERT_TRUE(folder_id > 0);
-    cbm_edge_t contains = {.project = "test",
+    lsm_edge_t contains = {.project = "test",
                            .source_id = folder_id,
                            .target_id = ids[1],
                            .type = "CONTAINS_FILE",
                            .properties_json = "{}"};
-    ASSERT_TRUE(cbm_store_insert_edge(s, &contains) > 0);
+    ASSERT_TRUE(lsm_store_insert_edge(s, &contains) > 0);
 
     const char *targets[] = {"b.py"};
     char **deps = NULL;
     int dep_count = 0;
-    ASSERT_EQ(cbm_store_get_dependent_files(s, "test", targets, 1, &deps, &dep_count),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_dependent_files(s, "test", targets, 1, &deps, &dep_count),
+              LSM_STORE_OK);
     ASSERT_EQ(dep_count, 2);
     bool saw_a = false;
     bool saw_c = false;
@@ -643,137 +643,137 @@ TEST(store_dependent_files_lookup) {
         saw_c = saw_c || strcmp(deps[i], "c.py") == 0;
     }
     ASSERT_TRUE(saw_a && saw_c);
-    cbm_store_free_dependent_files(deps, dep_count);
+    lsm_store_free_dependent_files(deps, dep_count);
 
     /* No inbound edges: an isolated target has no dependents. */
     const char *targets_d[] = {"d.py"};
-    ASSERT_EQ(cbm_store_get_dependent_files(s, "test", targets_d, 1, &deps, &dep_count),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_dependent_files(s, "test", targets_d, 1, &deps, &dep_count),
+              LSM_STORE_OK);
     ASSERT_EQ(dep_count, 0);
-    cbm_store_free_dependent_files(deps, dep_count);
+    lsm_store_free_dependent_files(deps, dep_count);
 
     /* A target list already containing the dependent excludes it: asking for
      * dependents of {a.py, b.py} returns only c.py. */
     const char *targets_ab[] = {"a.py", "b.py"};
-    ASSERT_EQ(cbm_store_get_dependent_files(s, "test", targets_ab, 2, &deps, &dep_count),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_dependent_files(s, "test", targets_ab, 2, &deps, &dep_count),
+              LSM_STORE_OK);
     ASSERT_EQ(dep_count, 1);
     ASSERT_STR_EQ(deps[0], "c.py");
-    cbm_store_free_dependent_files(deps, dep_count);
+    lsm_store_free_dependent_files(deps, dep_count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_file_hash_upsert_rejects_null_required_fields) {
-    /* Pins the API contract that `cbm_store_upsert_file_hash` returns
-     * CBM_STORE_ERR (not silent OK) when a NOT NULL column would receive
+    /* Pins the API contract that `lsm_store_upsert_file_hash` returns
+     * LSM_STORE_ERR (not silent OK) when a NOT NULL column would receive
      * SQL NULL. This is the failure mode that
      * `pipeline_incremental.c:persist_hashes` checks for and logs as
      * `incremental.persist_hash_failed`. If this contract ever changes
      * (e.g. the schema relaxes NOT NULL on rel_path or sha256), the
      * downstream warning becomes silent and the orphaned-node bug class
      * can re-emerge. Track that change here, not just in the consumer. */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Sanity: a fully-valid upsert returns OK. */
-    int rc = cbm_store_upsert_file_hash(s, "test", "main.go", "abc123", 1000000, 512);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_file_hash(s, "test", "main.go", "abc123", 1000000, 512);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* NULL sha256 violates NOT NULL on file_hashes.sha256 → must return ERR. */
-    rc = cbm_store_upsert_file_hash(s, "test", "other.go", NULL, 2000000, 1024);
-    ASSERT_EQ(rc, CBM_STORE_ERR);
+    rc = lsm_store_upsert_file_hash(s, "test", "other.go", NULL, 2000000, 1024);
+    ASSERT_EQ(rc, LSM_STORE_ERR);
 
     /* NULL rel_path violates NOT NULL on file_hashes.rel_path → must return ERR. */
-    rc = cbm_store_upsert_file_hash(s, "test", NULL, "deadbeef", 3000000, 2048);
-    ASSERT_EQ(rc, CBM_STORE_ERR);
+    rc = lsm_store_upsert_file_hash(s, "test", NULL, "deadbeef", 3000000, 2048);
+    ASSERT_EQ(rc, LSM_STORE_ERR);
 
     /* NULL project violates NOT NULL on file_hashes.project → must return ERR. */
-    rc = cbm_store_upsert_file_hash(s, NULL, "third.go", "cafebabe", 4000000, 4096);
-    ASSERT_EQ(rc, CBM_STORE_ERR);
+    rc = lsm_store_upsert_file_hash(s, NULL, "third.go", "cafebabe", 4000000, 4096);
+    ASSERT_EQ(rc, LSM_STORE_ERR);
 
     /* The valid row from earlier must still be present — partial-failure
      * policy: a single bad upsert does not corrupt or remove other rows. */
-    cbm_file_hash_t *hashes = NULL;
+    lsm_file_hash_t *hashes = NULL;
     int count = 0;
-    cbm_store_get_file_hashes(s, "test", &hashes, &count);
+    lsm_store_get_file_hashes(s, "test", &hashes, &count);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(hashes[0].rel_path, "main.go");
-    cbm_store_free_file_hashes(hashes, count);
+    lsm_store_free_file_hashes(hashes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Properties JSON round-trip ─────────────────────────────────── */
 
 TEST(store_node_properties_json) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "Bar",
                     .qualified_name = "test.Bar",
                     .properties_json = "{\"visibility\":\"public\",\"is_entry_point\":true}"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
-    cbm_node_t found = {0};
-    cbm_store_find_node_by_qn(s, "test", "test.Bar", &found);
+    lsm_node_t found = {0};
+    lsm_store_find_node_by_qn(s, "test", "test.Bar", &found);
     ASSERT_NOT_NULL(found.properties_json);
     ASSERT(strstr(found.properties_json, "visibility") != NULL);
     ASSERT(strstr(found.properties_json, "public") != NULL);
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_null_properties) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* NULL properties should default to "{}" */
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "Baz",
                     .qualified_name = "test.Baz",
                     .properties_json = NULL};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
-    cbm_node_t found = {0};
-    cbm_store_find_node_by_qn(s, "test", "test.Baz", &found);
+    lsm_node_t found = {0};
+    lsm_store_find_node_by_qn(s, "test", "test.Baz", &found);
     ASSERT_NOT_NULL(found.properties_json);
     ASSERT_STR_EQ(found.properties_json, "{}");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── File overlap ───────────────────────────────────────────────── */
 
 TEST(store_find_by_file_overlap) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t na = {.project = "test",
+    lsm_node_t na = {.project = "test",
                      .label = "Function",
                      .name = "funcA",
                      .qualified_name = "test.main.funcA",
                      .file_path = "main.go",
                      .start_line = 1,
                      .end_line = 10};
-    cbm_node_t nb = {.project = "test",
+    lsm_node_t nb = {.project = "test",
                      .label = "Function",
                      .name = "funcB",
                      .qualified_name = "test.main.funcB",
                      .file_path = "main.go",
                      .start_line = 12,
                      .end_line = 25};
-    cbm_node_t nc = {.project = "test",
+    lsm_node_t nc = {.project = "test",
                      .label = "Function",
                      .name = "funcC",
                      .qualified_name = "test.main.funcC",
@@ -781,219 +781,219 @@ TEST(store_find_by_file_overlap) {
                      .start_line = 1,
                      .end_line = 50};
     /* Module node should be excluded from overlap results */
-    cbm_node_t nm = {.project = "test",
+    lsm_node_t nm = {.project = "test",
                      .label = "Module",
                      .name = "main",
                      .qualified_name = "test.main",
                      .file_path = "main.go",
                      .start_line = 1,
                      .end_line = 100};
-    cbm_store_upsert_node(s, &na);
-    cbm_store_upsert_node(s, &nb);
-    cbm_store_upsert_node(s, &nc);
-    cbm_store_upsert_node(s, &nm);
+    lsm_store_upsert_node(s, &na);
+    lsm_store_upsert_node(s, &nb);
+    lsm_store_upsert_node(s, &nc);
+    lsm_store_upsert_node(s, &nm);
 
     /* Overlap with funcA (lines 5-8) */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_file_overlap(s, "test", "main.go", 5, 8, &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_file_overlap(s, "test", "main.go", 5, 8, &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "funcA");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
     /* Overlap spanning funcA and funcB (lines 8-15) */
-    rc = cbm_store_find_nodes_by_file_overlap(s, "test", "main.go", 8, 15, &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_file_overlap(s, "test", "main.go", 8, 15, &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 2);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
     /* No overlap (lines 26-30) */
-    rc = cbm_store_find_nodes_by_file_overlap(s, "test", "main.go", 26, 30, &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_file_overlap(s, "test", "main.go", 26, 30, &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
     /* Different file */
-    rc = cbm_store_find_nodes_by_file_overlap(s, "test", "other.go", 1, 50, &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_file_overlap(s, "test", "other.go", 1, 50, &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "funcC");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── QN suffix ─────────────────────────────────────────────────── */
 
 TEST(store_find_by_qn_suffix_single) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "HandleRequest",
                     .qualified_name = "test.cmd.server.main.HandleRequest"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_qn_suffix(s, "test", "main.HandleRequest", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_qn_suffix(s, "test", "main.HandleRequest", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "HandleRequest");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_by_qn_suffix_no_match) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n = {
+    lsm_node_t n = {
         .project = "test", .label = "Function", .name = "Foo", .qualified_name = "test.main.Foo"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_qn_suffix(s, "test", "main.Bar", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_qn_suffix(s, "test", "main.Bar", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_by_qn_suffix_multiple) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "Run",
                      .qualified_name = "test.cmd.server.Run"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "Run",
                      .qualified_name = "test.cmd.worker.Run"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_qn_suffix(s, "test", "Run", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_qn_suffix(s, "test", "Run", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 2);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_by_qn_suffix_dot_boundary) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "HandleRequest",
                      .qualified_name = "test.main.HandleRequest"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "MyHandleRequestHelper",
                      .qualified_name = "test.main.MyHandleRequestHelper"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
 
     /* Should only match the one with ".HandleRequest" suffix, not partial word */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_qn_suffix(s, "test", "HandleRequest", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_qn_suffix(s, "test", "HandleRequest", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(nodes[0].name, "HandleRequest");
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Node degree ───────────────────────────────────────────────── */
 
 TEST(store_node_degree) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t na = {
+    lsm_node_t na = {
         .project = "test", .label = "Function", .name = "A", .qualified_name = "test.A"};
-    cbm_node_t nb = {
+    lsm_node_t nb = {
         .project = "test", .label = "Function", .name = "B", .qualified_name = "test.B"};
-    cbm_node_t nc = {
+    lsm_node_t nc = {
         .project = "test", .label = "Function", .name = "C", .qualified_name = "test.C"};
-    int64_t idA = cbm_store_upsert_node(s, &na);
-    int64_t idB = cbm_store_upsert_node(s, &nb);
-    int64_t idC = cbm_store_upsert_node(s, &nc);
+    int64_t idA = lsm_store_upsert_node(s, &na);
+    int64_t idB = lsm_store_upsert_node(s, &nb);
+    int64_t idC = lsm_store_upsert_node(s, &nc);
 
     /* A->B (CALLS), A->C (CALLS), B->C (CALLS), A->C (USAGE — not counted) */
-    cbm_edge_t e1 = {.project = "test", .source_id = idA, .target_id = idB, .type = "CALLS"};
-    cbm_edge_t e2 = {.project = "test", .source_id = idA, .target_id = idC, .type = "CALLS"};
-    cbm_edge_t e3 = {.project = "test", .source_id = idB, .target_id = idC, .type = "CALLS"};
-    cbm_edge_t e4 = {.project = "test", .source_id = idA, .target_id = idC, .type = "USAGE"};
-    cbm_store_insert_edge(s, &e1);
-    cbm_store_insert_edge(s, &e2);
-    cbm_store_insert_edge(s, &e3);
-    cbm_store_insert_edge(s, &e4);
+    lsm_edge_t e1 = {.project = "test", .source_id = idA, .target_id = idB, .type = "CALLS"};
+    lsm_edge_t e2 = {.project = "test", .source_id = idA, .target_id = idC, .type = "CALLS"};
+    lsm_edge_t e3 = {.project = "test", .source_id = idB, .target_id = idC, .type = "CALLS"};
+    lsm_edge_t e4 = {.project = "test", .source_id = idA, .target_id = idC, .type = "USAGE"};
+    lsm_store_insert_edge(s, &e1);
+    lsm_store_insert_edge(s, &e2);
+    lsm_store_insert_edge(s, &e3);
+    lsm_store_insert_edge(s, &e4);
 
     int inA, outA, inB, outB, inC, outC;
-    cbm_store_node_degree(s, idA, &inA, &outA);
+    lsm_store_node_degree(s, idA, &inA, &outA);
     ASSERT_EQ(inA, 0);
     ASSERT_EQ(outA, 2);
 
-    cbm_store_node_degree(s, idB, &inB, &outB);
+    lsm_store_node_degree(s, idB, &inB, &outB);
     ASSERT_EQ(inB, 1);
     ASSERT_EQ(outB, 1);
 
-    cbm_store_node_degree(s, idC, &inC, &outC);
+    lsm_store_node_degree(s, idC, &inC, &outC);
     ASSERT_EQ(inC, 2);
     ASSERT_EQ(outC, 0);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── File hash batch ───────────────────────────────────────────── */
 
 TEST(store_file_hash_batch) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_file_hash_t hashes[3] = {
+    lsm_file_hash_t hashes[3] = {
         {.project = "test", .rel_path = "a.go", .sha256 = "h1", .mtime_ns = 1000, .size = 100},
         {.project = "test", .rel_path = "b.go", .sha256 = "h2", .mtime_ns = 2000, .size = 200},
         {.project = "test", .rel_path = "c.go", .sha256 = "h3", .mtime_ns = 3000, .size = 300},
     };
-    int rc = cbm_store_upsert_file_hash_batch(s, hashes, 3);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_file_hash_batch(s, hashes, 3);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    cbm_file_hash_t *stored = NULL;
+    lsm_file_hash_t *stored = NULL;
     int count = 0;
-    rc = cbm_store_get_file_hashes(s, "test", &stored, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_get_file_hashes(s, "test", &stored, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 3);
-    cbm_store_free_file_hashes(stored, count);
+    lsm_store_free_file_hashes(stored, count);
 
     /* Update hashes (should not duplicate) */
     hashes[0].sha256 = "updated";
     hashes[0].mtime_ns = 9000;
-    rc = cbm_store_upsert_file_hash_batch(s, hashes, 3);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_upsert_file_hash_batch(s, hashes, 3);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    rc = cbm_store_get_file_hashes(s, "test", &stored, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_get_file_hashes(s, "test", &stored, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 3);
     /* Verify updated value */
     int found = 0;
@@ -1005,19 +1005,19 @@ TEST(store_file_hash_batch) {
         }
     }
     ASSERT_TRUE(found);
-    cbm_store_free_file_hashes(stored, count);
+    lsm_store_free_file_hashes(stored, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* Guard for the persist-tail switch (pipeline.c dump_and_persist_hashes) from a
- * per-file cbm_store_upsert_file_hash loop to a single cbm_store_upsert_file_hash_batch:
+ * per-file lsm_store_upsert_file_hash loop to a single lsm_store_upsert_file_hash_batch:
  * both paths must yield IDENTICAL file_hashes rows (same tuples, same upsert/replace
  * semantics — only the transaction boundary differs). Uses sha256="" exactly as the
  * persist path does. */
 TEST(store_file_hash_batch_equals_loop) {
-    cbm_file_hash_t rows[4] = {
+    lsm_file_hash_t rows[4] = {
         {.project = "p", .rel_path = "a.c", .sha256 = "", .mtime_ns = 111, .size = 10},
         {.project = "p", .rel_path = "b/c.c", .sha256 = "", .mtime_ns = 222, .size = 20},
         {.project = "p", .rel_path = "d.rs", .sha256 = "", .mtime_ns = 333, .size = 30},
@@ -1025,23 +1025,23 @@ TEST(store_file_hash_batch_equals_loop) {
     };
 
     /* Store A: the original per-file loop. */
-    cbm_store_t *a = cbm_store_open_memory();
-    cbm_store_upsert_project(a, "p", "/tmp/p");
+    lsm_store_t *a = lsm_store_open_memory();
+    lsm_store_upsert_project(a, "p", "/tmp/p");
     for (int i = 0; i < 4; i++) {
-        ASSERT_EQ(cbm_store_upsert_file_hash(a, rows[i].project, rows[i].rel_path, rows[i].sha256,
+        ASSERT_EQ(lsm_store_upsert_file_hash(a, rows[i].project, rows[i].rel_path, rows[i].sha256,
                                              rows[i].mtime_ns, rows[i].size),
-                  CBM_STORE_OK);
+                  LSM_STORE_OK);
     }
 
     /* Store B: the batched path. */
-    cbm_store_t *b = cbm_store_open_memory();
-    cbm_store_upsert_project(b, "p", "/tmp/p");
-    ASSERT_EQ(cbm_store_upsert_file_hash_batch(b, rows, 4), CBM_STORE_OK);
+    lsm_store_t *b = lsm_store_open_memory();
+    lsm_store_upsert_project(b, "p", "/tmp/p");
+    ASSERT_EQ(lsm_store_upsert_file_hash_batch(b, rows, 4), LSM_STORE_OK);
 
-    cbm_file_hash_t *ha = NULL, *hb = NULL;
+    lsm_file_hash_t *ha = NULL, *hb = NULL;
     int ca = 0, cb = 0;
-    ASSERT_EQ(cbm_store_get_file_hashes(a, "p", &ha, &ca), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_get_file_hashes(b, "p", &hb, &cb), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_file_hashes(a, "p", &ha, &ca), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_get_file_hashes(b, "p", &hb, &cb), LSM_STORE_OK);
     ASSERT_EQ(ca, 4);
     ASSERT_EQ(cb, 4);
 
@@ -1060,51 +1060,51 @@ TEST(store_file_hash_batch_equals_loop) {
         ASSERT_TRUE(found);
     }
 
-    cbm_store_free_file_hashes(ha, ca);
-    cbm_store_free_file_hashes(hb, cb);
-    cbm_store_close(a);
-    cbm_store_close(b);
+    lsm_store_free_file_hashes(ha, ca);
+    lsm_store_free_file_hashes(hb, cb);
+    lsm_store_close(a);
+    lsm_store_close(b);
     PASS();
 }
 
 /* ── Find edges by URL path ────────────────────────────────────── */
 
 TEST(store_find_edges_by_url_path) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t ns = {
+    lsm_node_t ns = {
         .project = "test", .label = "Function", .name = "caller", .qualified_name = "test.caller"};
-    cbm_node_t nt = {.project = "test",
+    lsm_node_t nt = {.project = "test",
                      .label = "Function",
                      .name = "handler",
                      .qualified_name = "test.handler"};
-    int64_t srcID = cbm_store_upsert_node(s, &ns);
-    int64_t tgtID = cbm_store_upsert_node(s, &nt);
+    int64_t srcID = lsm_store_upsert_node(s, &ns);
+    int64_t tgtID = lsm_store_upsert_node(s, &nt);
 
-    cbm_edge_t e = {.project = "test",
+    lsm_edge_t e = {.project = "test",
                     .source_id = srcID,
                     .target_id = tgtID,
                     .type = "HTTP_CALLS",
                     .properties_json = "{\"url_path\":\"/api/orders/create\",\"confidence\":0.8}"};
-    cbm_store_insert_edge(s, &e);
+    lsm_store_insert_edge(s, &e);
 
     /* Search for edges containing "orders" */
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int count = 0;
-    int rc = cbm_store_find_edges_by_url_path(s, "test", "orders", &edges, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_edges_by_url_path(s, "test", "orders", &edges, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT(strstr(edges[0].properties_json, "/api/orders/create") != NULL);
-    cbm_store_free_edges(edges, count);
+    lsm_store_free_edges(edges, count);
 
     /* Search for non-matching */
-    rc = cbm_store_find_edges_by_url_path(s, "test", "users", &edges, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_edges_by_url_path(s, "test", "users", &edges, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_edges(edges, count);
+    lsm_store_free_edges(edges, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1112,89 +1112,89 @@ TEST(store_find_edges_by_url_path) {
 
 TEST(store_restore_from) {
     /* Create in-memory source store with data */
-    cbm_store_t *src = cbm_store_open_memory();
-    cbm_store_upsert_project(src, "test", "/tmp/test");
+    lsm_store_t *src = lsm_store_open_memory();
+    lsm_store_upsert_project(src, "test", "/tmp/test");
     for (int i = 0; i < 10; i++) {
         char name[32], qn[64];
         snprintf(name, sizeof(name), "Func%d", i);
         snprintf(qn, sizeof(qn), "test.main.Func%d", i);
-        cbm_node_t n = {.project = "test",
+        lsm_node_t n = {.project = "test",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "main.go",
                         .start_line = i * 10,
                         .end_line = i * 10 + 5};
-        cbm_store_upsert_node(src, &n);
+        lsm_store_upsert_node(src, &n);
     }
 
     /* Create destination store */
-    cbm_store_t *dst = cbm_store_open_memory();
+    lsm_store_t *dst = lsm_store_open_memory();
 
     /* Restore: copy from src → dst */
-    int rc = cbm_store_restore_from(dst, src);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_restore_from(dst, src);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* Verify data survived */
-    cbm_node_t found = {0};
-    rc = cbm_store_find_node_by_qn(dst, "test", "test.main.Func5", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    rc = lsm_store_find_node_by_qn(dst, "test", "test.main.Func5", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "Func5");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    int cnt = cbm_store_count_nodes(dst, "test");
+    int cnt = lsm_store_count_nodes(dst, "test");
     ASSERT_EQ(cnt, 10);
 
-    cbm_store_close(src);
-    cbm_store_close(dst);
+    lsm_store_close(src);
+    lsm_store_close(dst);
     PASS();
 }
 
 /* ── Pragma settings ───────────────────────────────────────────── */
 
 TEST(store_pragma_settings) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
     /* Just verify we can open and the store works — pragma settings
      * are verified by the fact that the store functions correctly. */
-    cbm_store_upsert_project(s, "test", "/tmp/test");
-    cbm_node_t n = {
+    lsm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_node_t n = {
         .project = "test", .label = "Function", .name = "X", .qualified_name = "test.X"};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     ASSERT_TRUE(id > 0);
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_node_ids_by_qns) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert two nodes */
-    cbm_node_t na = {
+    lsm_node_t na = {
         .project = "test", .label = "Function", .name = "A", .qualified_name = "test.A"};
-    cbm_node_t nb = {
+    lsm_node_t nb = {
         .project = "test", .label = "Function", .name = "B", .qualified_name = "test.B"};
-    int64_t id1 = cbm_store_upsert_node(s, &na);
-    int64_t id2 = cbm_store_upsert_node(s, &nb);
+    int64_t id1 = lsm_store_upsert_node(s, &na);
+    int64_t id2 = lsm_store_upsert_node(s, &nb);
     ASSERT_TRUE(id1 > 0);
     ASSERT_TRUE(id2 > 0);
 
     /* Batch lookup: 2 found + 1 missing */
     const char *qns[] = {"test.A", "test.B", "test.missing"};
     int64_t ids[3];
-    int found = cbm_store_find_node_ids_by_qns(s, "test", qns, 3, ids);
+    int found = lsm_store_find_node_ids_by_qns(s, "test", qns, 3, ids);
     ASSERT_EQ(found, 2);
     ASSERT_EQ(ids[0], id1);
     ASSERT_EQ(ids[1], id2);
     ASSERT_EQ(ids[2], 0); /* missing → 0 */
 
     /* Empty batch */
-    int found2 = cbm_store_find_node_ids_by_qns(s, "test", NULL, 0, ids);
+    int found2 = lsm_store_find_node_ids_by_qns(s, "test", NULL, 0, ids);
     ASSERT_EQ(found2, 0);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1202,35 +1202,35 @@ TEST(store_find_node_ids_by_qns) {
 
 TEST(store_integrity_clean) {
     /* A fresh store with correct data should pass integrity check */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test-proj", "/tmp/test");
-    ASSERT_TRUE(cbm_store_check_integrity(s));
-    cbm_store_close(s);
+    lsm_store_upsert_project(s, "test-proj", "/tmp/test");
+    ASSERT_TRUE(lsm_store_check_integrity(s));
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_integrity_empty) {
     /* An empty store (no project rows) should pass — 0 rows is fine */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_TRUE(cbm_store_check_integrity(s));
-    cbm_store_close(s);
+    ASSERT_TRUE(lsm_store_check_integrity(s));
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_integrity_corrupt_bad_path) {
     /* Simulate corruption: root_path is a numeric string (not a real path).
      * This matches the real corruption where node IDs ended up in root_path. */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    sqlite3 *db = cbm_store_get_db(s);
+    sqlite3 *db = lsm_store_get_db(s);
     sqlite3_exec(db,
                  "INSERT INTO projects (name, indexed_at, root_path) "
                  "VALUES ('some-project', '2024-01-01', '826');",
                  NULL, NULL, NULL);
-    ASSERT_FALSE(cbm_store_check_integrity(s));
-    cbm_store_close(s);
+    ASSERT_FALSE(lsm_store_check_integrity(s));
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1238,19 +1238,19 @@ TEST(store_integrity_windows_lowercase_drive_issue367) {
     /* Windows drive letters may be lower- or upper-case; a lowercase drive
      * path must NOT be treated as corrupt. Previously the check only accepted
      * 'A'..'Z', so "c:/repo" was flagged and the DB auto-deleted (#227/#367). */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "lc-drive", "c:/Users/dev/repo");
-    ASSERT_TRUE(cbm_store_check_integrity(s));
-    cbm_store_close(s);
+    lsm_store_upsert_project(s, "lc-drive", "c:/Users/dev/repo");
+    ASSERT_TRUE(lsm_store_check_integrity(s));
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_integrity_corrupt_too_many_rows) {
     /* Simulate corruption: >5 rows in projects table */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    sqlite3 *db = cbm_store_get_db(s);
+    sqlite3 *db = lsm_store_get_db(s);
     for (int i = 0; i < 10; i++) {
         char sql[256];
         snprintf(sql, sizeof(sql),
@@ -1259,8 +1259,8 @@ TEST(store_integrity_corrupt_too_many_rows) {
                  i, i);
         sqlite3_exec(db, sql, NULL, NULL, NULL);
     }
-    ASSERT_FALSE(cbm_store_check_integrity(s));
-    cbm_store_close(s);
+    ASSERT_FALSE(lsm_store_check_integrity(s));
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1273,11 +1273,11 @@ TEST(store_integrity_corrupt_too_many_rows) {
  * three-way verdict so that behaviour cannot come back. */
 
 TEST(store_integrity_verdict_healthy_is_ok) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "healthy-proj", "/tmp/healthy");
-    ASSERT_EQ(cbm_store_check_integrity_verdict(s), CBM_INTEGRITY_OK);
-    cbm_store_close(s);
+    lsm_store_upsert_project(s, "healthy-proj", "/tmp/healthy");
+    ASSERT_EQ(lsm_store_check_integrity_verdict(s), LSM_INTEGRITY_OK);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1285,15 +1285,15 @@ TEST(store_integrity_verdict_real_corruption_is_corrupt) {
     /* Structural damage the shallow check can see: node IDs landing in
      * root_path. This one MUST be quarantinable — a verdict that never says
      * CORRUPT would protect broken databases instead of users. */
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    sqlite3 *db = cbm_store_get_db(s);
+    sqlite3 *db = lsm_store_get_db(s);
     sqlite3_exec(db,
                  "INSERT INTO projects (name, indexed_at, root_path) "
                  "VALUES ('broken', '2024-01-01', '826');",
                  NULL, NULL, NULL);
-    ASSERT_EQ(cbm_store_check_integrity_verdict(s), CBM_INTEGRITY_CORRUPT);
-    cbm_store_close(s);
+    ASSERT_EQ(lsm_store_check_integrity_verdict(s), LSM_INTEGRITY_CORRUPT);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1302,53 +1302,53 @@ TEST(store_integrity_verdict_unopenable_is_transient_not_corrupt) {
      * Reporting CORRUPT here is how a database nobody could read got renamed
      * and rebuilt from scratch (#1206) — the destructive answer to a question
      * that was never asked. */
-    ASSERT_EQ(cbm_store_check_integrity_verdict(NULL), CBM_INTEGRITY_TRANSIENT);
+    ASSERT_EQ(lsm_store_check_integrity_verdict(NULL), LSM_INTEGRITY_TRANSIENT);
     PASS();
 }
 
 TEST(store_integrity_null_check) {
     /* NULL store should return false (not crash) */
-    ASSERT_FALSE(cbm_store_check_integrity(NULL));
+    ASSERT_FALSE(lsm_store_check_integrity(NULL));
     PASS();
 }
 
 /* ── Edge case: NULL / empty field handling ────────────────────── */
 
 TEST(store_node_null_project) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
 
     /* Upsert with NULL project — should fail gracefully */
-    cbm_node_t n = {
+    lsm_node_t n = {
         .project = NULL, .label = "Function", .name = "Foo", .qualified_name = "null.Foo"};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     /* Either returns error or silently succeeds; must not crash */
     (void)id;
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_null_qn) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Upsert with NULL qualified_name */
-    cbm_node_t n = {.project = "test", .label = "Function", .name = "Bar", .qualified_name = NULL};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    lsm_node_t n = {.project = "test", .label = "Function", .name = "Bar", .qualified_name = NULL};
+    int64_t id = lsm_store_upsert_node(s, &n);
     /* Must not crash regardless of return value */
     (void)id;
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_empty_strings) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Upsert with all fields as empty strings */
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "",
                     .name = "",
                     .qualified_name = "",
@@ -1356,188 +1356,188 @@ TEST(store_node_empty_strings) {
                     .start_line = 0,
                     .end_line = 0,
                     .properties_json = ""};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     /* Should succeed — empty strings are valid */
     ASSERT_GT(id, 0);
 
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn(s, "test", "", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn(s, "test", "", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "");
     ASSERT_STR_EQ(found.label, "");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: not-found lookups ──────────────────────────────── */
 
 TEST(store_find_by_id_not_found) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_id(s, 999999, &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_id(s, 999999, &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
     /* Negative ID should also be not found */
-    rc = cbm_store_find_node_by_id(s, -1, &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_id(s, -1, &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_by_qn_not_found) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert a node so the store is non-empty */
-    cbm_node_t n = {
+    lsm_node_t n = {
         .project = "test", .label = "Function", .name = "Exists", .qualified_name = "test.Exists"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
     /* Search for a non-existent QN */
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn(s, "test", "test.DoesNotExist", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn(s, "test", "test.DoesNotExist", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
     /* Wrong project */
-    rc = cbm_store_find_node_by_qn(s, "other-project", "test.Exists", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn(s, "other-project", "test.Exists", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: cross-project lookups ──────────────────────────── */
 
 TEST(store_find_by_qn_any_cross_project) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "proj-a", "/tmp/a");
-    cbm_store_upsert_project(s, "proj-b", "/tmp/b");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "proj-a", "/tmp/a");
+    lsm_store_upsert_project(s, "proj-b", "/tmp/b");
 
-    cbm_node_t na = {.project = "proj-a",
+    lsm_node_t na = {.project = "proj-a",
                      .label = "Function",
                      .name = "SharedFunc",
                      .qualified_name = "proj-a.main.SharedFunc"};
-    cbm_node_t nb = {.project = "proj-b",
+    lsm_node_t nb = {.project = "proj-b",
                      .label = "Class",
                      .name = "Widget",
                      .qualified_name = "proj-b.pkg.Widget"};
-    cbm_store_upsert_node(s, &na);
-    cbm_store_upsert_node(s, &nb);
+    lsm_store_upsert_node(s, &na);
+    lsm_store_upsert_node(s, &nb);
 
     /* find_node_by_qn_any finds without project filter */
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn_any(s, "proj-a.main.SharedFunc", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn_any(s, "proj-a.main.SharedFunc", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "SharedFunc");
     ASSERT_STR_EQ(found.project, "proj-a");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    rc = cbm_store_find_node_by_qn_any(s, "proj-b.pkg.Widget", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_node_by_qn_any(s, "proj-b.pkg.Widget", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "Widget");
     ASSERT_STR_EQ(found.project, "proj-b");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
     /* Non-existent QN */
-    rc = cbm_store_find_node_by_qn_any(s, "nonexistent.Nope", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn_any(s, "nonexistent.Nope", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_find_by_name_any_cross_project) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "proj-a", "/tmp/a");
-    cbm_store_upsert_project(s, "proj-b", "/tmp/b");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "proj-a", "/tmp/a");
+    lsm_store_upsert_project(s, "proj-b", "/tmp/b");
 
     /* Same name in two projects */
-    cbm_node_t na = {.project = "proj-a",
+    lsm_node_t na = {.project = "proj-a",
                      .label = "Function",
                      .name = "Init",
                      .qualified_name = "proj-a.main.Init"};
-    cbm_node_t nb = {.project = "proj-b",
+    lsm_node_t nb = {.project = "proj-b",
                      .label = "Function",
                      .name = "Init",
                      .qualified_name = "proj-b.main.Init"};
-    cbm_node_t nc = {.project = "proj-b",
+    lsm_node_t nc = {.project = "proj-b",
                      .label = "Function",
                      .name = "Other",
                      .qualified_name = "proj-b.main.Other"};
-    cbm_store_upsert_node(s, &na);
-    cbm_store_upsert_node(s, &nb);
-    cbm_store_upsert_node(s, &nc);
+    lsm_store_upsert_node(s, &na);
+    lsm_store_upsert_node(s, &nb);
+    lsm_store_upsert_node(s, &nc);
 
     /* find_nodes_by_name_any should find both "Init" across projects */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_name_any(s, "Init", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_name_any(s, "Init", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 2);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
     /* Name that doesn't exist */
-    rc = cbm_store_find_nodes_by_name_any(s, "Nonexistent", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_nodes_by_name_any(s, "Nonexistent", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: empty result sets ──────────────────────────────── */
 
 TEST(store_find_by_file_no_match) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "Foo",
                     .qualified_name = "test.Foo",
                     .file_path = "main.go"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
     /* Search for a file that has no nodes */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_file(s, "test", "nonexistent.go", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_file(s, "test", "nonexistent.go", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: batch upsert boundary ─────────────────────────── */
 
 TEST(store_node_batch_upsert_zero) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Batch upsert with count=0 should succeed, do nothing */
-    int rc = cbm_store_upsert_node_batch(s, NULL, 0, NULL);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_node_batch(s, NULL, 0, NULL);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 0);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_node_batch_upsert_100) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t nodes[100];
+    lsm_node_t nodes[100];
     int64_t ids[100];
     char names[100][32];
     char qns[100][64];
@@ -1545,7 +1545,7 @@ TEST(store_node_batch_upsert_100) {
     for (int i = 0; i < 100; i++) {
         snprintf(names[i], sizeof(names[i]), "stress_%d", i);
         snprintf(qns[i], sizeof(qns[i]), "test.stress.stress_%d", i);
-        nodes[i] = (cbm_node_t){.project = "test",
+        nodes[i] = (lsm_node_t){.project = "test",
                                 .label = "Function",
                                 .name = names[i],
                                 .qualified_name = qns[i],
@@ -1554,8 +1554,8 @@ TEST(store_node_batch_upsert_100) {
                                 .end_line = i + 1};
     }
 
-    int rc = cbm_store_upsert_node_batch(s, nodes, 100, ids);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_upsert_node_batch(s, nodes, 100, ids);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* All IDs should be positive */
     for (int i = 0; i < 100; i++)
@@ -1566,127 +1566,127 @@ TEST(store_node_batch_upsert_100) {
         for (int j = i + 1; j < 100; j++)
             ASSERT_NEQ(ids[i], ids[j]);
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 100);
 
     /* Verify a few random lookups */
-    cbm_node_t found = {0};
-    rc = cbm_store_find_node_by_qn(s, "test", "test.stress.stress_0", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    rc = lsm_store_find_node_by_qn(s, "test", "test.stress.stress_0", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "stress_0");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    rc = cbm_store_find_node_by_qn(s, "test", "test.stress.stress_99", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.stress.stress_99", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.name, "stress_99");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: delete then verify remaining ──────────────────── */
 
 TEST(store_delete_by_label_verify_remaining) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {
+    lsm_node_t n1 = {
         .project = "test", .label = "Function", .name = "FuncA", .qualified_name = "test.FuncA"};
-    cbm_node_t n2 = {
+    lsm_node_t n2 = {
         .project = "test", .label = "Class", .name = "ClassB", .qualified_name = "test.ClassB"};
-    cbm_node_t n3 = {
+    lsm_node_t n3 = {
         .project = "test", .label = "Function", .name = "FuncC", .qualified_name = "test.FuncC"};
-    cbm_node_t n4 = {
+    lsm_node_t n4 = {
         .project = "test", .label = "Method", .name = "MethodD", .qualified_name = "test.MethodD"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
-    cbm_store_upsert_node(s, &n3);
-    cbm_store_upsert_node(s, &n4);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n3);
+    lsm_store_upsert_node(s, &n4);
 
     /* Delete all Functions */
-    int rc = cbm_store_delete_nodes_by_label(s, "test", "Function");
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_delete_nodes_by_label(s, "test", "Function");
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 2);
 
     /* Class and Method should remain */
-    cbm_node_t found = {0};
-    rc = cbm_store_find_node_by_qn(s, "test", "test.ClassB", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    rc = lsm_store_find_node_by_qn(s, "test", "test.ClassB", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.label, "Class");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    rc = cbm_store_find_node_by_qn(s, "test", "test.MethodD", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.MethodD", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.label, "Method");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
     /* Deleted ones should be gone */
-    rc = cbm_store_find_node_by_qn(s, "test", "test.FuncA", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
-    rc = cbm_store_find_node_by_qn(s, "test", "test.FuncC", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.FuncA", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.FuncC", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_delete_by_file_verify_remaining) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "A",
                      .qualified_name = "test.A",
                      .file_path = "delete_me.go"};
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Function",
                      .name = "B",
                      .qualified_name = "test.B",
                      .file_path = "keep_me.go"};
-    cbm_node_t n3 = {.project = "test",
+    lsm_node_t n3 = {.project = "test",
                      .label = "Function",
                      .name = "C",
                      .qualified_name = "test.C",
                      .file_path = "delete_me.go"};
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
-    cbm_store_upsert_node(s, &n3);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n3);
 
-    int rc = cbm_store_delete_nodes_by_file(s, "test", "delete_me.go");
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_delete_nodes_by_file(s, "test", "delete_me.go");
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
     /* Only keep_me.go node should remain */
-    cbm_node_t found = {0};
-    rc = cbm_store_find_node_by_qn(s, "test", "test.B", &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    rc = lsm_store_find_node_by_qn(s, "test", "test.B", &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.file_path, "keep_me.go");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
     /* Deleted nodes should be gone */
-    rc = cbm_store_find_node_by_qn(s, "test", "test.A", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
-    rc = cbm_store_find_node_by_qn(s, "test", "test.C", &found);
-    ASSERT_EQ(rc, CBM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.A", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
+    rc = lsm_store_find_node_by_qn(s, "test", "test.C", &found);
+    ASSERT_EQ(rc, LSM_STORE_NOT_FOUND);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: upsert dedup with field changes ───────────────── */
 
 TEST(store_node_upsert_updates_fields) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert initial node */
-    cbm_node_t n1 = {.project = "test",
+    lsm_node_t n1 = {.project = "test",
                      .label = "Function",
                      .name = "MyFunc",
                      .qualified_name = "test.MyFunc",
@@ -1694,11 +1694,11 @@ TEST(store_node_upsert_updates_fields) {
                      .start_line = 1,
                      .end_line = 10,
                      .properties_json = "{\"version\":1}"};
-    int64_t id1 = cbm_store_upsert_node(s, &n1);
+    int64_t id1 = lsm_store_upsert_node(s, &n1);
     ASSERT_GT(id1, 0);
 
     /* Upsert same QN with changed fields */
-    cbm_node_t n2 = {.project = "test",
+    lsm_node_t n2 = {.project = "test",
                      .label = "Method",
                      .name = "MyFunc",
                      .qualified_name = "test.MyFunc",
@@ -1706,34 +1706,34 @@ TEST(store_node_upsert_updates_fields) {
                      .start_line = 50,
                      .end_line = 60,
                      .properties_json = "{\"version\":2}"};
-    int64_t id2 = cbm_store_upsert_node(s, &n2);
+    int64_t id2 = lsm_store_upsert_node(s, &n2);
     ASSERT_EQ(id1, id2); /* Same ID — updated, not duplicated */
 
     /* Count should still be 1 */
-    int cnt = cbm_store_count_nodes(s, "test");
+    int cnt = lsm_store_count_nodes(s, "test");
     ASSERT_EQ(cnt, 1);
 
     /* Verify fields were updated */
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_id(s, id1, &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_id(s, id1, &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.label, "Method");
     ASSERT_STR_EQ(found.file_path, "new.go");
     ASSERT_EQ(found.start_line, 50);
     ASSERT_EQ(found.end_line, 60);
     ASSERT(strstr(found.properties_json, "version") != NULL);
     ASSERT(strstr(found.properties_json, "2") != NULL);
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: long qualified name ───────────────────────────── */
 
 TEST(store_node_long_qn) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Build a 1200-char qualified name */
     char long_qn[1201];
@@ -1743,31 +1743,31 @@ TEST(store_node_long_qn) {
         long_qn[i] = '.';
     long_qn[1200] = '\0';
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "LongName",
                     .qualified_name = long_qn,
                     .file_path = "big.go"};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     ASSERT_GT(id, 0);
 
     /* Should be retrievable by QN */
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_qn(s, "test", long_qn, &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_qn(s, "test", long_qn, &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_STR_EQ(found.qualified_name, long_qn);
     ASSERT_STR_EQ(found.name, "LongName");
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: properties JSON with special characters ────────── */
 
 TEST(store_node_properties_special_chars) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* JSON with quotes, backslashes, unicode, newlines */
     const char *props = "{\"desc\":\"line1\\nline2\","
@@ -1775,67 +1775,67 @@ TEST(store_node_properties_special_chars) {
                         "\"emoji\":\"\\u2603\","
                         "\"nested\":{\"key\":\"val with \\\"quotes\\\"\"}}";
 
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "SpecialFunc",
                     .qualified_name = "test.SpecialFunc",
                     .properties_json = props};
-    int64_t id = cbm_store_upsert_node(s, &n);
+    int64_t id = lsm_store_upsert_node(s, &n);
     ASSERT_GT(id, 0);
 
-    cbm_node_t found = {0};
-    int rc = cbm_store_find_node_by_id(s, id, &found);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_node_t found = {0};
+    int rc = lsm_store_find_node_by_id(s, id, &found);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_NOT_NULL(found.properties_json);
     /* Round-trip should preserve the JSON exactly */
     ASSERT_STR_EQ(found.properties_json, props);
-    cbm_node_free_fields(&found);
+    lsm_node_free_fields(&found);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: delete from non-existent project/file ─────────── */
 
 TEST(store_delete_nodes_nonexistent) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
     /* Insert one node */
-    cbm_node_t n = {.project = "test",
+    lsm_node_t n = {.project = "test",
                     .label = "Function",
                     .name = "Survivor",
                     .qualified_name = "test.Survivor",
                     .file_path = "main.go"};
-    cbm_store_upsert_node(s, &n);
+    lsm_store_upsert_node(s, &n);
 
     /* Delete by non-existent file — should succeed but delete nothing */
-    int rc = cbm_store_delete_nodes_by_file(s, "test", "ghost.go");
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_count_nodes(s, "test"), 1);
+    int rc = lsm_store_delete_nodes_by_file(s, "test", "ghost.go");
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_count_nodes(s, "test"), 1);
 
     /* Delete by non-existent label */
-    rc = cbm_store_delete_nodes_by_label(s, "test", "Interface");
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_count_nodes(s, "test"), 1);
+    rc = lsm_store_delete_nodes_by_label(s, "test", "Interface");
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_count_nodes(s, "test"), 1);
 
     /* Delete by non-existent project */
-    rc = cbm_store_delete_nodes_by_project(s, "no-such-project");
-    ASSERT_EQ(rc, CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_count_nodes(s, "test"), 1);
+    rc = lsm_store_delete_nodes_by_project(s, "no-such-project");
+    ASSERT_EQ(rc, LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_count_nodes(s, "test"), 1);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 /* ── Edge case: count nodes for unknown project ───────────────── */
 
 TEST(store_count_nodes_unknown_project) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     /* No project created — count should be 0 */
-    int cnt = cbm_store_count_nodes(s, "ghost-project");
+    int cnt = lsm_store_count_nodes(s, "ghost-project");
     ASSERT_EQ(cnt, 0);
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -1845,11 +1845,11 @@ TEST(store_count_nodes_unknown_project) {
  * empty-replace wipe. The prune keys off file_hashes (the live-file set), so
  * a row for a file with no hash row must not survive the replace. */
 TEST(store_coverage_roundtrip_prune_shadow) {
-    cbm_store_t *s = cbm_store_open_memory();
-    cbm_store_upsert_project(s, "test", "/tmp/test");
-    cbm_store_upsert_file_hash(s, "test", "src/a.py", "", 1, 10);
+    lsm_store_t *s = lsm_store_open_memory();
+    lsm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_file_hash(s, "test", "src/a.py", "", 1, 10);
 
-    cbm_coverage_row_t rows[] = {
+    lsm_coverage_row_t rows[] = {
         {.rel_path = "src/a.py", .kind = "parse_partial", .detail = "4-7"},
         {.rel_path = "gone.py", .kind = "oversized", .detail = "too big"},
         /* By-design rows (#963): neither has a file_hashes row, yet both must
@@ -1858,11 +1858,11 @@ TEST(store_coverage_roundtrip_prune_shadow) {
         {.rel_path = "secret.py", .kind = "not_indexed_file", .detail = "gitignore"},
         {.rel_path = "generated", .kind = "not_indexed_dir", .detail = "excluded subtree"},
     };
-    ASSERT_EQ(cbm_store_coverage_replace(s, "test", rows, 4), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_replace(s, "test", rows, 4), LSM_STORE_OK);
 
-    cbm_coverage_row_t *got = NULL;
+    lsm_coverage_row_t *got = NULL;
     int n = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "test", &got, &n), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "test", &got, &n), LSM_STORE_OK);
     ASSERT_EQ(n, 3); /* gone.py pruned — no file_hashes row; by-design rows kept */
     int saw_partial = 0;
     int saw_by_design = 0;
@@ -1876,143 +1876,143 @@ TEST(store_coverage_roundtrip_prune_shadow) {
     }
     ASSERT_EQ(saw_partial, 1);
     ASSERT_EQ(saw_by_design, 2);
-    cbm_store_free_coverage(got, n);
+    lsm_store_free_coverage(got, n);
 
     /* Shadow miss-graph materialized under "test::missed": FAILURES only —
      * Project → Folder(src) → File(a.py){kind,detail}; the by-design rows do
      * not appear. */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int nc = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_label(s, "test::missed", "File", &nodes, &nc), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_label(s, "test::missed", "File", &nodes, &nc), LSM_STORE_OK);
     ASSERT_EQ(nc, 1);
     ASSERT_STR_EQ(nodes[0].file_path, "src/a.py");
     ASSERT_NOT_NULL(strstr(nodes[0].properties_json, "\"kind\":\"parse_partial\""));
     ASSERT_NOT_NULL(strstr(nodes[0].properties_json, "\"detail\":\"4-7\""));
-    cbm_store_free_nodes(nodes, nc);
+    lsm_store_free_nodes(nodes, nc);
     nodes = NULL;
     nc = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_label(s, "test::missed", "Folder", &nodes, &nc),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_label(s, "test::missed", "Folder", &nodes, &nc),
+              LSM_STORE_OK);
     ASSERT_EQ(nc, 1);
     ASSERT_STR_EQ(nodes[0].name, "src");
-    cbm_store_free_nodes(nodes, nc);
+    lsm_store_free_nodes(nodes, nc);
 
     /* Empty replace clears the table AND wipes the shadow graph. */
-    ASSERT_EQ(cbm_store_coverage_replace(s, "test", NULL, 0), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_replace(s, "test", NULL, 0), LSM_STORE_OK);
     got = NULL;
     n = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "test", &got, &n), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "test", &got, &n), LSM_STORE_OK);
     ASSERT_EQ(n, 0);
     free(got);
     nodes = NULL;
     nc = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_label(s, "test::missed", "File", &nodes, &nc), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_label(s, "test::missed", "File", &nodes, &nc), LSM_STORE_OK);
     ASSERT_EQ(nc, 0);
-    cbm_store_free_nodes(nodes, nc);
+    lsm_store_free_nodes(nodes, nc);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_coverage_targeted_path_and_scope_lookup) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "coverage-targeted", "/tmp/coverage-targeted"),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(s, "coverage-targeted", "/tmp/coverage-targeted"),
+              LSM_STORE_OK);
 
     /* Failure rows need live-file hash records so coverage_replace does not
      * correctly prune them as deleted. By-design exclusions have no hashes. */
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-targeted", "src/partial.c", "", 10, 20),
-              CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-targeted", "src/skipped.c", "", 11, 21),
-              CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-targeted", "src2/other.c", "", 12, 22),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-targeted", "src/partial.c", "", 10, 20),
+              LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-targeted", "src/skipped.c", "", 11, 21),
+              LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-targeted", "src2/other.c", "", 12, 22),
+              LSM_STORE_OK);
 
-    cbm_coverage_row_t rows[] = {
+    lsm_coverage_row_t rows[] = {
         {.rel_path = "src/partial.c", .kind = "parse_partial", .detail = "7-9"},
         {.rel_path = "src/skipped.c", .kind = "oversized", .detail = "too large"},
         {.rel_path = "src2/other.c", .kind = "extract", .detail = "parser failed"},
         {.rel_path = "generated", .kind = "not_indexed_dir", .detail = "excluded subtree"},
         {.rel_path = "secret.c", .kind = "not_indexed_file", .detail = "gitignore"},
     };
-    ASSERT_EQ(cbm_store_coverage_replace(s, "coverage-targeted", rows, 5), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_replace(s, "coverage-targeted", rows, 5), LSM_STORE_OK);
 
-    cbm_coverage_row_t *got = NULL;
+    lsm_coverage_row_t *got = NULL;
     int count = 0;
-    ASSERT_EQ(cbm_store_coverage_get_path(s, "coverage-targeted", "src/partial.c", &got, &count),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get_path(s, "coverage-targeted", "src/partial.c", &got, &count),
+              LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(got[0].rel_path, "src/partial.c");
     ASSERT_STR_EQ(got[0].kind, "parse_partial");
     ASSERT_STR_EQ(got[0].detail, "7-9");
-    cbm_store_free_coverage(got, count);
+    lsm_store_free_coverage(got, count);
 
     /* A file below an excluded directory inherits that directory row. */
     got = NULL;
     count = 0;
-    ASSERT_EQ(cbm_store_coverage_get_path(s, "coverage-targeted", "generated/nested/file.c", &got,
+    ASSERT_EQ(lsm_store_coverage_get_path(s, "coverage-targeted", "generated/nested/file.c", &got,
                                           &count),
-              CBM_STORE_OK);
+              LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(got[0].rel_path, "generated");
     ASSERT_STR_EQ(got[0].kind, "not_indexed_dir");
-    cbm_store_free_coverage(got, count);
+    lsm_store_free_coverage(got, count);
 
     /* Prefixes must stop at path-segment boundaries. */
     got = NULL;
     count = 0;
     ASSERT_EQ(
-        cbm_store_coverage_get_path(s, "coverage-targeted", "generated2/file.c", &got, &count),
-        CBM_STORE_OK);
+        lsm_store_coverage_get_path(s, "coverage-targeted", "generated2/file.c", &got, &count),
+        LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_coverage(got, count);
+    lsm_store_free_coverage(got, count);
 
     got = NULL;
     count = 0;
-    ASSERT_EQ(cbm_store_coverage_get_scope(s, "coverage-targeted", "src", &got, &count),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get_scope(s, "coverage-targeted", "src", &got, &count),
+              LSM_STORE_OK);
     ASSERT_EQ(count, 2);
     ASSERT_STR_EQ(got[0].rel_path, "src/partial.c");
     ASSERT_STR_EQ(got[1].rel_path, "src/skipped.c");
-    cbm_store_free_coverage(got, count);
+    lsm_store_free_coverage(got, count);
 
     /* A scope nested below an excluded directory still reports its ancestor. */
     got = NULL;
     count = 0;
     ASSERT_EQ(
-        cbm_store_coverage_get_scope(s, "coverage-targeted", "generated/nested", &got, &count),
-        CBM_STORE_OK);
+        lsm_store_coverage_get_scope(s, "coverage-targeted", "generated/nested", &got, &count),
+        LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(got[0].rel_path, "generated");
-    cbm_store_free_coverage(got, count);
+    lsm_store_free_coverage(got, count);
 
-    cbm_file_hash_t hash = {0};
-    ASSERT_EQ(cbm_store_get_file_hash(s, "coverage-targeted", "src/partial.c", &hash),
-              CBM_STORE_OK);
+    lsm_file_hash_t hash = {0};
+    ASSERT_EQ(lsm_store_get_file_hash(s, "coverage-targeted", "src/partial.c", &hash),
+              LSM_STORE_OK);
     ASSERT_STR_EQ(hash.project, "coverage-targeted");
     ASSERT_STR_EQ(hash.rel_path, "src/partial.c");
     ASSERT_EQ(hash.mtime_ns, 10);
     ASSERT_EQ(hash.size, 20);
-    cbm_store_clear_file_hash(&hash);
+    lsm_store_clear_file_hash(&hash);
     ASSERT_NULL(hash.project);
     ASSERT_NULL(hash.rel_path);
     ASSERT_NULL(hash.sha256);
 
-    ASSERT_EQ(cbm_store_get_file_hash(s, "coverage-targeted", "missing.c", &hash),
-              CBM_STORE_NOT_FOUND);
-    cbm_store_clear_file_hash(&hash);
+    ASSERT_EQ(lsm_store_get_file_hash(s, "coverage-targeted", "missing.c", &hash),
+              LSM_STORE_NOT_FOUND);
+    lsm_store_clear_file_hash(&hash);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_coverage_meta_zero_row_truncation_and_delete) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "coverage-meta", "/tmp/coverage-meta"), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(s, "coverage-meta", "/tmp/coverage-meta"), LSM_STORE_OK);
 
-    cbm_coverage_meta_t write_meta = {
+    lsm_coverage_meta_t write_meta = {
         .generation = "generation-42",
         .index_mode = "fast",
         .recording_status = "truncated",
@@ -2022,17 +2022,17 @@ TEST(store_coverage_meta_zero_row_truncation_and_delete) {
         .hash_records_complete = false,
     };
     /* Metadata is meaningful even when the authoritative miss set is empty. */
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-meta", NULL, 0, &write_meta),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-meta", NULL, 0, &write_meta),
+              LSM_STORE_OK);
 
-    cbm_coverage_row_t *rows = NULL;
+    lsm_coverage_row_t *rows = NULL;
     int count = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "coverage-meta", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "coverage-meta", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_coverage(rows, count);
+    lsm_store_free_coverage(rows, count);
 
-    cbm_coverage_meta_t got = {0};
-    ASSERT_EQ(cbm_store_coverage_meta_get(s, "coverage-meta", &got), CBM_STORE_OK);
+    lsm_coverage_meta_t got = {0};
+    ASSERT_EQ(lsm_store_coverage_meta_get(s, "coverage-meta", &got), LSM_STORE_OK);
     ASSERT_STR_EQ(got.project, "coverage-meta");
     ASSERT_STR_EQ(got.generation, "generation-42");
     ASSERT_NOT_NULL(got.recorded_at);
@@ -2042,7 +2042,7 @@ TEST(store_coverage_meta_zero_row_truncation_and_delete) {
     ASSERT_EQ(got.ignored_files_total, 2501);
     ASSERT_EQ(got.coverage_version, 1);
     ASSERT_FALSE(got.hash_records_complete);
-    cbm_store_coverage_meta_clear(&got);
+    lsm_store_coverage_meta_clear(&got);
     ASSERT_NULL(got.project);
     ASSERT_NULL(got.generation);
     ASSERT_NULL(got.recorded_at);
@@ -2050,123 +2050,123 @@ TEST(store_coverage_meta_zero_row_truncation_and_delete) {
     ASSERT_NULL(got.recording_status);
 
     /* Replacing through the compatibility wrapper clears possibly-stale meta. */
-    ASSERT_EQ(cbm_store_coverage_replace(s, "coverage-meta", NULL, 0), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_coverage_meta_get(s, "coverage-meta", &got), CBM_STORE_NOT_FOUND);
-    cbm_store_coverage_meta_clear(&got);
+    ASSERT_EQ(lsm_store_coverage_replace(s, "coverage-meta", NULL, 0), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_meta_get(s, "coverage-meta", &got), LSM_STORE_NOT_FOUND);
+    lsm_store_coverage_meta_clear(&got);
 
     /* Recreate metadata and a missed-graph node, then project deletion must
      * remove the table rows, metadata, and the derived ::missed project. */
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-meta", "bad.c", "", 1, 1), CBM_STORE_OK);
-    cbm_coverage_row_t failure = {.rel_path = "bad.c", .kind = "parse_partial", .detail = "1-2"};
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-meta", &failure, 1, &write_meta),
-              CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_delete_project(s, "coverage-meta"), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-meta", "bad.c", "", 1, 1), LSM_STORE_OK);
+    lsm_coverage_row_t failure = {.rel_path = "bad.c", .kind = "parse_partial", .detail = "1-2"};
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-meta", &failure, 1, &write_meta),
+              LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_delete_project(s, "coverage-meta"), LSM_STORE_OK);
 
     rows = NULL;
     count = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "coverage-meta", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "coverage-meta", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 0);
-    cbm_store_free_coverage(rows, count);
-    ASSERT_EQ(cbm_store_coverage_meta_get(s, "coverage-meta", &got), CBM_STORE_NOT_FOUND);
-    cbm_store_coverage_meta_clear(&got);
-    cbm_project_t shadow = {0};
-    ASSERT_EQ(cbm_store_get_project(s, "coverage-meta::missed", &shadow), CBM_STORE_NOT_FOUND);
-    cbm_project_free_fields(&shadow);
+    lsm_store_free_coverage(rows, count);
+    ASSERT_EQ(lsm_store_coverage_meta_get(s, "coverage-meta", &got), LSM_STORE_NOT_FOUND);
+    lsm_store_coverage_meta_clear(&got);
+    lsm_project_t shadow = {0};
+    ASSERT_EQ(lsm_store_get_project(s, "coverage-meta::missed", &shadow), LSM_STORE_NOT_FOUND);
+    lsm_project_free_fields(&shadow);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_coverage_replace_rejects_invalid_row_arguments) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "coverage-invalid", "/tmp/coverage-invalid"),
-              CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-invalid", "kept.c", "", 1, 1), CBM_STORE_OK);
-    cbm_coverage_row_t kept = {.rel_path = "kept.c", .kind = "parse_partial", .detail = "3-4"};
-    cbm_coverage_meta_t original_meta = {
+    ASSERT_EQ(lsm_store_upsert_project(s, "coverage-invalid", "/tmp/coverage-invalid"),
+              LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-invalid", "kept.c", "", 1, 1), LSM_STORE_OK);
+    lsm_coverage_row_t kept = {.rel_path = "kept.c", .kind = "parse_partial", .detail = "3-4"};
+    lsm_coverage_meta_t original_meta = {
         .generation = "before-invalid-call",
         .index_mode = "full",
         .recording_status = "complete",
         .coverage_version = 1,
         .hash_records_complete = true,
     };
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-invalid", &kept, 1, &original_meta),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-invalid", &kept, 1, &original_meta),
+              LSM_STORE_OK);
 
-    cbm_coverage_meta_t replacement_meta = original_meta;
+    lsm_coverage_meta_t replacement_meta = original_meta;
     replacement_meta.generation = "must-not-commit";
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-invalid", &kept, -1, &replacement_meta),
-              CBM_STORE_ERR);
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-invalid", NULL, 1, &replacement_meta),
-              CBM_STORE_ERR);
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-invalid", &kept, -1, &replacement_meta),
+              LSM_STORE_ERR);
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-invalid", NULL, 1, &replacement_meta),
+              LSM_STORE_ERR);
 
-    cbm_coverage_row_t *rows = NULL;
+    lsm_coverage_row_t *rows = NULL;
     int count = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "coverage-invalid", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "coverage-invalid", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(rows[0].rel_path, "kept.c");
     ASSERT_STR_EQ(rows[0].detail, "3-4");
-    cbm_store_free_coverage(rows, count);
-    cbm_coverage_meta_t got = {0};
-    ASSERT_EQ(cbm_store_coverage_meta_get(s, "coverage-invalid", &got), CBM_STORE_OK);
+    lsm_store_free_coverage(rows, count);
+    lsm_coverage_meta_t got = {0};
+    ASSERT_EQ(lsm_store_coverage_meta_get(s, "coverage-invalid", &got), LSM_STORE_OK);
     ASSERT_STR_EQ(got.generation, "before-invalid-call");
-    cbm_store_coverage_meta_clear(&got);
+    lsm_store_coverage_meta_clear(&got);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 
 TEST(store_coverage_replace_rolls_back_when_shadow_rebuild_fails) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "coverage-shadow", "/tmp/coverage-shadow"), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-shadow", "old.c", "", 1, 1), CBM_STORE_OK);
-    ASSERT_EQ(cbm_store_upsert_file_hash(s, "coverage-shadow", "new.c", "", 2, 2), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(s, "coverage-shadow", "/tmp/coverage-shadow"), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-shadow", "old.c", "", 1, 1), LSM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_file_hash(s, "coverage-shadow", "new.c", "", 2, 2), LSM_STORE_OK);
 
-    cbm_coverage_row_t old_row = {
+    lsm_coverage_row_t old_row = {
         .rel_path = "old.c", .kind = "parse_partial", .detail = "old-detail"};
-    cbm_coverage_meta_t old_meta = {
+    lsm_coverage_meta_t old_meta = {
         .generation = "old-generation",
         .index_mode = "full",
         .recording_status = "complete",
         .coverage_version = 1,
         .hash_records_complete = true,
     };
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-shadow", &old_row, 1, &old_meta),
-              CBM_STORE_OK);
-    int old_shadow_nodes = cbm_store_count_nodes(s, "coverage-shadow::missed");
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-shadow", &old_row, 1, &old_meta),
+              LSM_STORE_OK);
+    int old_shadow_nodes = lsm_store_count_nodes(s, "coverage-shadow::missed");
     ASSERT_GT(old_shadow_nodes, 0);
 
     /* Force only the derived-view rebuild to fail. The authoritative rows,
      * metadata, and prior shadow graph must remain one atomic generation. */
-    ASSERT_EQ(cbm_store_exec(s, "CREATE TRIGGER fail_missed_insert BEFORE INSERT ON nodes "
+    ASSERT_EQ(lsm_store_exec(s, "CREATE TRIGGER fail_missed_insert BEFORE INSERT ON nodes "
                                 "WHEN NEW.project = 'coverage-shadow::missed' "
                                 "BEGIN SELECT RAISE(ABORT, 'forced missed shadow failure'); END;"),
-              CBM_STORE_OK);
+              LSM_STORE_OK);
 
-    cbm_coverage_row_t new_row = {
+    lsm_coverage_row_t new_row = {
         .rel_path = "new.c", .kind = "parse_partial", .detail = "new-detail"};
-    cbm_coverage_meta_t new_meta = old_meta;
+    lsm_coverage_meta_t new_meta = old_meta;
     new_meta.generation = "new-generation";
-    ASSERT_EQ(cbm_store_coverage_replace_ex(s, "coverage-shadow", &new_row, 1, &new_meta),
-              CBM_STORE_ERR);
+    ASSERT_EQ(lsm_store_coverage_replace_ex(s, "coverage-shadow", &new_row, 1, &new_meta),
+              LSM_STORE_ERR);
 
-    cbm_coverage_row_t *rows = NULL;
+    lsm_coverage_row_t *rows = NULL;
     int count = 0;
-    ASSERT_EQ(cbm_store_coverage_get(s, "coverage-shadow", &rows, &count), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_coverage_get(s, "coverage-shadow", &rows, &count), LSM_STORE_OK);
     ASSERT_EQ(count, 1);
     ASSERT_STR_EQ(rows[0].rel_path, "old.c");
     ASSERT_STR_EQ(rows[0].detail, "old-detail");
-    cbm_store_free_coverage(rows, count);
+    lsm_store_free_coverage(rows, count);
 
-    cbm_coverage_meta_t got = {0};
-    ASSERT_EQ(cbm_store_coverage_meta_get(s, "coverage-shadow", &got), CBM_STORE_OK);
+    lsm_coverage_meta_t got = {0};
+    ASSERT_EQ(lsm_store_coverage_meta_get(s, "coverage-shadow", &got), LSM_STORE_OK);
     ASSERT_STR_EQ(got.generation, "old-generation");
-    cbm_store_coverage_meta_clear(&got);
-    ASSERT_EQ(cbm_store_count_nodes(s, "coverage-shadow::missed"), old_shadow_nodes);
+    lsm_store_coverage_meta_clear(&got);
+    ASSERT_EQ(lsm_store_count_nodes(s, "coverage-shadow::missed"), old_shadow_nodes);
 
-    cbm_store_close(s);
+    lsm_store_close(s);
     PASS();
 }
 

@@ -15,31 +15,31 @@
  *   9.  require fallback (require Foo; Foo->bar)
  *   10. Unresolvable receiver emits NO spurious edge (negative test)
  *
- * The resolver populates result->resolved_calls with CBMResolvedCall edges. Per
+ * The resolver populates result->resolved_calls with LSMResolvedCall edges. Per
  * the perl_lsp.c design (file header), sub QNs are `module_qn.subname` — the Perl
  * package is NOT woven into the sub QN. For these single-file fixtures the module
- * QN is `test.main` (from the cbm_extract_file "test"/"main.pl" args), so every
+ * QN is `test.main` (from the lsm_extract_file "test"/"main.pl" args), so every
  * resolved sub lands at `test.main.<sub>`. The helpers below use substring
  * matching, so tests assert on the unique `main.<sub>` callee fragment. The Perl
  * package only governs method *dispatch* (which sub a receiver resolves to), not
  * the emitted QN string.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "../src/pipeline/lsp_resolve.h"
 #include "lsp/perl_lsp.h"
 #include <string.h>
 
 /* ── Helpers (mirror test_php_lsp.c) ───────────────────────────── */
 
-static CBMFileResult *extract_perl(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_PERL, "test", "main.pl", 0, NULL,
+static LSMFileResult *extract_perl(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_PERL, "test", "main.pl", 0, NULL,
                             NULL);
 }
 
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -47,13 +47,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
     return -1;
 }
 
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("  MISSING resolved call: caller~%s -> callee~%s (have %d)\n", callerSub, calleeSub,
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)", rc->strategy ? rc->strategy : "(null)",
                    rc->confidence);
@@ -62,12 +62,12 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
     return idx;
 }
 
-static const CBMResolvedCall *find_resolved_with_strategy(const CBMFileResult *r,
+static const LSMResolvedCall *find_resolved_with_strategy(const LSMFileResult *r,
                                                           const char *callerSub,
                                                           const char *calleeSub,
                                                           const char *strategy) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (!rc->caller_qn || !rc->callee_qn)
             continue;
         if (!strstr(rc->caller_qn, callerSub))
@@ -92,13 +92,13 @@ TEST(perllsp_method_via_bless_assignment) {
                       "    my $obj = Foo->new;\n"
                       "    $obj->bar;\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     /* $obj is typed Foo via Foo->new (bless); $obj->bar dispatches to Foo::bar,
      * emitted as test.main.bar. */
     int idx = require_resolved(r, "main.run", "main.bar");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -114,10 +114,10 @@ TEST(perllsp_constructor_class_method) {
                       "    my $f = Foo->new();\n"
                       "    $f->greet();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.go", "main.greet") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -130,16 +130,16 @@ TEST(perllsp_static_package_call) {
                       "sub caller_sub {\n"
                       "    Foo::bar();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.caller_sub", "main.bar") >= 0);
-    /* The same edge is retrievable as a full CBMResolvedCall; static calls carry
+    /* The same edge is retrievable as a full LSMResolvedCall; static calls carry
      * the perl_static_call strategy. */
-    const CBMResolvedCall *rc =
+    const LSMResolvedCall *rc =
         find_resolved_with_strategy(r, "main.caller_sub", "main.bar", "perl_static_call");
     ASSERT(rc != NULL);
     ASSERT(rc->strategy != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -156,15 +156,15 @@ TEST(perllsp_static_multilevel_package_call) {
                       "sub caller_sub {\n"
                       "    Acme::Widget::render();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     /* Before the fix this edge was absent (LSP emitted nothing for the
      * multi-level qualified call). */
-    const CBMResolvedCall *rc =
+    const LSMResolvedCall *rc =
         find_resolved_with_strategy(r, "main.caller_sub", "main.render", "perl_static_call");
     ASSERT(rc != NULL);
     ASSERT(rc->strategy != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -175,10 +175,10 @@ TEST(perllsp_self_method) {
                       "sub new { return bless {}, shift; }\n"
                       "sub render { my $self = shift; $self->draw(); }\n"
                       "sub draw { return 1; }\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.render", "main.draw") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -198,10 +198,10 @@ TEST(perllsp_isa_inheritance) {
                       "    my $d = Derived->new;\n"
                       "    $d->speak;\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.run", "main.speak") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -218,10 +218,10 @@ TEST(perllsp_use_parent_inheritance) {
                       "    my $c = Child->new;\n"
                       "    $c->greet;\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.run", "main.greet") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -238,10 +238,10 @@ TEST(perllsp_use_base_inheritance) {
                       "    my $c = Child->new;\n"
                       "    $c->greet;\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.run", "main.greet") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -257,10 +257,10 @@ TEST(perllsp_exported_function) {
                       "sub run {\n"
                       "    func();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.run", "main.func") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -273,7 +273,7 @@ TEST(perllsp_exported_function) {
  * import never resolved. The import target must be dotted to match. */
 TEST(perllsp_cpan_exported_function) {
     /* blessed is a curated CPAN export (Scalar::Util) seeded by
-     * cbm_perl_stdlib_register as "Scalar.Util.blessed". The bare call must
+     * lsm_perl_stdlib_register as "Scalar.Util.blessed". The bare call must
      * resolve to that seeded registry symbol via the Exporter import map. */
     const char *src = "package main;\n"
                       "use Scalar::Util qw(blessed);\n"
@@ -281,11 +281,11 @@ TEST(perllsp_cpan_exported_function) {
                       "    my $x = bless {}, 'Foo';\n"
                       "    blessed($x);\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     /* Resolves to the dotted registry QN Scalar.Util.blessed. */
     ASSERT(require_resolved(r, "main.run", "Scalar.Util.blessed") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -299,10 +299,10 @@ TEST(perllsp_require_fallback) {
                       "    require Foo;\n"
                       "    Foo->bar();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "main.run", "main.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -325,13 +325,13 @@ TEST(perllsp_super_dispatch) {
                       "    my $self = shift;\n"
                       "    return $self->SUPER::greet();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     /* The SUPER:: call resolves to a greet sub via the dedicated strategy. */
-    const CBMResolvedCall *rc =
+    const LSMResolvedCall *rc =
         find_resolved_with_strategy(r, "main.greet", "main.greet", "perl_method_super");
     ASSERT(rc != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -344,10 +344,10 @@ TEST(perllsp_super_no_parent_no_edge) {
                       "    my $self = shift;\n"
                       "    return $self->SUPER::greet();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     ASSERT(find_resolved_with_strategy(r, "main.greet", "greet", "perl_method_super") == NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -363,13 +363,13 @@ TEST(perllsp_unindexed_receiver_emits_block) {
                       "    $thing->do_work();\n"
                       "    Unknown::Pkg->mystery();\n"
                       "}\n";
-    CBMFileResult *r = extract_perl(src);
+    LSMFileResult *r = extract_perl(src);
     ASSERT(r);
     /* No edge for the untyped scalar receiver. */
     ASSERT(find_resolved(r, "main.run", "do_work") < 0);
     /* No edge for the unindexed package receiver. */
     ASSERT(find_resolved(r, "main.run", "mystery") < 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -397,15 +397,15 @@ TEST(perllsp_repeated_target_calls_join_by_exact_site) {
     const uint32_t second_start = (uint32_t)(second_site - source);
     const uint32_t second_end = second_start + (uint32_t)strlen(call_text);
 
-    CBMFileResult *r = extract_perl(source);
+    LSMFileResult *r = extract_perl(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *first_call = NULL;
-    const CBMCall *second_call = NULL;
+    const LSMCall *first_call = NULL;
+    const LSMCall *second_call = NULL;
     int render_carriers = 0;
     int zero_span_carriers = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, "main.occurrence_probe") ||
             !call->callee_name || !strstr(call->callee_name, "render")) {
             continue;
@@ -425,13 +425,13 @@ TEST(perllsp_repeated_target_calls_join_by_exact_site) {
     ASSERT_NOT_NULL(second_call);
     ASSERT_TRUE(first_call != second_call);
 
-    const CBMResolvedCall *first_semantic = NULL;
-    const CBMResolvedCall *second_semantic = NULL;
+    const LSMResolvedCall *first_semantic = NULL;
+    const LSMResolvedCall *second_semantic = NULL;
     int render_semantics = 0;
     int zero_span_semantics = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
             !strstr(rc->caller_qn, "main.occurrence_probe") || !rc->callee_qn ||
             !strstr(rc->callee_qn, "render")) {
             continue;
@@ -452,14 +452,14 @@ TEST(perllsp_repeated_target_calls_join_by_exact_site) {
     ASSERT_TRUE(first_semantic != second_semantic);
     ASSERT_STR_EQ(first_semantic->callee_qn, second_semantic->callee_qn);
 
-    const CBMResolvedCall *first_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, first_call, false);
-    const CBMResolvedCall *second_joined =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, second_call, false);
+    const LSMResolvedCall *first_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, first_call, false);
+    const LSMResolvedCall *second_joined =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, second_call, false);
     ASSERT_TRUE(first_joined == first_semantic);
     ASSERT_TRUE(second_joined == second_semantic);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -478,13 +478,13 @@ static int assert_perl_repeated_exact_join(const char *source, const char *calle
     const uint32_t ends[2] = {starts[0] + (uint32_t)strlen(call_text),
                               starts[1] + (uint32_t)strlen(call_text)};
 
-    CBMFileResult *r = extract_perl(source);
+    LSMFileResult *r = extract_perl(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *calls[2] = {NULL, NULL};
+    const LSMCall *calls[2] = {NULL, NULL};
     int carrier_count = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, caller_fragment) ||
             !call->callee_name || !strstr(call->callee_name, callee_fragment)) {
             continue;
@@ -501,12 +501,12 @@ static int assert_perl_repeated_exact_join(const char *source, const char *calle
     ASSERT_NOT_NULL(calls[0]);
     ASSERT_NOT_NULL(calls[1]);
 
-    const CBMResolvedCall *semantics[2] = {NULL, NULL};
+    const LSMResolvedCall *semantics[2] = {NULL, NULL};
     int semantic_count = 0;
     int zero_span_semantics = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *resolved = &r->resolved_calls.items[i];
-        if (resolved->kind != CBM_RESOLVED_INVOCATION || resolved->confidence <= 0.0f ||
+        const LSMResolvedCall *resolved = &r->resolved_calls.items[i];
+        if (resolved->kind != LSM_RESOLVED_INVOCATION || resolved->confidence <= 0.0f ||
             !resolved->caller_qn || !strstr(resolved->caller_qn, caller_fragment) ||
             !resolved->callee_qn || !strstr(resolved->callee_qn, callee_fragment)) {
             continue;
@@ -527,12 +527,12 @@ static int assert_perl_repeated_exact_join(const char *source, const char *calle
     ASSERT_NOT_NULL(semantics[0]);
     ASSERT_NOT_NULL(semantics[1]);
     ASSERT_STR_EQ(semantics[0]->callee_qn, semantics[1]->callee_qn);
-    ASSERT_TRUE(cbm_pipeline_find_lsp_resolution(&r->resolved_calls, calls[0], false) ==
+    ASSERT_TRUE(lsm_pipeline_find_lsp_resolution(&r->resolved_calls, calls[0], false) ==
                 semantics[0]);
-    ASSERT_TRUE(cbm_pipeline_find_lsp_resolution(&r->resolved_calls, calls[1], false) ==
+    ASSERT_TRUE(lsm_pipeline_find_lsp_resolution(&r->resolved_calls, calls[1], false) ==
                 semantics[1]);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 

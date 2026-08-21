@@ -58,30 +58,30 @@ enum {
 
 /* ── Globals ────────────────────────────────────────────────────────────── */
 
-cbm_query_stats_t g_query_stats = {0};
+lsm_query_stats_t g_query_stats = {0};
 static atomic_bool g_diag_stop = false;
 static atomic_bool g_diag_done = false;
-static cbm_thread_t g_diag_thread;
+static lsm_thread_t g_diag_thread;
 static bool g_diag_started = false;
 static bool g_diag_abandoned = false;
 static time_t g_start_time = 0;
-static cbm_private_lock_directory_t *g_diag_directory = NULL;
+static lsm_private_lock_directory_t *g_diag_directory = NULL;
 #ifndef _WIN32
 static int g_diag_directory_fd = -1;
 #endif
-static char g_diag_directory_path[CBM_PATH_MAX] = "";
-static char g_diag_path[CBM_PATH_MAX] = "";
-static char g_diag_ndjson_path[CBM_PATH_MAX] = "";
+static char g_diag_directory_path[LSM_PATH_MAX] = "";
+static char g_diag_path[LSM_PATH_MAX] = "";
+static char g_diag_ndjson_path[LSM_PATH_MAX] = "";
 static size_t g_diag_ndjson_size = 0;
 
-#ifdef CBM_DIAGNOSTICS_ENABLE_TEST_API
+#ifdef LSM_DIAGNOSTICS_ENABLE_TEST_API
 static atomic_bool g_diag_test_hold_writer = false;
 static atomic_bool g_diag_test_writer_reached = false;
 #endif
 
 /* ── Query stats ────────────────────────────────────────────────────────── */
 
-void cbm_diag_record_query(long long duration_us, bool is_error) {
+void lsm_diag_record_query(long long duration_us, bool is_error) {
     atomic_fetch_add(&g_query_stats.count, 1);
     atomic_fetch_add(&g_query_stats.time_us, duration_us);
     if (is_error) {
@@ -102,7 +102,7 @@ static int count_open_fds(void) {
     struct dirent **entries = NULL;
     int n = scandir("/proc/self/fd", &entries, NULL, NULL);
     if (n < 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     for (int i = 0; i < n; i++) {
         free(entries[i]);
@@ -113,7 +113,7 @@ static int count_open_fds(void) {
     struct dirent **entries = NULL;
     int n = scandir("/dev/fd", &entries, NULL, NULL);
     if (n < 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     for (int i = 0; i < n; i++) {
         free(entries[i]);
@@ -121,7 +121,7 @@ static int count_open_fds(void) {
     free(entries);
     return n - PAIR_LEN;
 #else
-    return CBM_NOT_FOUND;
+    return LSM_NOT_FOUND;
 #endif
 }
 
@@ -131,7 +131,7 @@ static int count_open_fds(void) {
  * only measurement that separates "the allocator holds committed-but-free
  * pages" (fragmentation / slice granularity) from "these blocks are still
  * live" (a real leak) — opposite conclusions that process-level RSS and
- * committed bytes cannot tell apart. Off unless CBM_MEM_STATS=1. */
+ * committed bytes cannot tell apart. Off unless LSM_MEM_STATS=1. */
 static void diag_stats_write(const char *text, void *arg) {
     FILE *sink = arg;
     if (sink && text) {
@@ -149,11 +149,11 @@ static void diag_stats_write(const char *text, void *arg) {
  * O_NOFOLLOW is belt-and-braces for the same window on POSIX. Mode 0600: the
  * snapshot describes this process's heap layout, so it is owner-only. */
 static FILE *diag_open_private_stats_file(const char *path) {
-    (void)cbm_unlink(path);
+    (void)lsm_unlink(path);
 #ifdef _WIN32
-    /* _wopen mirrors cbm_mkstemp's Windows contract — the ANSI CRT interprets
+    /* _wopen mirrors lsm_mkstemp's Windows contract — the ANSI CRT interprets
      * the UTF-8 bytes of a non-ASCII %TEMP% in the local codepage and fails. */
-    wchar_t *wide = cbm_path_to_wide(path);
+    wchar_t *wide = lsm_path_to_wide(path);
     if (!wide) {
         return NULL;
     }
@@ -186,18 +186,18 @@ static FILE *diag_open_private_stats_file(const char *path) {
 }
 
 static void diag_write_allocator_stats(void) {
-    char flag[CBM_SZ_16];
-    if (cbm_safe_getenv("CBM_MEM_STATS", flag, sizeof(flag), NULL) == NULL || flag[0] != '1') {
+    char flag[LSM_SZ_16];
+    if (lsm_safe_getenv("LSM_MEM_STATS", flag, sizeof(flag), NULL) == NULL || flag[0] != '1') {
         return;
     }
-    char path[CBM_PATH_MAX];
+    char path[LSM_PATH_MAX];
     /* Deliberately NOT inside the diagnostics directory: that tree is
      * owner-private with anchored (openat-based) writes on POSIX, which a plain
      * path-based open does not satisfy. This file is a developer diagnostic, so
      * a predictable temp path keeps it working identically on every platform —
      * diag_open_private_stats_file is what makes that path safe to write. */
     int written =
-        snprintf(path, sizeof(path), "%s/cbm-allocator-stats-%d.txt", cbm_tmpdir(), (int)getpid());
+        snprintf(path, sizeof(path), "%s/lsm-allocator-stats-%d.txt", lsm_tmpdir(), (int)getpid());
     if (written <= 0 || (size_t)written >= sizeof(path)) {
         return;
     }
@@ -236,23 +236,23 @@ static void diag_directory_close(bool remove_directory) {
         g_diag_directory_fd = -1;
     }
 #endif
-    cbm_private_lock_directory_close(g_diag_directory);
+    lsm_private_lock_directory_close(g_diag_directory);
     g_diag_directory = NULL;
     if (remove_directory && g_diag_directory_path[0] != '\0') {
-        (void)cbm_rmdir(g_diag_directory_path);
+        (void)lsm_rmdir(g_diag_directory_path);
     }
 }
 
 /* Diagnostics placement honors the documented contract ($TMPDIR, /tmp
- * fallback) without touching cbm_tmpdir(), whose many other callers keep
+ * fallback) without touching lsm_tmpdir(), whose many other callers keep
  * their established behavior. Windows already resolves the real user temp. */
 static const char *diag_tmp_base(char *buffer, size_t size) {
 #ifdef _WIN32
     (void)buffer;
     (void)size;
-    return cbm_tmpdir();
+    return lsm_tmpdir();
 #else
-    cbm_safe_getenv("TMPDIR", buffer, size, NULL);
+    lsm_safe_getenv("TMPDIR", buffer, size, NULL);
     if (buffer[0] != '\0') {
         return buffer;
     }
@@ -261,24 +261,24 @@ static const char *diag_tmp_base(char *buffer, size_t size) {
 }
 
 static bool diag_directory_prepare(void) {
-    char tmp_base[CBM_PATH_MAX];
-    char directory_template[CBM_PATH_MAX];
+    char tmp_base[LSM_PATH_MAX];
+    char directory_template[LSM_PATH_MAX];
     int written =
-        snprintf(directory_template, sizeof(directory_template), "%s/cbm-diagnostics-%d-XXXXXX",
+        snprintf(directory_template, sizeof(directory_template), "%s/lsm-diagnostics-%d-XXXXXX",
                  diag_tmp_base(tmp_base, sizeof(tmp_base)), (int)getpid());
     if (written <= 0 || (size_t)written >= sizeof(directory_template) ||
-        !cbm_mkdtemp(directory_template)) {
+        !lsm_mkdtemp(directory_template)) {
         return false;
     }
     written =
         snprintf(g_diag_directory_path, sizeof(g_diag_directory_path), "%s", directory_template);
     if (written <= 0 || (size_t)written >= sizeof(g_diag_directory_path)) {
-        (void)cbm_rmdir(directory_template);
+        (void)lsm_rmdir(directory_template);
         return false;
     }
 
 #ifdef _WIN32
-    wchar_t *wide_directory = cbm_path_to_wide(g_diag_directory_path);
+    wchar_t *wide_directory = lsm_path_to_wide(g_diag_directory_path);
     HANDLE handle =
         wide_directory
             ? CreateFileW(wide_directory, FILE_READ_ATTRIBUTES | READ_CONTROL,
@@ -287,11 +287,11 @@ static bool diag_directory_prepare(void) {
                           NULL)
             : INVALID_HANDLE_VALUE;
     free(wide_directory);
-    cbm_private_file_lock_status_t status = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t status = LSM_PRIVATE_FILE_LOCK_IO;
     if (handle != INVALID_HANDLE_VALUE) {
-        status = cbm_private_lock_directory_adopt_windows(handle, g_diag_directory_path,
+        status = lsm_private_lock_directory_adopt_windows(handle, g_diag_directory_path,
                                                           &g_diag_directory);
-        if (status != CBM_PRIVATE_FILE_LOCK_OK) {
+        if (status != LSM_PRIVATE_FILE_LOCK_OK) {
             (void)CloseHandle(handle);
         }
     }
@@ -305,11 +305,11 @@ static bool diag_directory_prepare(void) {
         validation_fd >= 0 && output_fd >= 0 && fstat(validation_fd, &validation_state) == 0 &&
         fstat(output_fd, &output_state) == 0 && validation_state.st_dev == output_state.st_dev &&
         validation_state.st_ino == output_state.st_ino;
-    cbm_private_file_lock_status_t status = CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_status_t status = LSM_PRIVATE_FILE_LOCK_IO;
     if (same_directory) {
-        status = cbm_private_lock_directory_adopt_posix(validation_fd, g_diag_directory_path,
+        status = lsm_private_lock_directory_adopt_posix(validation_fd, g_diag_directory_path,
                                                         &g_diag_directory);
-        if (status == CBM_PRIVATE_FILE_LOCK_OK) {
+        if (status == LSM_PRIVATE_FILE_LOCK_OK) {
             validation_fd = -1;
             g_diag_directory_fd = output_fd;
             output_fd = -1;
@@ -323,7 +323,7 @@ static bool diag_directory_prepare(void) {
     }
 #endif
 
-    if (status != CBM_PRIVATE_FILE_LOCK_OK || !diag_set_output_paths()) {
+    if (status != LSM_PRIVATE_FILE_LOCK_OK || !diag_set_output_paths()) {
         diag_directory_close(true);
         return false;
     }
@@ -348,11 +348,11 @@ static bool diag_win_handle_valid(HANDLE handle) {
 }
 
 static bool diag_write_file(const char *base_name, const char *data, size_t length, bool append) {
-    char path[CBM_PATH_MAX];
+    char path[LSM_PATH_MAX];
     if (!diag_full_path(base_name, path, sizeof(path))) {
         return false;
     }
-    wchar_t *wide_path = cbm_path_to_wide(path);
+    wchar_t *wide_path = lsm_path_to_wide(path);
     DWORD access = append ? FILE_APPEND_DATA : GENERIC_WRITE;
     HANDLE handle = wide_path
                         ? CreateFileW(wide_path, access, FILE_SHARE_READ, NULL, CREATE_NEW,
@@ -387,17 +387,17 @@ static bool diag_write_file(const char *base_name, const char *data, size_t leng
 }
 
 static bool diag_native_rename(const char *source_name, const char *destination_name) {
-    char source[CBM_PATH_MAX];
-    char destination[CBM_PATH_MAX];
+    char source[LSM_PATH_MAX];
+    char destination[LSM_PATH_MAX];
     return diag_full_path(source_name, source, sizeof(source)) &&
            diag_full_path(destination_name, destination, sizeof(destination)) &&
-           cbm_rename_replace(source, destination) == 0;
+           lsm_rename_replace(source, destination) == 0;
 }
 
 static void diag_native_unlink(const char *base_name) {
-    char path[CBM_PATH_MAX];
+    char path[LSM_PATH_MAX];
     if (diag_full_path(base_name, path, sizeof(path))) {
-        (void)cbm_unlink(path);
+        (void)lsm_unlink(path);
     }
 }
 
@@ -407,7 +407,7 @@ static bool diag_posix_file_valid(int descriptor) {
     struct stat state;
     return descriptor >= 0 && fstat(descriptor, &state) == 0 && S_ISREG(state.st_mode) &&
            state.st_uid == geteuid() && state.st_nlink == 1 && (state.st_mode & 07777) == 0600 &&
-           cbm_macos_extended_acl_fd_is_empty(descriptor);
+           lsm_macos_extended_acl_fd_is_empty(descriptor);
 }
 
 static bool diag_write_file(const char *base_name, const char *data, size_t length, bool append) {
@@ -461,13 +461,13 @@ static void diag_sleep_ms(unsigned int milliseconds) {
         .tv_sec = (time_t)(milliseconds / 1000U),
         .tv_nsec = (long)((milliseconds % 1000U) * 1000000U),
     };
-    (void)cbm_nanosleep(&delay, NULL);
+    (void)lsm_nanosleep(&delay, NULL);
 }
 
 static void diag_wait_for_interval(void) {
-    uint64_t deadline = cbm_now_ms() + DIAG_INTERVAL_MS;
+    uint64_t deadline = lsm_now_ms() + DIAG_INTERVAL_MS;
     while (!atomic_load_explicit(&g_diag_stop, memory_order_acquire)) {
-        uint64_t now = cbm_now_ms();
+        uint64_t now = lsm_now_ms();
         if (now >= deadline) {
             return;
         }
@@ -478,7 +478,7 @@ static void diag_wait_for_interval(void) {
     }
 }
 
-#ifdef CBM_DIAGNOSTICS_ENABLE_TEST_API
+#ifdef LSM_DIAGNOSTICS_ENABLE_TEST_API
 static void diag_test_pause_writer(void) {
     if (!atomic_load_explicit(&g_diag_test_hold_writer, memory_order_acquire)) {
         return;
@@ -498,7 +498,7 @@ static void append_trajectory(long uptime, size_t rss, size_t peak_rss, size_t c
         }
         g_diag_ndjson_size = 0;
     }
-    char line[CBM_SZ_512];
+    char line[LSM_SZ_512];
     int length = snprintf(line, sizeof(line),
                           "{\"uptime_s\":%ld,\"rss\":%zu,\"peak_rss\":%zu,\"committed\":%zu,"
                           "\"peak_committed\":%zu,\"page_faults\":%zu,\"fd\":%d,\"queries\":%d}\n",
@@ -511,7 +511,7 @@ static void append_trajectory(long uptime, size_t rss, size_t peak_rss, size_t c
 }
 
 static void write_diagnostics(void) {
-#ifdef CBM_DIAGNOSTICS_ENABLE_TEST_API
+#ifdef LSM_DIAGNOSTICS_ENABLE_TEST_API
     diag_test_pause_writer();
 #endif
     if (atomic_load_explicit(&g_diag_stop, memory_order_acquire)) {
@@ -533,11 +533,11 @@ static void write_diagnostics(void) {
      * counter — deliberately tuned low here (purge_decommits=1, purge_delay=0)
      * and able to go transiently NEGATIVE under purge, which wraps through
      * size_t and printed rss_bytes of ~2^64 (soak read it as a 17-exabyte
-     * "leak"). cbm_mem_rss()/cbm_mem_peak_rss() already encode the whole
+     * "leak"). lsm_mem_rss()/lsm_mem_peak_rss() already encode the whole
      * lesson: /proc statm is authoritative on Linux, mimalloc is correct on
      * macOS/Windows, and peak is reconciled to never undercut current. */
-    current_rss = cbm_mem_rss();
-    peak_rss = cbm_mem_peak_rss();
+    current_rss = lsm_mem_rss();
+    peak_rss = lsm_mem_peak_rss();
 
     int fds = count_open_fds();
     time_t now = time(NULL);
@@ -553,19 +553,19 @@ static void write_diagnostics(void) {
      * is what keeps this honest — see mem.h. */
     diag_write_allocator_stats();
 
-    cbm_mem_map_t map;
-    (void)cbm_mem_map_collect_os(&map);
+    lsm_mem_map_t map;
+    (void)lsm_mem_map_collect_os(&map);
     size_t residual =
         map.os_committed_bytes > map.live_bytes ? map.os_committed_bytes - map.live_bytes : 0;
-    char buckets[CBM_SZ_512];
+    char buckets[LSM_SZ_512];
     int bucket_length = 0;
     for (int i = 0;
-         i < CBM_MEM_MAP_BUCKETS && bucket_length >= 0 && (size_t)bucket_length < sizeof(buckets);
+         i < LSM_MEM_MAP_BUCKETS && bucket_length >= 0 && (size_t)bucket_length < sizeof(buckets);
          i++) {
         int written =
             snprintf(buckets + bucket_length, sizeof(buckets) - (size_t)bucket_length,
                      "%s{\"limit\": %zu, \"bytes\": %zu, \"blocks\": %zu}", i == 0 ? "" : ", ",
-                     cbm_mem_map_bucket_limit(i), map.bucket_bytes[i], map.bucket_blocks[i]);
+                     lsm_mem_map_bucket_limit(i), map.bucket_bytes[i], map.bucket_blocks[i]);
         if (written < 0) {
             break;
         }
@@ -573,13 +573,13 @@ static void write_diagnostics(void) {
     }
 
     /* Phase attribution: which bracketed code path the committed bytes stayed
-     * in. Empty unless CBM_MEM_PHASES=1. */
-    char phases[CBM_SZ_1K];
-    if (cbm_mem_phase_report_json(phases, sizeof(phases)) <= 0) {
+     * in. Empty unless LSM_MEM_PHASES=1. */
+    char phases[LSM_SZ_1K];
+    if (lsm_mem_phase_report_json(phases, sizeof(phases)) <= 0) {
         phases[0] = '\0';
     }
 
-    char snapshot[CBM_SZ_4K];
+    char snapshot[LSM_SZ_4K];
     int length =
         snprintf(snapshot, sizeof(snapshot),
                  "{\n"
@@ -639,9 +639,9 @@ static void diag_cleanup_live_files(void) {
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-bool cbm_diag_start(void) {
-    char env_buf[CBM_SZ_32] = "";
-    cbm_safe_getenv("CBM_DIAGNOSTICS", env_buf, sizeof(env_buf), NULL);
+bool lsm_diag_start(void) {
+    char env_buf[LSM_SZ_32] = "";
+    lsm_safe_getenv("LSM_DIAGNOSTICS", env_buf, sizeof(env_buf), NULL);
     if (env_buf[0] == '\0' || (strcmp(env_buf, "1") != 0 && strcmp(env_buf, "true") != 0) ||
         g_diag_started || g_diag_abandoned) {
         return false;
@@ -651,35 +651,35 @@ bool cbm_diag_start(void) {
     g_diag_ndjson_size = 0;
     atomic_store_explicit(&g_diag_stop, false, memory_order_release);
     atomic_store_explicit(&g_diag_done, false, memory_order_release);
-#ifdef CBM_DIAGNOSTICS_ENABLE_TEST_API
+#ifdef LSM_DIAGNOSTICS_ENABLE_TEST_API
     atomic_store_explicit(&g_diag_test_writer_reached, false, memory_order_release);
 #endif
     if (!diag_directory_prepare()) {
         return false;
     }
-    if (cbm_thread_create(&g_diag_thread, 0, diag_thread_fn, NULL) != 0) {
+    if (lsm_thread_create(&g_diag_thread, 0, diag_thread_fn, NULL) != 0) {
         diag_directory_close(true);
         return false;
     }
 
     g_diag_started = true;
-    char interval[CBM_SZ_32];
+    char interval[LSM_SZ_32];
     (void)snprintf(interval, sizeof(interval), "%d", DIAG_INTERVAL_MS / 1000);
-    /* Discovery must survive CBM_LOG_LEVEL suppression and paths containing
+    /* Discovery must survive LSM_LOG_LEVEL suppression and paths containing
      * spaces: a control record is the only announced copy of these paths. */
-    cbm_log_control("diagnostics.start", "snapshot", g_diag_path, "trajectory", g_diag_ndjson_path,
+    lsm_log_control("diagnostics.start", "snapshot", g_diag_path, "trajectory", g_diag_ndjson_path,
                     "interval_s", interval);
     return true;
 }
 
-void cbm_diag_stop(void) {
+void lsm_diag_stop(void) {
     if (!g_diag_started) {
         return;
     }
     atomic_store_explicit(&g_diag_stop, true, memory_order_release);
 
-    uint64_t deadline = cbm_now_ms() + DIAG_STOP_TIMEOUT_MS;
-    while (!atomic_load_explicit(&g_diag_done, memory_order_acquire) && cbm_now_ms() < deadline) {
+    uint64_t deadline = lsm_now_ms() + DIAG_STOP_TIMEOUT_MS;
+    while (!atomic_load_explicit(&g_diag_done, memory_order_acquire) && lsm_now_ms() < deadline) {
         diag_sleep_ms(DIAG_WAIT_SLICE_MS);
     }
     bool completed = atomic_load_explicit(&g_diag_done, memory_order_acquire);
@@ -687,7 +687,7 @@ void cbm_diag_stop(void) {
         /* The completion publication is the final access to diagnostics
          * state. Detaching avoids turning an already-complete best-effort
          * writer into an unbounded native join during daemon teardown. */
-        (void)cbm_thread_detach(&g_diag_thread);
+        (void)lsm_thread_detach(&g_diag_thread);
         diag_cleanup_live_files();
         diag_directory_close(false);
     } else {
@@ -695,13 +695,13 @@ void cbm_diag_stop(void) {
          * Detach it and intentionally retain all static state until process
          * exit; closing or reusing those handles would create an fd/handle
          * reuse race if the stalled operation later resumes. */
-        (void)cbm_thread_detach(&g_diag_thread);
+        (void)lsm_thread_detach(&g_diag_thread);
         g_diag_abandoned = true;
     }
     g_diag_started = false;
 }
 
-#ifdef CBM_DIAGNOSTICS_ENABLE_TEST_API
+#ifdef LSM_DIAGNOSTICS_ENABLE_TEST_API
 
 static bool diag_test_copy(char *destination, size_t destination_size, const char *source) {
     if (!destination || destination_size == 0) {
@@ -711,26 +711,26 @@ static bool diag_test_copy(char *destination, size_t destination_size, const cha
     return written >= 0 && (size_t)written < destination_size;
 }
 
-bool cbm_diag_test_copy_paths(char *directory, size_t directory_size, char *snapshot,
+bool lsm_diag_test_copy_paths(char *directory, size_t directory_size, char *snapshot,
                               size_t snapshot_size, char *trajectory, size_t trajectory_size) {
     return diag_test_copy(directory, directory_size, g_diag_directory_path) &&
            diag_test_copy(snapshot, snapshot_size, g_diag_path) &&
            diag_test_copy(trajectory, trajectory_size, g_diag_ndjson_path);
 }
 
-void cbm_diag_test_hold_writer(bool hold) {
+void lsm_diag_test_hold_writer(bool hold) {
     atomic_store_explicit(&g_diag_test_hold_writer, hold, memory_order_release);
 }
 
-bool cbm_diag_test_writer_reached(void) {
+bool lsm_diag_test_writer_reached(void) {
     return atomic_load_explicit(&g_diag_test_writer_reached, memory_order_acquire);
 }
 
-bool cbm_diag_test_abandoned(void) {
+bool lsm_diag_test_abandoned(void) {
     return g_diag_abandoned;
 }
 
-bool cbm_diag_test_reset_abandoned(void) {
+bool lsm_diag_test_reset_abandoned(void) {
     if (!g_diag_abandoned || g_diag_started ||
         !atomic_load_explicit(&g_diag_done, memory_order_acquire)) {
         return false;

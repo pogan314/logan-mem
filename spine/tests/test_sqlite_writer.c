@@ -1,25 +1,25 @@
 /*
  * test_sqlite_writer.c — Tests for direct SQLite page writer.
  *
- * Ports from internal/cbm/sqlite_writer_test.go:
+ * Ports from internal/lsm/sqlite_writer_test.go:
  *   TestWriteDB_MinimalData, TestWriteDB_ScaleAndIndexes, TestWriteDB_Empty
  *
- * The page writer (cbm_write_db) constructs B-tree pages directly,
+ * The page writer (lsm_write_db) constructs B-tree pages directly,
  * bypassing the SQL parser entirely. These tests verify integrity.
  */
 #include "../src/foundation/compat.h"
 #include "foundation/compat_fs.h"
 #include "test_framework.h"
-/* sqlite_writer.h is at internal/cbm/ — Makefile adds -Iinternal/cbm */
-#include "sqlite_writer.h" /* CBMDumpNode, CBMDumpEdge, cbm_write_db */
+/* sqlite_writer.h is at internal/lsm/ — Makefile adds -Iinternal/lsm */
+#include "sqlite_writer.h" /* LSMDumpNode, LSMDumpEdge, lsm_write_db */
 #include "sqlite3.h"       /* vendored/sqlite3/ via -Ivendored/sqlite3 */
 #include <unistd.h>
 
 /* ── Helper: create temp file path ─────────────────────────────── */
 
 static int make_temp_db(char *path, size_t pathsz) {
-    snprintf(path, pathsz, "/tmp/cbm_sw_test_XXXXXX");
-    int fd = cbm_mkstemp(path);
+    snprintf(path, pathsz, "/tmp/lsm_sw_test_XXXXXX");
+    int fd = lsm_mkstemp(path);
     if (fd < 0)
         return -1;
     close(fd);
@@ -38,7 +38,7 @@ static int assert_node_name(sqlite3 *db, const char *expected) {
 }
 
 static int write_fixture_file(const char *path, const char *contents) {
-    FILE *fp = cbm_fopen(path, "wb");
+    FILE *fp = lsm_fopen(path, "wb");
     if (!fp) {
         return -1;
     }
@@ -49,7 +49,7 @@ static int write_fixture_file(const char *path, const char *contents) {
 }
 
 static int fixture_file_equals(const char *path, const char *expected) {
-    FILE *fp = cbm_fopen(path, "rb");
+    FILE *fp = lsm_fopen(path, "rb");
     if (!fp) {
         return 0;
     }
@@ -83,21 +83,21 @@ static int count_temp_outputs_for(const char *path) {
         snprintf(base, sizeof(base), "%s", path);
     }
 
-    cbm_dir_t *d = cbm_opendir(dir);
+    lsm_dir_t *d = lsm_opendir(dir);
     if (!d) {
         return -1;
     }
     size_t base_len = strlen(base);
     int count = 0;
-    cbm_dirent_t *ent;
-    while ((ent = cbm_readdir(d)) != NULL) {
+    lsm_dirent_t *ent;
+    while ((ent = lsm_readdir(d)) != NULL) {
         size_t name_len = strlen(ent->name);
         if (name_len > base_len + 5 && strncmp(ent->name, base, base_len) == 0 &&
             strncmp(ent->name + base_len, ".tmp.", 5) == 0) {
             count++;
         }
     }
-    cbm_closedir(d);
+    lsm_closedir(d);
     return count;
 }
 
@@ -107,7 +107,7 @@ TEST(sw_minimal_data) {
     char path[256];
     ASSERT_EQ(make_temp_db(path, sizeof(path)), 0);
 
-    CBMDumpNode nodes[2] = {
+    LSMDumpNode nodes[2] = {
         {.id = 1,
          .project = "test",
          .label = "Module",
@@ -127,7 +127,7 @@ TEST(sw_minimal_data) {
          .end_line = 5,
          .properties = "{}"},
     };
-    CBMDumpEdge edges[1] = {
+    LSMDumpEdge edges[1] = {
         {.id = 1,
          .project = "test",
          .source_id = 1,
@@ -137,7 +137,7 @@ TEST(sw_minimal_data) {
          .url_path = ""},
     };
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 2, edges, 1,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 2, edges, 1,
                           NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -207,7 +207,7 @@ TEST(sw_imports_local_name_unique) {
     char path[256];
     ASSERT_EQ(make_temp_db(path, sizeof(path)), 0);
 
-    CBMDumpNode nodes[2] = {
+    LSMDumpNode nodes[2] = {
         {.id = 1,
          .project = "test",
          .label = "File",
@@ -227,7 +227,7 @@ TEST(sw_imports_local_name_unique) {
          .end_line = 2,
          .properties = "{}"},
     };
-    CBMDumpEdge edges[2] = {
+    LSMDumpEdge edges[2] = {
         {.id = 1,
          .project = "test",
          .source_id = 1,
@@ -246,7 +246,7 @@ TEST(sw_imports_local_name_unique) {
          .local_name = "B"},
     };
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 2, edges, 2,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 2, edges, 2,
                           NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -292,7 +292,7 @@ TEST(sw_scale_and_indexes) {
     ASSERT_EQ(make_temp_db(path, sizeof(path)), 0);
 
     /* 100 nodes across multiple files/labels */
-    CBMDumpNode nodes[100];
+    LSMDumpNode nodes[100];
     const char *labels[] = {"Function", "Method", "Class", "Module", "Variable"};
     const char *files[] = {"alpha.go", "beta.go", "gamma.py", "delta.ts", "epsilon.rs"};
     char names[100][32];
@@ -301,7 +301,7 @@ TEST(sw_scale_and_indexes) {
     for (int i = 0; i < 100; i++) {
         snprintf(names[i], sizeof(names[i]), "sym_%03d", i);
         snprintf(qns[i], sizeof(qns[i]), "proj.pkg.sym_%03d", i);
-        nodes[i] = (CBMDumpNode){
+        nodes[i] = (LSMDumpNode){
             .id = i + 1,
             .project = "proj",
             .label = labels[i % 5],
@@ -316,7 +316,7 @@ TEST(sw_scale_and_indexes) {
 
     /* 200 edges with varied types — build unique (source, target, type) combos */
     const char *edge_types[] = {"CALLS", "DEFINES", "IMPORTS", "IMPLEMENTS", "USES"};
-    CBMDumpEdge edges[200];
+    LSMDumpEdge edges[200];
     char eprops[200][80];
     int edge_count = 0;
     int64_t edge_id = 1;
@@ -350,7 +350,7 @@ TEST(sw_scale_and_indexes) {
 
         snprintf(eprops[edge_count], sizeof(eprops[edge_count]), "{\"weight\":%d}", i);
 
-        edges[edge_count] = (CBMDumpEdge){
+        edges[edge_count] = (LSMDumpEdge){
             .id = edge_id++,
             .project = "proj",
             .source_id = src,
@@ -362,7 +362,7 @@ TEST(sw_scale_and_indexes) {
         edge_count++;
     }
 
-    int rc = cbm_write_db(path, "proj", "/repo", "2026-03-14T12:00:00Z", nodes, 100, edges,
+    int rc = lsm_write_db(path, "proj", "/repo", "2026-03-14T12:00:00Z", nodes, 100, edges,
                           edge_count, NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -460,7 +460,7 @@ TEST(sw_long_index_keys_overflow) {
     longname[LONGN] = '\0';
     snprintf(longqn, LONGN + 16, "test.%s", longname);
 
-    CBMDumpNode nodes[3] = {
+    LSMDumpNode nodes[3] = {
         {.id = 1,
          .project = "test",
          .label = "Module",
@@ -490,7 +490,7 @@ TEST(sw_long_index_keys_overflow) {
          .properties = "{}"},
     };
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 3, NULL, 0,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", nodes, 3, NULL, 0,
                           NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -521,7 +521,7 @@ TEST(sw_empty) {
     char path[256];
     ASSERT_EQ(make_temp_db(path, sizeof(path)), 0);
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", NULL, 0, NULL, 0, NULL,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-03-14T00:00:00Z", NULL, 0, NULL, 0, NULL,
                           0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -547,7 +547,7 @@ TEST(sw_multi_page) {
 
     /* 192 nodes — enough to trigger multi-page B-tree */
     int N = 192;
-    CBMDumpNode nodes[192];
+    LSMDumpNode nodes[192];
     char node_names[192][16];
     char node_qns[192][32];
     char node_files[192][32];
@@ -556,7 +556,7 @@ TEST(sw_multi_page) {
         snprintf(node_names[i], sizeof(node_names[i]), "f%04d", i);
         snprintf(node_qns[i], sizeof(node_qns[i]), "p.f%04d", i);
         snprintf(node_files[i], sizeof(node_files[i]), "pkg%d/file.go", i % 10);
-        nodes[i] = (CBMDumpNode){
+        nodes[i] = (LSMDumpNode){
             .id = (int64_t)(i + 1),
             .project = "p",
             .label = "Function",
@@ -570,7 +570,7 @@ TEST(sw_multi_page) {
     }
 
     int rc =
-        cbm_write_db(path, "p", "/r", "2026-01-01T00:00:00Z", nodes, N, NULL, 0, NULL, 0, NULL, 0);
+        lsm_write_db(path, "p", "/r", "2026-01-01T00:00:00Z", nodes, N, NULL, 0, NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
     sqlite3 *db = NULL;
@@ -634,7 +634,7 @@ TEST(sw_oversized_node) {
     big_props[prop_len - 1] = '"';
     big_props[prop_len] = '\0';
 
-    CBMDumpNode nodes[1] = {{
+    LSMDumpNode nodes[1] = {{
         .id = 1,
         .project = "test",
         .label = "Function",
@@ -646,7 +646,7 @@ TEST(sw_oversized_node) {
         .properties = big_props,
     }};
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-03-28T00:00:00Z", nodes, 1, NULL, 0,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-03-28T00:00:00Z", nodes, 1, NULL, 0,
                           NULL, 0, NULL, 0);
     free(big_props);
     ASSERT_EQ(rc, 0);
@@ -688,18 +688,18 @@ TEST(sw_stream_open_does_not_truncate_destination) {
     const char sentinel[] = "old-db-visible-until-finalize";
     ASSERT_EQ(write_fixture_file(path, sentinel), 0);
 
-    cbm_db_writer_t *w = cbm_writer_open(path);
+    lsm_db_writer_t *w = lsm_writer_open(path);
     ASSERT(w != NULL);
 
     char buf[64] = {0};
-    FILE *fp = cbm_fopen(path, "rb");
+    FILE *fp = lsm_fopen(path, "rb");
     ASSERT(fp != NULL);
     size_t n = fread(buf, 1, sizeof(sentinel) - 1, fp);
     ASSERT_EQ(fclose(fp), 0);
     ASSERT_EQ(n, sizeof(sentinel) - 1);
     ASSERT_EQ(memcmp(buf, sentinel, sizeof(sentinel) - 1), 0);
 
-    int rc = cbm_writer_finalize(w, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0,
+    int rc = lsm_writer_finalize(w, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0,
                                  NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -715,7 +715,7 @@ TEST(sw_stream_open_does_not_truncate_destination) {
     sqlite3_finalize(stmt);
 
     sqlite3_close(db);
-    cbm_unlink(path);
+    lsm_unlink(path);
     PASS();
 }
 
@@ -731,7 +731,7 @@ TEST(sw_publish_removes_destination_sidecars) {
     ASSERT_EQ(write_fixture_file(wal, "stale-wal"), 0);
     ASSERT_EQ(write_fixture_file(shm, "stale-shm"), 0);
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
                           0, NULL, 0);
     ASSERT_EQ(rc, 0);
     ASSERT(!fixture_file_equals(wal, "stale-wal"));
@@ -749,14 +749,14 @@ TEST(sw_publish_removes_destination_sidecars) {
     sqlite3_finalize(stmt);
 
     sqlite3_close(db);
-    cbm_unlink(path);
+    lsm_unlink(path);
     PASS();
 }
 
 TEST(sw_publish_failure_preserves_destination_sidecars) {
     char path[256];
-    snprintf(path, sizeof(path), "/tmp/cbm_sw_dir_XXXXXX");
-    ASSERT(cbm_mkdtemp(path) != NULL);
+    snprintf(path, sizeof(path), "/tmp/lsm_sw_dir_XXXXXX");
+    ASSERT(lsm_mkdtemp(path) != NULL);
 
     char wal[320];
     char shm[320];
@@ -765,7 +765,7 @@ TEST(sw_publish_failure_preserves_destination_sidecars) {
     ASSERT_EQ(write_fixture_file(wal, "live-wal"), 0);
     ASSERT_EQ(write_fixture_file(shm, "live-shm"), 0);
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
                           0, NULL, 0);
     ASSERT(rc != 0);
 
@@ -773,16 +773,16 @@ TEST(sw_publish_failure_preserves_destination_sidecars) {
     ASSERT(fixture_file_equals(wal, "live-wal"));
     ASSERT(fixture_file_equals(shm, "live-shm"));
 
-    cbm_unlink(wal);
-    cbm_unlink(shm);
-    cbm_rmdir(path);
+    lsm_unlink(wal);
+    lsm_unlink(shm);
+    lsm_rmdir(path);
     PASS();
 }
 
 TEST(sw_publish_supports_non_ascii_path) {
     char dir[256];
-    snprintf(dir, sizeof(dir), "/tmp/cbm_sw_utf8_XXXXXX");
-    ASSERT(cbm_mkdtemp(dir) != NULL);
+    snprintf(dir, sizeof(dir), "/tmp/lsm_sw_utf8_XXXXXX");
+    ASSERT(lsm_mkdtemp(dir) != NULL);
 
     char path[320];
     char wal[384];
@@ -793,7 +793,7 @@ TEST(sw_publish_supports_non_ascii_path) {
     ASSERT_EQ(write_fixture_file(wal, "stale-wal"), 0);
     ASSERT_EQ(write_fixture_file(shm, "stale-shm"), 0);
 
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", NULL, 0, NULL, 0, NULL,
                           0, NULL, 0);
     ASSERT_EQ(rc, 0);
     ASSERT(!fixture_file_equals(wal, "stale-wal"));
@@ -809,8 +809,8 @@ TEST(sw_publish_supports_non_ascii_path) {
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 
-    cbm_unlink(path);
-    cbm_rmdir(dir);
+    lsm_unlink(path);
+    lsm_rmdir(dir);
     PASS();
 }
 
@@ -821,7 +821,7 @@ TEST(sw_publish_preserves_live_reader) {
     char path[256];
     ASSERT_EQ(make_temp_db(path, sizeof(path)), 0);
 
-    CBMDumpNode old_nodes[1] = {{
+    LSMDumpNode old_nodes[1] = {{
         .id = 1,
         .project = "test",
         .label = "Function",
@@ -832,7 +832,7 @@ TEST(sw_publish_preserves_live_reader) {
         .end_line = 2,
         .properties = "{}",
     }};
-    int rc = cbm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", old_nodes, 1, NULL, 0,
+    int rc = lsm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:00Z", old_nodes, 1, NULL, 0,
                           NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -845,7 +845,7 @@ TEST(sw_publish_preserves_live_reader) {
     ASSERT_EQ(rc, SQLITE_OK);
     ASSERT_EQ(assert_node_name(reader, "old_fn"), 0);
 
-    CBMDumpNode new_nodes[1] = {{
+    LSMDumpNode new_nodes[1] = {{
         .id = 1,
         .project = "test",
         .label = "Function",
@@ -856,7 +856,7 @@ TEST(sw_publish_preserves_live_reader) {
         .end_line = 2,
         .properties = "{}",
     }};
-    rc = cbm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:01Z", new_nodes, 1, NULL, 0,
+    rc = lsm_write_db(path, "test", "/tmp/test", "2026-07-07T00:00:01Z", new_nodes, 1, NULL, 0,
                       NULL, 0, NULL, 0);
     ASSERT_EQ(rc, 0);
 
@@ -871,7 +871,7 @@ TEST(sw_publish_preserves_live_reader) {
     ASSERT_EQ(assert_node_name(db, "new_fn"), 0);
     sqlite3_close(db);
 
-    cbm_unlink(path);
+    lsm_unlink(path);
     PASS();
 }
 

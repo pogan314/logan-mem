@@ -24,8 +24,8 @@ static int suite_name_contains_token(const char *name, const char *token, size_t
     return 0;
 }
 
-int cbm_suite_enabled(const char *name) {
-    const char *only = getenv("CBM_REPRO_ONLY");
+int lsm_suite_enabled(const char *name) {
+    const char *only = getenv("LSM_REPRO_ONLY");
     if (!only || !*only) {
         return 1;
     }
@@ -48,24 +48,24 @@ int cbm_suite_enabled(const char *name) {
 }
 
 static char *save_selector(void) {
-    const char *prior = getenv("CBM_REPRO_ONLY");
-    return prior ? cbm_strdup(prior) : NULL;
+    const char *prior = getenv("LSM_REPRO_ONLY");
+    return prior ? lsm_strdup(prior) : NULL;
 }
 
 static void restore_selector(char *saved) {
     if (saved) {
-        cbm_setenv("CBM_REPRO_ONLY", saved, 1);
+        lsm_setenv("LSM_REPRO_ONLY", saved, 1);
         free(saved);
     } else {
-        cbm_unsetenv("CBM_REPRO_ONLY");
+        lsm_unsetenv("LSM_REPRO_ONLY");
     }
 }
 
 /* The documented selector accepts suite-name substrings. */
 TEST(repro_runner_filter_accepts_suite_substring) {
     char *saved = save_selector();
-    cbm_setenv("CBM_REPRO_ONLY", "call_argument", 1);
-    int enabled = cbm_suite_enabled("repro_call_argument_usages");
+    lsm_setenv("LSM_REPRO_ONLY", "call_argument", 1);
+    int enabled = lsm_suite_enabled("repro_call_argument_usages");
     restore_selector(saved);
     if (!enabled)
         fprintf(stderr, "  [repro-filter] invariant=suite_substring_not_matched\n");
@@ -75,9 +75,9 @@ TEST(repro_runner_filter_accepts_suite_substring) {
 
 TEST(repro_runner_filter_accepts_comma_list) {
     char *saved = save_selector();
-    cbm_setenv("CBM_REPRO_ONLY", "language_registry,call_argument", 1);
-    int first = cbm_suite_enabled("repro_language_registry");
-    int second = cbm_suite_enabled("repro_call_argument_usages");
+    lsm_setenv("LSM_REPRO_ONLY", "language_registry,call_argument", 1);
+    int first = lsm_suite_enabled("repro_language_registry");
+    int second = lsm_suite_enabled("repro_call_argument_usages");
     restore_selector(saved);
     if (!first || !second)
         fprintf(stderr, "  [repro-filter] invariant=comma_list_not_matched\n");
@@ -87,9 +87,9 @@ TEST(repro_runner_filter_accepts_comma_list) {
 
 TEST(repro_runner_filter_accepts_space_list) {
     char *saved = save_selector();
-    cbm_setenv("CBM_REPRO_ONLY", "language_registry call_argument", 1);
-    int first = cbm_suite_enabled("repro_language_registry");
-    int second = cbm_suite_enabled("repro_call_argument_usages");
+    lsm_setenv("LSM_REPRO_ONLY", "language_registry call_argument", 1);
+    int first = lsm_suite_enabled("repro_language_registry");
+    int second = lsm_suite_enabled("repro_call_argument_usages");
     restore_selector(saved);
     if (!first || !second)
         fprintf(stderr, "  [repro-filter] invariant=space_list_not_matched\n");
@@ -99,8 +99,8 @@ TEST(repro_runner_filter_accepts_space_list) {
 
 TEST(repro_runner_filter_rejects_nonmatch) {
     char *saved = save_selector();
-    cbm_setenv("CBM_REPRO_ONLY", "language_registry", 1);
-    int enabled = cbm_suite_enabled("repro_call_argument_usages");
+    lsm_setenv("LSM_REPRO_ONLY", "language_registry", 1);
+    int enabled = lsm_suite_enabled("repro_call_argument_usages");
     restore_selector(saved);
     if (enabled)
         fprintf(stderr, "  [repro-filter] invariant=nonmatch_enabled\n");
@@ -110,10 +110,10 @@ TEST(repro_runner_filter_rejects_nonmatch) {
 
 TEST(repro_runner_filter_unset_or_empty_enables_all) {
     char *saved = save_selector();
-    cbm_unsetenv("CBM_REPRO_ONLY");
-    int unset_enabled = cbm_suite_enabled("repro_call_argument_usages");
-    cbm_setenv("CBM_REPRO_ONLY", "", 1);
-    int empty_enabled = cbm_suite_enabled("repro_call_argument_usages");
+    lsm_unsetenv("LSM_REPRO_ONLY");
+    int unset_enabled = lsm_suite_enabled("repro_call_argument_usages");
+    lsm_setenv("LSM_REPRO_ONLY", "", 1);
+    int empty_enabled = lsm_suite_enabled("repro_call_argument_usages");
     restore_selector(saved);
     if (!unset_enabled || !empty_enabled)
         fprintf(stderr, "  [repro-filter] invariant=unset_or_empty_disabled\n");

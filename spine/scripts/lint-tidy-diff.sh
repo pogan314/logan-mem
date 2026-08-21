@@ -3,7 +3,7 @@
 #
 # `make lint-tidy` (the full sweep) checks the entire LINT_SRCS tree, which
 # currently surfaces ~5,100 pre-existing findings unrelated to any given
-# commit (see Makefile.cbm's `lint-tidy` target). That is fine for a manual
+# commit (see Makefile.lsm's `lint-tidy` target). That is fine for a manual
 # deep audit but makes the pre-commit hook unusable: it blocks every commit,
 # including ones that touch files with zero findings on the touched lines.
 #

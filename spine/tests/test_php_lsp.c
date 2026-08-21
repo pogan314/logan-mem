@@ -16,21 +16,21 @@
  * global helpers.value function — see docs/PHP_LSP_PRE_FLIGHT.md §4.2.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "../src/pipeline/lsp_resolve.h"
 #include "lsp/php_lsp.h"
 #include <string.h>
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
-static CBMFileResult *extract_php(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_PHP, "test", "main.php", 0, NULL,
+static LSMFileResult *extract_php(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_PHP, "test", "main.php", 0, NULL,
                             NULL);
 }
 
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -38,13 +38,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
     return -1;
 }
 
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("  MISSING resolved call: caller~%s -> callee~%s (have %d)\n", callerSub, calleeSub,
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)", rc->strategy ? rc->strategy : "(null)",
                    rc->confidence);
@@ -53,12 +53,12 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
     return idx;
 }
 
-static const CBMResolvedCall *find_resolved_with_strategy(const CBMFileResult *r,
+static const LSMResolvedCall *find_resolved_with_strategy(const LSMFileResult *r,
                                                           const char *callerSub,
                                                           const char *calleeSub,
                                                           const char *strategy) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (!rc->caller_qn || !rc->callee_qn) continue;
         if (!strstr(rc->caller_qn, callerSub)) continue;
         if (!strstr(rc->callee_qn, calleeSub)) continue;
@@ -82,11 +82,11 @@ TEST(phplsp_local_method_via_new_assignment) {
         "        $g->hello();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "Caller.go", "Greeter.hello");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -99,11 +99,11 @@ TEST(phplsp_local_method_via_typed_param) {
         "class C {\n"
         "    public function run(P $p): void { $p->value(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "P.value");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -118,11 +118,11 @@ TEST(phplsp_arrow_function_typed_param) {
         "        $f = fn (P $p) => $p->value();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "P.value");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -135,11 +135,11 @@ TEST(phplsp_static_call_resolved) {
         "class C {\n"
         "    public function run(): void { Util::fmt('hi'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "Util.fmt");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -156,11 +156,11 @@ TEST(phplsp_self_and_parent) {
         "        parent::tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Child.go", "Child.alt") >= 0);
     ASSERT(require_resolved(r, "Child.go", "Base.tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -175,9 +175,9 @@ TEST(phplsp_use_function_clause) {
         "namespace A;\n"
         "use function B\\helper;\n"
         "function caller(): void { helper(); }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -193,11 +193,11 @@ TEST(phplsp_phpdoc_var) {
         "        $x->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "Q.tap");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -212,11 +212,11 @@ TEST(phplsp_catch_binding) {
         "        try { /* nop */ } catch (MyExc $e) { $e->name(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "MyExc.name");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -229,11 +229,11 @@ TEST(phplsp_this_method) {
         "    public function helper(): string { return 'h'; }\n"
         "    public function go(): void { $this->helper(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.go", "C.helper");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -256,14 +256,14 @@ TEST(phplsp_method_inherited_via_parent) {
         "class C {\n"
         "    public function run(Mid $m): void { $m->tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either resolved Base.tag OR emitted unindexed Mid.tag is acceptable —
      * both block the misroute. */
     int direct = find_resolved(r, "C.run", "Base.tag");
     int unindexed_mid = find_resolved(r, "C.run", "Mid.tag");
     ASSERT(direct >= 0 || unindexed_mid >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -277,24 +277,24 @@ TEST(phplsp_unindexed_receiver_emits_block) {
         "class C {\n"
         "    public function run(Foo $x): void { $x->value(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* The synthetic entry must exist so the pipeline bridge can suppress
      * the unified extractor's name-based misroute. */
-    const CBMResolvedCall *rc =
+    const LSMResolvedCall *rc =
         find_resolved_with_strategy(r, "C.run", "Foo.value", "php_method_typed_unindexed");
     if (!rc) {
         printf("  expected php_method_typed_unindexed for Foo.value, got %d entries\n",
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rcd = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rcd = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rcd->caller_qn ? rcd->caller_qn : "(null)",
                    rcd->callee_qn ? rcd->callee_qn : "(null)",
                    rcd->strategy ? rcd->strategy : "(null)", rcd->confidence);
         }
     }
     ASSERT(rc != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -320,22 +320,22 @@ TEST(phplsp_regression_prompt_value_not_routed_to_helper) {
         "}\n"
         "class Bus { public static function run(callable $f): void {} }\n"
         "function value($x) { return $x; }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    const CBMResolvedCall *rc = find_resolved_with_strategy(r, "C.configure", "Prompt.value",
+    const LSMResolvedCall *rc = find_resolved_with_strategy(r, "C.configure", "Prompt.value",
                                                             "php_method_typed_unindexed");
     if (!rc) {
         printf("  expected unindexed Prompt.value for ConfiguresPrompts pattern, got %d\n",
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rcd = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rcd = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rcd->caller_qn ? rcd->caller_qn : "(null)",
                    rcd->callee_qn ? rcd->callee_qn : "(null)",
                    rcd->strategy ? rcd->strategy : "(null)", rcd->confidence);
         }
     }
     ASSERT(rc != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -349,13 +349,13 @@ TEST(phplsp_method_chain_return_type) {
         "class C {\n"
         "    public function run(A $a): void { $a->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* First link: A.next */
     ASSERT(require_resolved(r, "C.run", "A.next") >= 0);
     /* Second link via return type */
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -366,11 +366,11 @@ TEST(phplsp_function_global_fallback) {
         "<?php\n"
         "function doit($x) { return $x; }\n"
         "class C { public function go(): void { doit(1); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either php_function_namespaced or php_function_global_fallback. */
     ASSERT(find_resolved(r, "C.go", "doit") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -389,9 +389,9 @@ TEST(phplsp_use_alias_resolves_for_new) {
         "class C {\n"
         "    public function run(): void { $r = new R(); $r->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -405,11 +405,11 @@ TEST(phplsp_constructor_property_promotion) {
         "    public function __construct(public P $p) {}\n"
         "    public function run(): void { $this->p->value(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     int idx = require_resolved(r, "C.run", "P.value");
     ASSERT(idx >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -424,10 +424,10 @@ TEST(phplsp_typed_property_declaration) {
         "    public function __construct(B $b) { $this->bar = $b; }\n"
         "    public function run(): void { $this->bar->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -442,10 +442,10 @@ TEST(phplsp_constructor_body_inference) {
         "    public function __construct(W $w) { $this->w = $w; }\n"
         "    public function run(): void { $this->w->ping(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "W.ping") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -460,10 +460,10 @@ TEST(phplsp_narrow_instanceof) {
         "        if ($x instanceof Foo) { $x->bar(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -479,10 +479,10 @@ TEST(phplsp_narrow_assert_instanceof) {
         "        $x->bar();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -498,10 +498,10 @@ TEST(phplsp_phpdoc_property_class_tag) {
         "class Model {\n"
         "    public function go(): void { $this->q->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Model.go", "Q.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -517,12 +517,12 @@ TEST(phplsp_phpdoc_method_class_tag) {
         "class Model {\n"
         "    public function go(): void { $this->fooBar()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* fooBar resolves on Model (the @method virtual), and chains to Z.tap. */
     ASSERT(require_resolved(r, "Model.go", "Model.fooBar") >= 0);
     ASSERT(require_resolved(r, "Model.go", "Z.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -536,11 +536,11 @@ TEST(phplsp_trait_method_flattened) {
         "    use T;\n"
         "    public function run(): void { $this->shared(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "C.shared") >= 0 ||
            require_resolved(r, "C.run", "T.shared") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -549,7 +549,7 @@ TEST(phplsp_trait_method_flattened) {
  * `trait T { use T; ... }` — directly, or via an alias that resolves back
  * to T by short name (`use Other\T as A; use A;`) — previously sent
  * flatten_trait_into_class() into an unbounded loop: each copied method
- * re-matched the loop filter while cbm_registry_add_func() grew the
+ * re-matched the loop filter while lsm_registry_add_func() grew the
  * registry, exhausting all memory (40 GB+, freezing the host). The fix
  * short-circuits self-flattening and snapshots the loop bound. The
  * assertion is simply that extraction returns: pre-fix this never
@@ -563,9 +563,9 @@ TEST(phplsp_trait_self_use_terminates) {
         "    use EnumTrait;\n"
         "    public function getRandom(): int { return 1; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -590,9 +590,9 @@ TEST(phplsp_trait_aliased_import_name_collision_terminates) {
                       "\n"
                       "    function f() { $x = 1; return $x; }\n"
                       "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -619,9 +619,9 @@ TEST(phplsp_class_aliased_trait_name_collision_terminates) {
                       "    public function run(): void {\n"
                       "    }\n"
                       "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -637,10 +637,10 @@ TEST(phplsp_match_result_type) {
         "        $a->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -656,10 +656,10 @@ TEST(phplsp_ternary_result_type) {
         "        $a->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -674,12 +674,12 @@ TEST(phplsp_method_chain_depth_three) {
         "class Caller {\n"
         "    public function run(C1 $c): void { $c->next()->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Caller.run", "C1.next") >= 0);
     ASSERT(require_resolved(r, "Caller.run", "C2.next") >= 0);
     ASSERT(require_resolved(r, "Caller.run", "C3.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -694,12 +694,12 @@ TEST(phplsp_lsb_two_deep_chain) {
         "class C {\n"
         "    public function run(Child $c): void { $c->tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either resolves directly to GrandParent_.tag or emits unindexed for
      * an intermediate — both block the misroute. */
     ASSERT(find_resolved(r, "C.run", ".tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -712,10 +712,10 @@ TEST(phplsp_nullsafe_operator) {
         "class C {\n"
         "    public function run(?Foo $f): void { $f?->bar(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -728,10 +728,10 @@ TEST(phplsp_static_keyword_dispatch) {
         "    public static function make(): self { return new self(); }\n"
         "    public function go(): void { static::make(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.go", "C.make") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -744,10 +744,10 @@ TEST(phplsp_self_in_method_body) {
         "    public function helper(): int { return 1; }\n"
         "    public function go(): void { self::helper(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.go", "C.helper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -759,9 +759,9 @@ TEST(phplsp_variadic_parameter) {
         "class C {\n"
         "    public function run(string ...$args): void {}\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -776,11 +776,11 @@ TEST(phplsp_closure_with_use) {
         "        $f = function () use ($p) { return $p->value(); };\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Closure use-imports aren't tracked in Phase 1; allow either resolve
      * or no resolve, but test must not crash. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -795,10 +795,10 @@ TEST(phplsp_anonymous_function_arg) {
         "    }\n"
         "}\n"
         "class Bus { public static function run(callable $f): void {} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Bus.run") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -813,10 +813,10 @@ TEST(phplsp_nested_arrow_functions) {
         "        $f = fn () => fn (A $a) => $a->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -830,9 +830,9 @@ TEST(phplsp_narrow_is_string) {
         "        if (is_string($x)) {}\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -846,9 +846,9 @@ TEST(phplsp_narrow_is_array) {
         "        if (is_array($x)) { count($x); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -866,12 +866,12 @@ TEST(phplsp_multiple_use_clauses) {
         "        $b->stop();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Both should emit unindexed override entries. */
     ASSERT(find_resolved(r, "C.run", "Vendor.Foo.go") >= 0);
     ASSERT(find_resolved(r, "C.run", "Vendor.Bar.stop") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -885,10 +885,10 @@ TEST(phplsp_group_use_clause) {
         "class C {\n"
         "    public function run(Foo $f): void { $f->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Group form may or may not be parsed by tree-sitter-php — accept. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -903,10 +903,10 @@ TEST(phplsp_fqn_new_expression) {
         "        $f->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Vendor.Foo.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -920,9 +920,9 @@ TEST(phplsp_foreach_iteration) {
         "        foreach ($xs as $x) { /* nop */ }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -938,11 +938,11 @@ TEST(phplsp_catch_multi_type) {
         "        try { /* nop */ } catch (A | B $e) { $e->go(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Phase 1 takes leftmost — A.go is the expected resolution. */
     ASSERT(find_resolved(r, "C.run", ".go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -958,10 +958,10 @@ TEST(phplsp_namespaced_catch) {
         "        try { /* nop */ } catch (MyExc $e) { $e->reason(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "MyExc.reason") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -977,11 +977,11 @@ TEST(phplsp_implements_multiple_interfaces) {
         "    public function bb(): int { return 2; }\n"
         "    public function go(): void { $this->aa(); $this->bb(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.go", "C.aa") >= 0);
     ASSERT(require_resolved(r, "C.go", "C.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -996,10 +996,10 @@ TEST(phplsp_method_on_typed_field) {
         "    public function __construct(Inner $i) { $this->i = $i; }\n"
         "    public function run(): void { $this->i->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Inner.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1015,11 +1015,11 @@ TEST(phplsp_child_overrides_parent_method) {
         "class C {\n"
         "    public function run(Kid $k): void { $k->speak(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Child override is preferred over parent. */
     ASSERT(require_resolved(r, "C.run", "Kid.speak") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1035,10 +1035,10 @@ TEST(phplsp_phpdoc_param_method) {
         "     */\n"
         "    public function run($arg): void { $arg->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "T.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1051,9 +1051,9 @@ TEST(phplsp_static_field_access) {
         "class C {\n"
         "    public function run(): void { $x = Cfg::$value; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1066,9 +1066,9 @@ TEST(phplsp_class_constant_access) {
         "class C {\n"
         "    public function run(): void { $x = Cfg::KEY; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1082,9 +1082,9 @@ TEST(phplsp_anonymous_class) {
         "        return new class { public function go(): int { return 1; } };\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1101,10 +1101,10 @@ TEST(phplsp_enum_method_dispatch) {
         "class C {\n"
         "    public function run(Suit $s): void { $s->label(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Suit.label") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1119,10 +1119,10 @@ TEST(phplsp_readonly_property) {
         "    public function __construct(V $v) { $this->v = $v; }\n"
         "    public function run(): void { $this->v->get(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "V.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1139,12 +1139,12 @@ TEST(phplsp_static_factory_chain) {
         "class C {\n"
         "    public function run(): void { A::make()->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.make") >= 0);
     ASSERT(require_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1156,10 +1156,10 @@ TEST(phplsp_stdlib_datetime_chain) {
         "class C {\n"
         "    public function run(\\DateTime $d): void { $d->modify('+1 day')->format('Y'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "DateTime.modify") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1173,13 +1173,13 @@ TEST(phplsp_stdlib_throwable_chain) {
         "        try { /* nop */ } catch (\\RuntimeException $e) { $e->getMessage(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* getMessage is on Throwable; RuntimeException -> Exception -> Throwable */
     ASSERT(find_resolved(r, "C.run", "Throwable.getMessage") >= 0 ||
            find_resolved(r, "C.run", "RuntimeException.getMessage") >= 0 ||
            find_resolved(r, "C.run", "Exception.getMessage") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1191,10 +1191,10 @@ TEST(phplsp_stdlib_iterator) {
         "class C {\n"
         "    public function run(\\Iterator $it): void { $it->current(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Iterator.current") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1208,11 +1208,11 @@ TEST(phplsp_abstract_class_method) {
         "class C {\n"
         "    public function run(Kid $k): void { $k->tap(); $k->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".tap") >= 0);
     ASSERT(require_resolved(r, "C.run", "Kid.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1226,11 +1226,11 @@ TEST(phplsp_static_call_via_alias) {
         "class C {\n"
         "    public function run(): void { H::go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Vendor.Helper unindexed; emit unindexed entry. */
     ASSERT(find_resolved(r, "C.run", "Vendor.Helper.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1244,11 +1244,11 @@ TEST(phplsp_function_call_namespaced) {
         "class C {\n"
         "    public function run(): void { helper(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either path works. */
     ASSERT(find_resolved(r, "C.run", ".helper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1267,11 +1267,11 @@ TEST(phplsp_reassignment_changes_type) {
         "        $x->bb();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1288,11 +1288,11 @@ TEST(phplsp_use_then_new_aliased) {
         "        $r->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* $r should bind to NAMED(Vendor.Real); $r->go() should emit override. */
     ASSERT(find_resolved(r, "C.run", "Vendor.Real.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1309,11 +1309,11 @@ TEST(phplsp_narrow_branches) {
         "        if ($x instanceof B) { $x->bb(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1330,10 +1330,10 @@ TEST(phplsp_sequential_bindings) {
         "        $b->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1351,11 +1351,11 @@ TEST(phplsp_chained_with_intermediate_var) {
         "        $b->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1372,11 +1372,11 @@ TEST(phplsp_trait_multiple_methods) {
         "    use T;\n"
         "    public function run(): void { $this->aa(); $this->bb(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "C.aa") >= 0 || find_resolved(r, "C.run", "T.aa") >= 0);
     ASSERT(find_resolved(r, "C.run", "C.bb") >= 0 || find_resolved(r, "C.run", "T.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1390,9 +1390,9 @@ TEST(phplsp_cast_expression) {
         "        $i = (int) $x;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1408,10 +1408,10 @@ TEST(phplsp_clone_preserves_type) {
         "        $b->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1419,9 +1419,9 @@ TEST(phplsp_clone_preserves_type) {
 
 TEST(phplsp_empty_class_body) {
     const char *src = "<?php\nclass Empty_ {}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1435,10 +1435,10 @@ TEST(phplsp_stdlib_psr_logger) {
         "        $log->info('hi');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "LoggerInterface.info") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1451,10 +1451,10 @@ TEST(phplsp_long_method_chain) {
         "class C {\n"
         "    public function run(A $a): void { $a->n()->n()->n()->n()->n()->t(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.t") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1468,9 +1468,9 @@ TEST(phplsp_conditional_return) {
         "        return $b ? 1 : 2;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1486,10 +1486,10 @@ TEST(phplsp_phpdoc_var_at_assignment) {
         "        $x->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "P.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1503,9 +1503,9 @@ TEST(phplsp_narrow_is_int) {
         "        if (is_int($x)) {}\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1519,9 +1519,9 @@ TEST(phplsp_encapsed_string) {
         "        $x = \"hello $name\";\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1535,9 +1535,9 @@ TEST(phplsp_heredoc) {
         "        return <<<EOT\nhi\nEOT;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1553,9 +1553,9 @@ TEST(phplsp_cyclic_embed_bounded) {
         "class C {\n"
         "    public function run(A $a): void { $a->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1578,12 +1578,12 @@ TEST(phplsp_many_use_clauses) {
         "        $a->aa(); $b->bb(); $c->cc();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "K.run", "Vendor.A.aa") >= 0);
     ASSERT(find_resolved(r, "K.run", "Vendor.B.bb") >= 0);
     ASSERT(find_resolved(r, "K.run", "Vendor.C2.cc") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1603,11 +1603,11 @@ TEST(phplsp_chain_through_this_field) {
         "        $o->tap()->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Outer.tap") >= 0);
     ASSERT(require_resolved(r, "C.run", "Inner.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1621,12 +1621,12 @@ TEST(phplsp_trait_with_alias) {
         "    use T1 { shared as inheritedShared; }\n"
         "    public function run(): void { $this->shared(); $this->inheritedShared(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "C.shared") >= 0 ||
            find_resolved(r, "C.run", "T1.shared") >= 0);
     /* The aliased method either resolves on C or falls through. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1640,9 +1640,9 @@ TEST(phplsp_yield_expression) {
         "        yield 1; yield 2;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1658,9 +1658,9 @@ TEST(phplsp_bool_literals) {
         "        $c = null;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1676,11 +1676,11 @@ TEST(phplsp_generic_var_collection) {
         "        $coll->first();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Collection.first is registered in stdlib; should resolve. */
     ASSERT(find_resolved(r, "C.run", "Collection.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1696,10 +1696,10 @@ TEST(phplsp_foreach_array_typed) {
         "        foreach ($users as $u) { $u->name(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1715,10 +1715,10 @@ TEST(phplsp_negative_narrow_early_return) {
         "        $x->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1734,10 +1734,10 @@ TEST(phplsp_negative_narrow_throw) {
         "        $x->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1751,12 +1751,12 @@ TEST(phplsp_eloquent_builder_chain) {
         "        $q->where('a', 1)->orderBy('id')->first();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.orderBy") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1770,12 +1770,12 @@ TEST(phplsp_collection_chain) {
         "        $c->map(fn($x) => $x)->filter(fn($x) => true)->first();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Collection.map") >= 0);
     ASSERT(find_resolved(r, "C.run", "Collection.filter") >= 0);
     ASSERT(find_resolved(r, "C.run", "Collection.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1789,10 +1789,10 @@ TEST(phplsp_symfony_request) {
         "        $req->getMethod();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Request.getMethod") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1806,11 +1806,11 @@ TEST(phplsp_carbon_chain) {
         "        $now->addDay()->format('Y-m-d');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Carbon.addDay") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.format") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1828,11 +1828,11 @@ TEST(phplsp_nested_if_narrowing) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(require_resolved(r, "C.run", "A.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1849,11 +1849,11 @@ TEST(phplsp_assert_then_chain) {
         "        $x->next()->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1867,11 +1867,11 @@ TEST(phplsp_psr7_with_chain) {
         "        $r->withStatus(200)->withHeader('X', 'y');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ResponseInterface.withStatus") >= 0);
     ASSERT(find_resolved(r, "C.run", "ResponseInterface.withHeader") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1891,12 +1891,12 @@ TEST(phplsp_at_method_then_real) {
         "        $this->baz()->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "M.run", "M.fooBar") >= 0);
     ASSERT(find_resolved(r, "M.run", "M.baz") >= 0);
     /* Both chains end in Z.tap. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1916,11 +1916,11 @@ TEST(phplsp_property_method_combined) {
         "        $this->getQ()->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "M.run", "Q.tap") >= 0);
     ASSERT(find_resolved(r, "M.run", "M.getQ") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1934,12 +1934,12 @@ TEST(phplsp_model_query_chain) {
         "        \\Illuminate\\Database\\Eloquent\\Model::query()->where('a',1)->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Model.query") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1953,13 +1953,13 @@ TEST(phplsp_long_eloquent_chain) {
         "        $q->where('a',1)->whereIn('b',[1])->orderBy('c')->limit(10)->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.whereIn") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.orderBy") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.limit") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1975,10 +1975,10 @@ TEST(phplsp_generic_two_args) {
         "        foreach ($map as $u) { $u->name(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1993,10 +1993,10 @@ TEST(phplsp_throwable_subclass_message) {
         "        try { /* nop */ } catch (Custom $e) { $e->getMessage(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".getMessage") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2015,11 +2015,11 @@ TEST(phplsp_instance_then_static_chain) {
         "        B::tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "B.next") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2034,11 +2034,11 @@ TEST(phplsp_self_method_chain) {
         "        self::helper()->helper();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Both helpers should resolve. */
     ASSERT(find_resolved(r, "C.run", "C.helper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2052,11 +2052,11 @@ TEST(phplsp_interface_typed_param) {
         "class C {\n"
         "    public function run(Greeter $g): void { $g->hi(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either resolves to Greeter.hi (interface) or English.hi (impl). */
     ASSERT(find_resolved(r, "C.run", ".hi") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2078,10 +2078,10 @@ TEST(phplsp_generic_substitution_simple) {
         "        $c->get()->name();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2096,10 +2096,10 @@ TEST(phplsp_closure_use_captures) {
         "        $f = function () use ($p) { return $p->tap(); };\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "P.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2118,11 +2118,11 @@ TEST(phplsp_conjunction_narrowing) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2137,10 +2137,10 @@ TEST(phplsp_is_a_narrowing) {
         "        if (is_a($x, Foo::class)) { $x->bar(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2156,10 +2156,10 @@ TEST(phplsp_subscript_array_typed) {
         "        $arr[0]->name();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2175,10 +2175,10 @@ TEST(phplsp_subscript_array_keyed) {
         "        $map['a']->name();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2195,10 +2195,10 @@ TEST(phplsp_enum_case_value) {
         "class C {\n"
         "    public function run(): void { Suit::Hearts->label(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Suit.label") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2220,12 +2220,12 @@ TEST(phplsp_template_extends) {
         "        $uc->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* At minimum, get() resolves on the chain — deep substitution into
      * User is not yet wired. Accept resolution to .get(). */
     ASSERT(find_resolved(r, "C.run", ".get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2239,10 +2239,10 @@ TEST(phplsp_symfony_console) {
         "        $io->success('ok');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "SymfonyStyle.success") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2256,14 +2256,14 @@ TEST(phplsp_doctrine_chain) {
         "        $em->createQueryBuilder()->select('u')->from('User','u')->getQuery()->getResult();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "EntityManagerInterface.createQueryBuilder") >= 0);
     ASSERT(find_resolved(r, "C.run", "QueryBuilder.select") >= 0);
     ASSERT(find_resolved(r, "C.run", "QueryBuilder.from") >= 0);
     ASSERT(find_resolved(r, "C.run", "QueryBuilder.getQuery") >= 0);
     ASSERT(find_resolved(r, "C.run", "Query.getResult") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2277,11 +2277,11 @@ TEST(phplsp_guzzle_chain) {
         "        $http->get('/x')->getStatusCode();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Client.get") >= 0);
     ASSERT(find_resolved(r, "C.run", "ResponseInterface.getStatusCode") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2295,11 +2295,11 @@ TEST(phplsp_twig_render) {
         "        $twig->load('x.html')->render([]);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Environment.load") >= 0);
     ASSERT(find_resolved(r, "C.run", "TemplateWrapper.render") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2316,10 +2316,10 @@ TEST(phplsp_nested_closure_capture) {
         "        };\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "P.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2338,12 +2338,12 @@ TEST(phplsp_three_conjunction) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.bb") >= 0);
     ASSERT(require_resolved(r, "C.run", "D.dd") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2357,11 +2357,11 @@ TEST(phplsp_model_where_first) {
         "        \\Illuminate\\Database\\Eloquent\\Model::where('a', 1)->first();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Model.where") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2375,10 +2375,10 @@ TEST(phplsp_namespaced_alias_static) {
         "class C {\n"
         "    public function run(): void { Base::where('a', 1); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Model.where") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2392,10 +2392,10 @@ TEST(phplsp_logger_through_field) {
         "    public function __construct(\\Psr\\Log\\LoggerInterface $log) { $this->log = $log; }\n"
         "    public function run(): void { $this->log->error('x'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "LoggerInterface.error") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2411,11 +2411,11 @@ TEST(phplsp_closure_multiple_captures) {
         "        $f = function () use ($a, $b) { $a->aa(); $b->bb(); };\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2431,11 +2431,11 @@ TEST(phplsp_is_a_then_chain) {
         "        if (is_a($x, A::class)) { $x->next()->tap(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2452,10 +2452,10 @@ TEST(phplsp_mixed_narrow_call) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2472,10 +2472,10 @@ TEST(phplsp_foreach_key_value) {
         "        foreach ($users as $idx => $user) { $user->name(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2489,9 +2489,9 @@ TEST(phplsp_static_class_const) {
         "class C {\n"
         "    public function run(): void { $x = Cfg::KEY; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2507,10 +2507,10 @@ TEST(phplsp_ternary_chain) {
         "        $x->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2525,9 +2525,9 @@ TEST(phplsp_trait_insteadof) {
         "    use A, B { A::shared insteadof B; }\n"
         "    public function run(): void { $this->shared(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2541,13 +2541,13 @@ TEST(phplsp_value_method_typed_receiver) {
         "        $b->value('id');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* This is the regression case from PHP_LSP_PRE_FLIGHT.md:
      * value() method on a typed receiver should route to Builder.value,
      * not the global helpers.value function. */
     ASSERT(find_resolved(r, "C.run", "Builder.value") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2563,9 +2563,9 @@ TEST(phplsp_generator_foreach) {
         "        foreach ($this->gen() as $u) { /* User unknown without @return */ }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2580,10 +2580,10 @@ TEST(phplsp_long_property_chain) {
         "class C {\n"
         "    public function run(C1 $a): void { $a->b->c->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "C3.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2598,10 +2598,10 @@ TEST(phplsp_conjunction_with_isset) {
         "        if (isset($x) && $x instanceof Foo) { $x->bar(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2622,11 +2622,11 @@ TEST(phplsp_match_class_arms) {
         "        $obj->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Match returns first arm's type — A. A.go should resolve. */
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2640,10 +2640,10 @@ TEST(phplsp_static_factory_via_alias) {
         "class C {\n"
         "    public function run(B $b): void { $b->where('a', 1); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2655,10 +2655,10 @@ TEST(phplsp_static_call_fqn) {
         "class C {\n"
         "    public function run(): void { \\Carbon\\Carbon::now(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Carbon.now") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2674,11 +2674,11 @@ TEST(phplsp_method_returns_typed_generic) {
         "class C {\n"
         "    public function run(Pool $p): void { $p->items()->map(fn($x)=>$x); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Pool.items") >= 0);
     ASSERT(find_resolved(r, "C.run", "Collection.map") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2694,10 +2694,10 @@ TEST(phplsp_nullsafe_after_narrowing) {
         "        $x?->bar();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2716,11 +2716,11 @@ TEST(phplsp_logger_in_console_command) {
         "        $io->success('done');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.execute", "LoggerInterface.info") >= 0);
     ASSERT(find_resolved(r, "C.execute", "SymfonyStyle.success") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2734,11 +2734,11 @@ TEST(phplsp_doctrine_repo_find) {
         "        $em->getRepository('User')->findAll();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "EntityManagerInterface.getRepository") >= 0);
     ASSERT(find_resolved(r, "C.run", "EntityRepository.findAll") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2751,10 +2751,10 @@ TEST(phplsp_model_static_query) {
         "class C {\n"
         "    public function run(): void { User::query()->where('a', 1)->first(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Model.query") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2771,9 +2771,9 @@ TEST(phplsp_switch_statement) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2786,10 +2786,10 @@ TEST(phplsp_interface_const) {
         "class C {\n"
         "    public function run(Greeter $g): void { $g->hi(); $x = Greeter::GREETING; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Greeter.hi") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2803,11 +2803,11 @@ TEST(phplsp_factory_method_chain) {
         "class C {\n"
         "    public function run(): void { Factory::make()->ok(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Factory.make") >= 0);
     ASSERT(require_resolved(r, "C.run", "Result.ok") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2825,10 +2825,10 @@ TEST(phplsp_phpdoc_intersection) {
         "        $x->walk();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* My resolver takes leftmost interface — should resolve walk. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2842,10 +2842,10 @@ TEST(phplsp_abstract_via_concrete) {
         "class C {\n"
         "    public function run(K $k): void { $k->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "K.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2862,11 +2862,11 @@ TEST(phplsp_phpdoc_var_on_param_chain) {
         "     */\n"
         "    public function run($a): void { $a->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(require_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2881,12 +2881,12 @@ TEST(phplsp_fqn_method_chain) {
         "        $r->map(fn($x)=>$x)->filter(fn($x)=>true)->first();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Collection.map") >= 0);
     ASSERT(find_resolved(r, "C.run", "Collection.filter") >= 0);
     ASSERT(find_resolved(r, "C.run", "Collection.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2901,10 +2901,10 @@ TEST(phplsp_nested_namespace) {
         "        public function run(Foo $f): void { $f->bar(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2918,12 +2918,12 @@ TEST(phplsp_carbon_static_chain) {
         "        \\Carbon\\Carbon::now()->addDay()->format('Y-m-d');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Carbon.now") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.addDay") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.format") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2935,10 +2935,10 @@ TEST(phplsp_psr_container_get) {
         "class C {\n"
         "    public function run(\\Psr\\Container\\ContainerInterface $c): void { $c->get('id'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ContainerInterface.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2952,9 +2952,9 @@ TEST(phplsp_variadic_typed_then_call) {
         "        $count = count($args);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2968,10 +2968,10 @@ TEST(phplsp_method_covariant_return) {
         "class C {\n"
         "    public function run(K $k): void { $k->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.run", "K.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2985,11 +2985,11 @@ TEST(phplsp_interface_inheritance) {
         "class C {\n"
         "    public function run(Ext $e): void { $e->tag(); $e->ext(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Base.tag") >= 0);
     ASSERT(find_resolved(r, "C.run", "Ext.ext") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3005,9 +3005,9 @@ TEST(phplsp_magic_get_set) {
         "class C {\n"
         "    public function run(M $m): void { $x = $m->something; $m->other = 1; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3028,12 +3028,12 @@ TEST(phplsp_at_return_this_fluent) {
         "        $b->where('a', 1)->orderBy('id')->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.orderBy") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3050,12 +3050,12 @@ TEST(phplsp_at_return_static_covariant) {
         "class C {\n"
         "    public function run(Kid $k): void { $k->self()->ext(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* @return static — at least .self() resolves; .ext() may or may not
      * depending on covariance handling. */
     ASSERT(find_resolved(r, "C.run", ".self") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3069,10 +3069,10 @@ TEST(phplsp_symfony_cache) {
         "        $c->get('key', fn() => 'value');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "CacheInterface.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3086,10 +3086,10 @@ TEST(phplsp_event_dispatcher) {
         "        $d->dispatch(new \\Symfony\\Contracts\\EventDispatcher\\Event());\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "EventDispatcherInterface.dispatch") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3107,13 +3107,13 @@ TEST(phplsp_mailer_chain) {
         "        $m->send($email);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Email.from") >= 0);
     ASSERT(find_resolved(r, "C.run", "Email.to") >= 0);
     ASSERT(find_resolved(r, "C.run", "Email.subject") >= 0);
     ASSERT(find_resolved(r, "C.run", "MailerInterface.send") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3128,11 +3128,11 @@ TEST(phplsp_laravel_request) {
         "        $req->validate(['a' => 'required']);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Request.input") >= 0);
     ASSERT(find_resolved(r, "C.run", "Request.validate") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3146,11 +3146,11 @@ TEST(phplsp_laravel_auth) {
         "        $auth->user()->getAuthIdentifier();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Guard.user") >= 0);
     ASSERT(find_resolved(r, "C.run", "Authenticatable.getAuthIdentifier") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3164,11 +3164,11 @@ TEST(phplsp_laravel_view) {
         "        return $v->with('x', 1)->render();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "View.with") >= 0);
     ASSERT(find_resolved(r, "C.run", "View.render") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3182,11 +3182,11 @@ TEST(phplsp_promise_chain) {
         "        $p->then(fn() => null)->catch(fn() => null);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "PromiseInterface.then") >= 0);
     ASSERT(find_resolved(r, "C.run", "PromiseInterface.catch") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3201,12 +3201,12 @@ TEST(phplsp_monolog_logger) {
         "        $log->pushHandler('h')->pushProcessor('p');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".info") >= 0);
     ASSERT(find_resolved(r, "C.run", "Logger.pushHandler") >= 0);
     ASSERT(find_resolved(r, "C.run", "Logger.pushProcessor") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3220,12 +3220,12 @@ TEST(phplsp_reflection_class) {
         "        $rc->getMethod('foo')->invoke($rc->newInstance());\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ReflectionClass.getMethod") >= 0);
     ASSERT(find_resolved(r, "C.run", "ReflectionMethod.invoke") >= 0);
     ASSERT(find_resolved(r, "C.run", "ReflectionClass.newInstance") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3239,11 +3239,11 @@ TEST(phplsp_validator) {
         "        $v->validate('input')->count();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ValidatorInterface.validate") >= 0);
     ASSERT(find_resolved(r, "C.run", "ConstraintViolationListInterface.count") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3258,12 +3258,12 @@ TEST(phplsp_psr_cache) {
         "        $pool->save($item->set('value'));\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "CacheItemPoolInterface.getItem") >= 0);
     ASSERT(find_resolved(r, "C.run", "CacheItemPoolInterface.save") >= 0);
     ASSERT(find_resolved(r, "C.run", "CacheItemInterface.set") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3280,10 +3280,10 @@ TEST(phplsp_many_parents) {
         "class Caller {\n"
         "    public function run(E $e): void { $e->aa(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "Caller.run", ".aa") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3303,12 +3303,12 @@ TEST(phplsp_multi_interface_impl) {
         "class C {\n"
         "    public function run(K $k): void { $k->aa(); $k->bb(); $k->dd(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "K.aa") >= 0);
     ASSERT(find_resolved(r, "C.run", "K.bb") >= 0);
     ASSERT(find_resolved(r, "C.run", "K.dd") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3324,11 +3324,11 @@ TEST(phplsp_static_self_return) {
         "class C {\n"
         "    public function run(): void { A::make()->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.make") >= 0);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3346,11 +3346,11 @@ TEST(phplsp_static_this_phpdoc) {
         "class C {\n"
         "    public function run(A $a): void { $a->chain()->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.chain") >= 0);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3365,10 +3365,10 @@ TEST(phplsp_field_interface_typed) {
         "    public function __construct(Greeter $g) { $this->g = $g; }\n"
         "    public function run(): void { $this->g->hi(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Greeter.hi") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3384,11 +3384,11 @@ TEST(phplsp_foreach_collection_typed) {
         "        foreach ($c as $u) { $u->name(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Foreach with Collection<User> isn't ideal yet; accept either resolve
      * or no-resolve to avoid breaking on unrelated regressions. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3401,10 +3401,10 @@ TEST(phplsp_nullsafe_null_coalesce) {
         "class C {\n"
         "    public function run(?Foo $f): string { return $f?->bar() ?? 'default'; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3420,10 +3420,10 @@ TEST(phplsp_nested_ternary_instance) {
         "        $r->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3440,11 +3440,11 @@ TEST(phplsp_trait_in_chain) {
         "class Caller {\n"
         "    public function run(C $c): void { $c->tap()->ok(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "Caller.run", ".tap") >= 0);
     ASSERT(find_resolved(r, "Caller.run", "C.ok") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3459,10 +3459,10 @@ TEST(phplsp_interface_method_via_class) {
         "class C {\n"
         "    public function run(B $b): void { $b->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3475,9 +3475,9 @@ TEST(phplsp_static_through_interface) {
         "class C {\n"
         "    public function run(): void { /* static through interface is exotic */ }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3491,9 +3491,9 @@ TEST(phplsp_foreach_iterator_current) {
         "        foreach ($it as $x) { /* nothing */ }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3510,10 +3510,10 @@ TEST(phplsp_trait_uses_this) {
         "    public function local(): int { return 1; }\n"
         "    public function run(): void { $this->shared(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".shared") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3529,9 +3529,9 @@ TEST(phplsp_cast_then_chain) {
         "        /* Cast result is `object` not specific class — fine. */\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3545,13 +3545,13 @@ TEST(phplsp_iterator_full_api) {
         "        if ($it->valid()) { $it->current(); $it->key(); $it->next(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Iterator.valid") >= 0);
     ASSERT(find_resolved(r, "C.run", "Iterator.current") >= 0);
     ASSERT(find_resolved(r, "C.run", "Iterator.key") >= 0);
     ASSERT(find_resolved(r, "C.run", "Iterator.next") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3565,12 +3565,12 @@ TEST(phplsp_carbon_parse_chain) {
         "        return \\Carbon\\Carbon::parse('2024-01-01')->addDay()->format('Y-m-d');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Carbon.parse") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.addDay") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.format") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3584,12 +3584,12 @@ TEST(phplsp_psr7_request_builder) {
         "        $req->withMethod('POST')->withUri($req->getUri());\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "RequestInterface.withMethod") >= 0);
     ASSERT(find_resolved(r, "C.run", "RequestInterface.withUri") >= 0);
     ASSERT(find_resolved(r, "C.run", "RequestInterface.getUri") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3603,12 +3603,12 @@ TEST(phplsp_array_object_iterator) {
         "        $a->getIterator()->current();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ArrayObject.getIterator") >= 0);
     ASSERT(find_resolved(r, "C.run", "ArrayIterator.current") >= 0 ||
            find_resolved(r, "C.run", "Iterator.current") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3623,11 +3623,11 @@ TEST(phplsp_phpdoc_param_then_chain) {
         "    /** @param A $x */\n"
         "    public function run($x): void { $x->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3641,10 +3641,10 @@ TEST(phplsp_twig_render_array) {
         "        return $twig->render('tpl.html', ['key' => 'val']);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Environment.render") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3658,11 +3658,11 @@ TEST(phplsp_aliased_static_chain) {
         "class C {\n"
         "    public function run(): string { return Time::now()->format('Y'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Carbon.now") >= 0);
     ASSERT(find_resolved(r, "C.run", "Carbon.format") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3683,10 +3683,10 @@ TEST(phplsp_foreach_with_control) {
         "        }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3703,11 +3703,11 @@ TEST(phplsp_sequential_assert_chain) {
         "        $x->next()->tap();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3722,10 +3722,10 @@ TEST(phplsp_trait_in_inherited) {
         "class C {\n"
         "    public function run(Kid $k): void { $k->shared(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", ".shared") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3741,9 +3741,9 @@ TEST(phplsp_multiple_narrowing_types) {
         "        if (is_int($z)) { $c = $z + 1; }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3762,7 +3762,7 @@ TEST(phplsp_eloquent_query_full) {
         "            ->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Model.query") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
@@ -3770,7 +3770,7 @@ TEST(phplsp_eloquent_query_full) {
     ASSERT(find_resolved(r, "C.run", "Builder.orderBy") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.limit") >= 0);
     ASSERT(find_resolved(r, "C.run", "Builder.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3787,10 +3787,10 @@ TEST(phplsp_chained_field_method) {
         "class C {\n"
         "    public function run(Outer $o): void { $o->i->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Inner.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3807,10 +3807,10 @@ TEST(phplsp_nullsafe_field) {
         "class C {\n"
         "    public function run(Outer $o): void { $o->i?->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Inner.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3822,10 +3822,10 @@ TEST(phplsp_closure_invoke) {
         "class C {\n"
         "    public function run(\\Closure $f): mixed { return $f->__invoke(1, 2); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Closure.__invoke") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3839,10 +3839,10 @@ TEST(phplsp_psr_log_constants) {
         "        $log->log('info', 'msg');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "LoggerInterface.log") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3856,11 +3856,11 @@ TEST(phplsp_eloquent_first_or_create) {
         "        $b->firstOrCreate(['a' => 1])->save();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.firstOrCreate") >= 0);
     ASSERT(find_resolved(r, "C.run", "Model.save") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3874,10 +3874,10 @@ TEST(phplsp_container_get) {
         "        $svc = $c->get('logger');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "ContainerInterface.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3896,14 +3896,14 @@ TEST(phplsp_multiple_classes_one_file) {
         "        $a->aa(); $b->bb(); $d->dd(); $e->ee(); $f->ff();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.aa") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.bb") >= 0);
     ASSERT(find_resolved(r, "C.run", "D.dd") >= 0);
     ASSERT(find_resolved(r, "C.run", "E.ee") >= 0);
     ASSERT(find_resolved(r, "C.run", "F.ff") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3919,10 +3919,10 @@ TEST(phplsp_type_valid_after_branch) {
         "        $a->go();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3940,11 +3940,11 @@ TEST(phplsp_foreach_kv_chain) {
         "        foreach ($arr as $i => $a) { $a->next()->tap(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3962,10 +3962,10 @@ TEST(phplsp_self_ref_recursive) {
         "        $t->left?->leaf();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Tree.leaf") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3993,7 +3993,7 @@ TEST(phplsp_realistic_laravel_controller) {
         "        return (new JsonResponse($user))->header('X-Hello', 'world');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "UserController.index", "LoggerInterface.info") >= 0);
     ASSERT(find_resolved(r, "UserController.index", "Model.query") >= 0);
@@ -4004,7 +4004,7 @@ TEST(phplsp_realistic_laravel_controller) {
     ASSERT(find_resolved(r, "UserController.show", "Builder.where") >= 0);
     ASSERT(find_resolved(r, "UserController.show", "Builder.firstOrFail") >= 0);
     ASSERT(find_resolved(r, "UserController.show", "JsonResponse.header") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4013,9 +4013,9 @@ TEST(phplsp_realistic_laravel_controller) {
 TEST(phplsp_edge_namespaced_facade) {
     const char *src = "<?php\nnamespace App;\nuse Illuminate\\Support\\Facades\\DB;\n"
                       "class C { public function r(): void { DB::table('x'); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4023,10 +4023,10 @@ TEST(phplsp_edge_chain_through_promotion) {
     const char *src =
         "<?php\nclass Inner { public function go(): int { return 1; } }\n"
         "class C { public function __construct(public Inner $i) {} public function r(): void { $this->i->go(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Inner.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4034,9 +4034,9 @@ TEST(phplsp_edge_static_property_chain) {
     const char *src =
         "<?php\nclass A { public function go(): int { return 1; } public static A $instance; }\n"
         "class C { public function r(): void { A::$instance->go(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4045,10 +4045,10 @@ TEST(phplsp_edge_enum_method_chain) {
         "<?php\nenum Status: string { case Active = 'a'; case Inactive = 'i';\n"
         "    public function label(): string { return $this->value; } }\n"
         "class C { public function r(): void { Status::Active->label(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Status.label") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4057,11 +4057,11 @@ TEST(phplsp_edge_call_after_assert_two_levels) {
         "<?php\nclass B { public function tap(): int { return 1; } }\n"
         "class A { public function n(): B { return new B(); } }\n"
         "class C { public function r($x): void { assert($x instanceof A); $x->n()->tap(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.n") >= 0);
     ASSERT(find_resolved(r, "C.r", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4072,10 +4072,10 @@ TEST(phplsp_edge_negative_narrow_chain) {
         "    if (!($x instanceof Foo)) { throw new \\RuntimeException('x'); }\n"
         "    $x->go();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Foo.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4087,9 +4087,9 @@ TEST(phplsp_edge_closure_bound_class) {
         "    }\n"
         "    public function helper(): int { return 1; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4101,19 +4101,19 @@ TEST(phplsp_edge_late_assignment_chain) {
         "    $a = new A();\n"
         "    $a->go();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(phplsp_edge_callable_type_param) {
     const char *src =
         "<?php\nclass C { public function r(callable $f): void { $f(1, 2); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4121,10 +4121,10 @@ TEST(phplsp_edge_nullable_param_chain) {
     const char *src =
         "<?php\nclass A { public function go(): int { return 1; } }\n"
         "class C { public function r(?A $a): void { if ($a) { $a->go(); } } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4136,10 +4136,10 @@ TEST(phplsp_edge_phpdoc_ignored_then_real) {
         "    $a = new A();\n"
         "    $a->go();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4148,28 +4148,28 @@ TEST(phplsp_edge_attribute_above_class) {
         "<?php\n#[\\AllowDynamicProperties]\n"
         "class A { public function go(): int { return 1; } }\n"
         "class C { public function r(A $a): void { $a->go(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(phplsp_edge_method_with_ref_param) {
     const char *src =
         "<?php\nclass C { public function r(string &$x): void { $x = 'mutated'; } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(phplsp_edge_abstract_no_body) {
     const char *src =
         "<?php\nabstract class A { abstract public function go(): int; }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4181,10 +4181,10 @@ TEST(phplsp_edge_interface_only) {
         "    public function tap(): self { return $this; }\n"
         "}\n"
         "class C { public function r(I $i): void { $i->go(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "I.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4198,9 +4198,9 @@ TEST(phplsp_edge_nested_match) {
         "        default => new A(),\n"
         "    };\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4209,12 +4209,12 @@ TEST(phplsp_edge_long_static_chain) {
         "<?php\nclass C { public function r(): void {\n"
         "    \\Carbon\\Carbon::parse('2024-01-01')->addDay()->addDay()->addDay()->format('Y');\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Carbon.parse") >= 0);
     ASSERT(find_resolved(r, "C.r", "Carbon.addDay") >= 0);
     ASSERT(find_resolved(r, "C.r", "Carbon.format") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4223,9 +4223,9 @@ TEST(phplsp_edge_iterator_iterable_param) {
         "<?php\nclass C { public function r(iterable $items): void {\n"
         "    foreach ($items as $i) { /* nothing */ }\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4237,10 +4237,10 @@ TEST(phplsp_edge_array_of_classes) {
         "    $arr = [];\n"
         "    foreach ($arr as $a) { $a->go(); }\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4252,10 +4252,10 @@ TEST(phplsp_edge_phpdoc_var_then_assign_chain) {
         "    $a = null;\n"
         "    $a->go();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4264,11 +4264,11 @@ TEST(phplsp_edge_two_traits_one_class) {
         "<?php\ntrait T1 { public function aa(): int { return 1; } }\n"
         "trait T2 { public function bb(): int { return 2; } }\n"
         "class C { use T1, T2; public function r(): void { $this->aa(); $this->bb(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "C.aa") >= 0 || find_resolved(r, "C.r", "T1.aa") >= 0);
     ASSERT(find_resolved(r, "C.r", "C.bb") >= 0 || find_resolved(r, "C.r", "T2.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4280,10 +4280,10 @@ TEST(phplsp_edge_enum_with_interface) {
         "    public function label(): string { return $this->value; }\n"
         "}\n"
         "class C { public function r(Status $s): void { $s->label(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Status.label") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4294,10 +4294,10 @@ TEST(phplsp_edge_constructor_promote_then_use) {
         "    public function __construct(private readonly Foo $f) {}\n"
         "    public function r(): void { $this->f->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Foo.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4307,9 +4307,9 @@ TEST(phplsp_edge_anonymous_class_in_call) {
         "    $obj = new class { public function go(): int { return 1; } };\n"
         "    /* anonymous class types aren't tracked — chain not asserted */\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4320,10 +4320,10 @@ TEST(phplsp_edge_arrow_function_capture_implicit) {
         "    /* arrow functions implicitly capture by value */\n"
         "    $f = fn() => $a->go();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4332,10 +4332,10 @@ TEST(phplsp_edge_long_namespace_chain) {
         "<?php\nnamespace A\\B\\C\\D\\E;\n"
         "class Foo { public function bar(): int { return 1; } }\n"
         "class K { public function r(Foo $f): void { $f->bar(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "K.r", "Foo.bar") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4344,13 +4344,13 @@ TEST(phplsp_edge_psr_logger_chain) {
         "<?php\nclass C { public function r(\\Psr\\Log\\LoggerInterface $log): void {\n"
         "    $log->info('a'); $log->warning('b'); $log->error('c'); $log->debug('d');\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "LoggerInterface.info") >= 0);
     ASSERT(find_resolved(r, "C.r", "LoggerInterface.warning") >= 0);
     ASSERT(find_resolved(r, "C.r", "LoggerInterface.error") >= 0);
     ASSERT(find_resolved(r, "C.r", "LoggerInterface.debug") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4359,13 +4359,13 @@ TEST(phplsp_edge_eloquent_relations) {
         "<?php\nclass C { public function r(\\Illuminate\\Database\\Eloquent\\Model $m): void {\n"
         "    $m->with('rel')->where('a', 1)->find(1)->save();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Model.with") >= 0 ||
            find_resolved(r, "C.r", "Builder.with") >= 0);
     ASSERT(find_resolved(r, "C.r", "Builder.where") >= 0);
     ASSERT(find_resolved(r, "C.r", "Builder.find") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4374,11 +4374,11 @@ TEST(phplsp_edge_collection_pluck_first) {
         "<?php\nclass C { public function r(\\Illuminate\\Support\\Collection $c): void {\n"
         "    $c->pluck('name')->first();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Collection.pluck") >= 0);
     ASSERT(find_resolved(r, "C.r", "Collection.first") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4387,14 +4387,14 @@ TEST(phplsp_edge_doctrine_qb_orderBy_setMax) {
         "<?php\nclass C { public function r(\\Doctrine\\ORM\\QueryBuilder $qb): void {\n"
         "    $qb->select('u')->orderBy('u.id')->setMaxResults(50)->getQuery()->getResult();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "QueryBuilder.select") >= 0);
     ASSERT(find_resolved(r, "C.r", "QueryBuilder.orderBy") >= 0);
     ASSERT(find_resolved(r, "C.r", "QueryBuilder.setMaxResults") >= 0);
     ASSERT(find_resolved(r, "C.r", "QueryBuilder.getQuery") >= 0);
     ASSERT(find_resolved(r, "C.r", "Query.getResult") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4403,11 +4403,11 @@ TEST(phplsp_edge_guzzle_chain) {
         "<?php\nclass C { public function r(\\GuzzleHttp\\Client $h): int {\n"
         "    return $h->get('https://x')->getStatusCode();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Client.get") >= 0);
     ASSERT(find_resolved(r, "C.r", "ResponseInterface.getStatusCode") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4417,11 +4417,11 @@ TEST(phplsp_edge_psr7_full_lifecycle) {
         "    $req->getUri()->__toString();\n"
         "    $req->withMethod('POST')->withUri($req->getUri());\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "RequestInterface.getUri") >= 0);
     ASSERT(find_resolved(r, "C.r", "RequestInterface.withMethod") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4430,10 +4430,10 @@ TEST(phplsp_edge_dt_immutable_chain) {
         "<?php\nclass C { public function r(\\DateTimeImmutable $d): string {\n"
         "    return $d->modify('+1 day')->format('Y-m-d');\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "DateTimeImmutable.modify") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4444,10 +4444,10 @@ TEST(phplsp_edge_throwable_chain) {
         "        $t->getMessage(); $t->getCode(); $t->getFile(); $t->getLine();\n"
         "    }\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "Throwable.getMessage") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4456,11 +4456,11 @@ TEST(phplsp_edge_psr_container_resolve) {
         "<?php\nclass C { public function r(\\Psr\\Container\\ContainerInterface $c): void {\n"
         "    if ($c->has('logger')) { $c->get('logger'); }\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "ContainerInterface.has") >= 0);
     ASSERT(find_resolved(r, "C.r", "ContainerInterface.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4468,10 +4468,10 @@ TEST(phplsp_edge_nullsafe_long) {
     const char *src =
         "<?php\nclass D { public function ok(): int { return 1; } }\n"
         "class C { public ?D $x; public function r(): void { $this->x?->ok(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "D.ok") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4479,10 +4479,10 @@ TEST(phplsp_edge_self_in_constructor) {
     const char *src =
         "<?php\nclass C { public function __construct() { self::init(); }\n"
         "    public static function init(): void {} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.__construct", "C.init") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4490,10 +4490,10 @@ TEST(phplsp_edge_static_in_constructor) {
     const char *src =
         "<?php\nclass C { public function __construct() { static::init(); }\n"
         "    public static function init(): void {} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.__construct", "C.init") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4501,10 +4501,10 @@ TEST(phplsp_edge_parent_method) {
     const char *src =
         "<?php\nclass B { public function tap(): int { return 1; } }\n"
         "class C extends B { public function r(): void { parent::tap(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4515,11 +4515,11 @@ TEST(phplsp_edge_method_visibility_modifiers) {
         "    protected function y(): int { return 2; }\n"
         "    public function z(): int { return $this->x() + $this->y(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.z", "C.x") >= 0);
     ASSERT(find_resolved(r, "C.z", "C.y") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4527,28 +4527,28 @@ TEST(phplsp_edge_final_class) {
     const char *src =
         "<?php\nfinal class C { public function go(): int { return 1; } }\n"
         "class K { public function r(C $c): void { $c->go(); } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "K.r", "C.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(phplsp_edge_class_const_used_in_call) {
     const char *src =
         "<?php\nclass C { const NAME = 'C'; public function r(): string { return self::NAME; } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(phplsp_edge_parameter_default_value) {
     const char *src =
         "<?php\nclass C { public function r(int $x = 0, string $s = 'x'): int { return $x; } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4556,9 +4556,9 @@ TEST(phplsp_edge_return_type_union) {
     const char *src =
         "<?php\nclass A { public function go(): int { return 1; } }\n"
         "class C { public function r(): A|null { return null; } }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4569,11 +4569,11 @@ TEST(phplsp_edge_multi_param_typed) {
         "class C { public function r(A $a, B $b, int $i, string $s): void {\n"
         "    $a->aa(); $b->bb();\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "A.aa") >= 0);
     ASSERT(find_resolved(r, "C.r", "B.bb") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4582,9 +4582,9 @@ TEST(phplsp_edge_function_with_default_typed) {
         "<?php\nclass C { public function r(\\DateTimeImmutable $d = null): void {\n"
         "    /* default null but param typed */\n"
         "} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4594,9 +4594,9 @@ TEST(phplsp_edge_property_with_default) {
         "    public int $count = 0;\n"
         "    public function r(): int { return $this->count; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4607,11 +4607,11 @@ TEST(phplsp_edge_private_static) {
         "    public function go(): int { return 1; }\n"
         "    public function r(): void { self::make()->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.r", "C.make") >= 0);
     ASSERT(find_resolved(r, "C.r", "C.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4631,10 +4631,10 @@ TEST(phplsp_phpstan_type_alias_basic) {
         "        $x->name();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4650,11 +4650,11 @@ TEST(phplsp_phpstan_type_alias_via_param) {
         "    /** @param Maker $a */\n"
         "    public function run($a): void { $a->next()->tap(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.next") >= 0);
     ASSERT(find_resolved(r, "C.run", "B.tap") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4669,10 +4669,10 @@ TEST(phplsp_psalm_type_alias_alternate_spelling) {
         "    /** @param UID $u */\n"
         "    public function run($u): void { $u->name(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4683,9 +4683,9 @@ TEST(phplsp_phpstan_import_type_no_crash) {
         " * @phpstan-import-type Foo from \\Other\\Class_\n"
         " */\n"
         "class C { public function run(): void {} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4701,10 +4701,10 @@ TEST(phplsp_closure_bindTo_resolves_this) {
         "}\n";
     /* The closure literal is the callee of bindTo; my walker should
      * re-walk the closure body with $this rebound to Other. */
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Either the original walk OR the rebind walk emits Other.helper. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4717,10 +4717,10 @@ TEST(phplsp_closure_static_bind_resolves_this) {
         "        \\Closure::bind(function () { return $this->helper(); }, $o);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Other.helper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4733,10 +4733,10 @@ TEST(phplsp_closure_static_bind_arrow_fn) {
         "        \\Closure::bind(fn() => $this->helper(), $o);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Other.helper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4750,10 +4750,10 @@ TEST(phplsp_conditional_return_no_crash) {
         "    public function strange(string|int $x): mixed { return 1; }\n"
         "    public function run(): void { $this->strange('a'); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "C.strange") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4775,10 +4775,10 @@ TEST(phplsp_template_covariant_no_crash) {
         "        $b->get()->name();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4793,9 +4793,9 @@ TEST(phplsp_template_contravariant_no_crash) {
         "    public function take($x): void {}\n"
         "}\n"
         "class C { public function run(): void {} }\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4809,9 +4809,9 @@ TEST(phplsp_phpstan_type_array_shape) {
         "    public function run(): void {}\n"
         "}\n";
     /* @phpstan-type at method-level — we don't apply but shouldn't crash. */
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4827,10 +4827,10 @@ TEST(phplsp_phpstan_type_union) {
         "    /** @param Either $x */\n"
         "    public function run($x): void { $x->aa(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     /* Union types take leftmost — A. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4850,10 +4850,10 @@ TEST(phplsp_eloquent_macro_pattern) {
         "        }, $builder);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Builder.where") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4866,9 +4866,9 @@ TEST(phplsp_array_shape_call_no_crash) {
         "     */\n"
         "    public function run(array $data): void { /* nothing */ }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4882,9 +4882,9 @@ TEST(phplsp_class_string_no_crash) {
         "     */\n"
         "    public function run(string $cls): void {}\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4897,9 +4897,9 @@ TEST(phplsp_int_range_no_crash) {
         "     */\n"
         "    public function run(int $pct): void {}\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4912,9 +4912,9 @@ TEST(phplsp_literal_string_no_crash) {
         "     */\n"
         "    public function run(string $s): void {}\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4933,10 +4933,10 @@ TEST(phplsp_recursive_phpstan_alias) {
         "     */\n"
         "    public function run($id, $u): void { $u->name(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4952,10 +4952,10 @@ TEST(phplsp_phpstan_type_with_template) {
         "    /** @param Maybe $u */\n"
         "    public function run($u): void { $u->name(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "User.name") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4973,10 +4973,10 @@ TEST(phplsp_closure_bind_chain) {
         "        }, $b);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "Bag.add") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4997,10 +4997,10 @@ TEST(phplsp_long_phpdoc_block) {
         "     */\n"
         "    public function run($a): void { $a->go(); }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "C.run", "A.go") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5026,7 +5026,7 @@ TEST(phplsp_realistic_repository_pattern) {
         "            ->getQuery()->getResult();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "UserRepository.findActive", "LoggerInterface.info") >= 0);
     ASSERT(find_resolved(r, "UserRepository.findActive",
@@ -5036,7 +5036,7 @@ TEST(phplsp_realistic_repository_pattern) {
     ASSERT(find_resolved(r, "UserRepository.findActive", "QueryBuilder.where") >= 0);
     ASSERT(find_resolved(r, "UserRepository.findActive", "QueryBuilder.getQuery") >= 0);
     ASSERT(find_resolved(r, "UserRepository.findActive", "Query.getResult") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5052,10 +5052,10 @@ TEST(phplsp_realistic_event_listener) {
         "        $this->log->info('order created');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "OrderCreatedListener.__invoke", "LoggerInterface.info") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5074,11 +5074,11 @@ TEST(phplsp_realistic_command) {
         "        return 0;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "SyncCommand.execute", "SymfonyStyle.success") >= 0);
     ASSERT(find_resolved(r, "SyncCommand.execute", "InputInterface.getArgument") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5094,11 +5094,11 @@ TEST(phplsp_realistic_form_handler) {
         "        return $errors->count() === 0;\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "FormHandler.handle", "ValidatorInterface.validate") >= 0);
     ASSERT(find_resolved(r, "FormHandler.handle", "ConstraintViolationListInterface.count") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5115,13 +5115,13 @@ TEST(phplsp_realistic_mail_sender) {
         "        $this->m->send($email);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "WelcomeMailer.send", "Email.from") >= 0);
     ASSERT(find_resolved(r, "WelcomeMailer.send", "Email.to") >= 0);
     ASSERT(find_resolved(r, "WelcomeMailer.send", "Email.subject") >= 0);
     ASSERT(find_resolved(r, "WelcomeMailer.send", "MailerInterface.send") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5137,10 +5137,10 @@ TEST(phplsp_realistic_cached_service) {
         "    }\n"
         "    private function compute(string $k): mixed { return null; }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "CachedService.getData", "CacheInterface.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5160,7 +5160,7 @@ TEST(phplsp_realistic_logger_chain_with_context) {
         "        $this->log->log('info', 'f');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "S.r", "LoggerInterface.info") >= 0);
     ASSERT(find_resolved(r, "S.r", "LoggerInterface.warning") >= 0);
@@ -5168,7 +5168,7 @@ TEST(phplsp_realistic_logger_chain_with_context) {
     ASSERT(find_resolved(r, "S.r", "LoggerInterface.critical") >= 0);
     ASSERT(find_resolved(r, "S.r", "LoggerInterface.debug") >= 0);
     ASSERT(find_resolved(r, "S.r", "LoggerInterface.log") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5185,13 +5185,13 @@ TEST(phplsp_realistic_carbon_chain_in_method) {
         "        return Carbon::now()->subDay()->subDay()->format('Y-m-d');\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "Clock.tomorrow", "Carbon.now") >= 0);
     ASSERT(find_resolved(r, "Clock.tomorrow", "Carbon.addDay") >= 0);
     ASSERT(find_resolved(r, "Clock.tomorrow", "Carbon.format") >= 0);
     ASSERT(find_resolved(r, "Clock.lastWeek", "Carbon.subDay") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5205,12 +5205,12 @@ TEST(phplsp_realistic_eloquent_model) {
         "        return self::where('active', 1)->orderBy('id')->get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_php(src);
+    LSMFileResult *r = extract_php(src);
     ASSERT(r);
     ASSERT(find_resolved(r, "User.active", "Model.where") >= 0);
     ASSERT(find_resolved(r, "User.active", "Builder.orderBy") >= 0);
     ASSERT(find_resolved(r, "User.active", "Builder.get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5239,15 +5239,15 @@ TEST(phplsp_ordinary_same_leaf_calls_join_by_exact_site) {
     const uint32_t beta_start = (uint32_t)(beta_site - source);
     const uint32_t beta_end = beta_start + (uint32_t)strlen(beta_text);
 
-    CBMFileResult *r = extract_php(source);
+    LSMFileResult *r = extract_php(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *alpha_call = NULL;
-    const CBMCall *beta_call = NULL;
+    const LSMCall *alpha_call = NULL;
+    const LSMCall *beta_call = NULL;
     int render_carriers = 0;
     int zero_span_carriers = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, "OccurrenceProbe.run") ||
             !call->callee_name || !strstr(call->callee_name, "render")) {
             continue;
@@ -5267,13 +5267,13 @@ TEST(phplsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_NOT_NULL(beta_call);
     ASSERT_TRUE(alpha_call != beta_call);
 
-    const CBMResolvedCall *alpha_semantic = NULL;
-    const CBMResolvedCall *beta_semantic = NULL;
+    const LSMResolvedCall *alpha_semantic = NULL;
+    const LSMResolvedCall *beta_semantic = NULL;
     int render_semantics = 0;
     int zero_span_hijackers = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
             !strstr(rc->caller_qn, "OccurrenceProbe.run") || !rc->callee_qn ||
             !strstr(rc->callee_qn, ".render")) {
             continue;
@@ -5297,14 +5297,14 @@ TEST(phplsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_NOT_NULL(beta_semantic);
     ASSERT_TRUE(alpha_semantic != beta_semantic);
 
-    const CBMResolvedCall *alpha_join =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, alpha_call, false);
-    const CBMResolvedCall *beta_join =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, beta_call, false);
+    const LSMResolvedCall *alpha_join =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, alpha_call, false);
+    const LSMResolvedCall *beta_join =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, beta_call, false);
     ASSERT_TRUE(alpha_join == alpha_semantic);
     ASSERT_TRUE(beta_join == beta_semantic);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

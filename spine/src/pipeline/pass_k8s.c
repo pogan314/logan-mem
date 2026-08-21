@@ -8,8 +8,8 @@
  *      → emit one Resource node per file (first document only — multi-document YAML is not yet
  * supported)
  *
- * Depends on: pass_infrascan.c (cbm_is_kustomize_file, cbm_is_k8s_manifest, cbm_infra_qn),
- *             extraction layer (cbm.h), graph_buffer, pipeline internals.
+ * Depends on: pass_infrascan.c (lsm_is_kustomize_file, lsm_is_k8s_manifest, lsm_infra_qn),
+ *             extraction layer (lsm.h), graph_buffer, pipeline internals.
  */
 #include "foundation/constants.h"
 #include "pipeline/pipeline.h"
@@ -21,7 +21,7 @@
 #include "foundation/compat.h"
 #include "foundation/compat_fs.h"
 #include "foundation/limits.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +32,7 @@
 /* Read entire file into heap-allocated buffer. Returns NULL on error.
  * Caller must free(). Sets *out_len to byte count. */
 static char *k8s_read_file(const char *path, int *out_len) {
-    FILE *f = cbm_fopen(path, "rb");
+    FILE *f = lsm_fopen(path, "rb");
     if (!f) {
         return NULL;
     }
@@ -41,14 +41,14 @@ static char *k8s_read_file(const char *path, int *out_len) {
     long size = ftell(f);
     (void)fseek(f, 0, SEEK_SET);
 
-    if (size <= 0 || size > cbm_max_file_bytes()) { /* generous, env-configurable cap (B4) */
+    if (size <= 0 || size > lsm_max_file_bytes()) { /* generous, env-configurable cap (B4) */
         (void)fclose(f);
         return NULL;
     }
 
     /* +pad: tree-sitter lexer lookahead reads past EOF; keep it in-bounds */
-    enum { CBM_TS_LOOKAHEAD_PAD = 16 };
-    char *buf = malloc((size_t)size + CBM_TS_LOOKAHEAD_PAD);
+    enum { LSM_TS_LOOKAHEAD_PAD = 16 };
+    char *buf = malloc((size_t)size + LSM_TS_LOOKAHEAD_PAD);
     if (!buf) {
         (void)fclose(f);
         return NULL;
@@ -59,7 +59,7 @@ static char *k8s_read_file(const char *path, int *out_len) {
     if (nread > (size_t)size) {
         nread = (size_t)size;
     }
-    memset(buf + nread, 0, CBM_TS_LOOKAHEAD_PAD);
+    memset(buf + nread, 0, LSM_TS_LOOKAHEAD_PAD);
     *out_len = (int)nread;
     return buf;
 }
@@ -67,8 +67,8 @@ static char *k8s_read_file(const char *path, int *out_len) {
 /* Format int to string for logging. Thread-safe via TLS. */
 static const char *itoa_k8s(int val) {
     enum { RING_BUF_COUNT = 4, RING_BUF_MASK = 3 };
-    static CBM_TLS char bufs[RING_BUF_COUNT][CBM_SZ_32];
-    static CBM_TLS int idx = 0;
+    static LSM_TLS char bufs[RING_BUF_COUNT][LSM_SZ_32];
+    static LSM_TLS int idx = 0;
     int i = idx;
     idx = (idx + SKIP_ONE) & RING_BUF_MASK;
     snprintf(bufs[i], sizeof(bufs[i]), "%d", val);
@@ -83,15 +83,15 @@ static const char *k8s_basename(const char *path) {
 
 /* ── Kustomize handler ───────────────────────────────────────────── */
 
-static void handle_kustomize(cbm_pipeline_ctx_t *ctx, const char *path, const char *rel_path,
-                             CBMFileResult *result) {
+static void handle_kustomize(lsm_pipeline_ctx_t *ctx, const char *path, const char *rel_path,
+                             LSMFileResult *result) {
     /* Emit Module node for this kustomize overlay file */
-    char *mod_qn = cbm_infra_qn(ctx->project_name, rel_path, "kustomize", NULL);
+    char *mod_qn = lsm_infra_qn(ctx->project_name, rel_path, "kustomize", NULL);
     if (!mod_qn) {
         return;
     }
 
-    int64_t mod_id = cbm_gbuf_upsert_node(ctx->gbuf, "Module", k8s_basename(rel_path), mod_qn,
+    int64_t mod_id = lsm_gbuf_upsert_node(ctx->gbuf, "Module", k8s_basename(rel_path), mod_qn,
                                           rel_path, SKIP_ONE, 0, "{\"source\":\"kustomize\"}");
     free(mod_qn);
 
@@ -102,7 +102,7 @@ static void handle_kustomize(cbm_pipeline_ctx_t *ctx, const char *path, const ch
     /* If we have a cached extraction result, emit IMPORTS edges for
      * resources/bases/patches/components entries */
     int import_count = 0;
-    CBMFileResult *res = result;
+    LSMFileResult *res = result;
     bool allocated = false;
 
     if (!res) {
@@ -110,8 +110,8 @@ static void handle_kustomize(cbm_pipeline_ctx_t *ctx, const char *path, const ch
         int src_len = 0;
         char *source = k8s_read_file(path, &src_len);
         if (source) {
-            res = cbm_extract_file(source, src_len, CBM_LANG_KUSTOMIZE, ctx->project_name, rel_path,
-                                   CBM_EXTRACT_BUDGET, NULL, NULL);
+            res = lsm_extract_file(source, src_len, LSM_LANG_KUSTOMIZE, ctx->project_name, rel_path,
+                                   LSM_EXTRACT_BUDGET, NULL, NULL);
             free(source);
             allocated = true;
         }
@@ -119,34 +119,34 @@ static void handle_kustomize(cbm_pipeline_ctx_t *ctx, const char *path, const ch
 
     if (res) {
         for (int j = 0; j < res->imports.count; j++) {
-            CBMImport *imp = &res->imports.items[j];
+            LSMImport *imp = &res->imports.items[j];
             if (!imp->module_path) {
                 continue;
             }
 
             /* Compute target file QN */
             char *target_qn =
-                cbm_pipeline_fqn_compute(ctx->project_name, imp->module_path, "__file__");
+                lsm_pipeline_fqn_compute(ctx->project_name, imp->module_path, "__file__");
             if (!target_qn) {
                 continue;
             }
 
-            const cbm_gbuf_node_t *target = cbm_gbuf_find_by_qn(ctx->gbuf, target_qn);
+            const lsm_gbuf_node_t *target = lsm_gbuf_find_by_qn(ctx->gbuf, target_qn);
             free(target_qn);
 
             if (target) {
-                cbm_gbuf_insert_edge(ctx->gbuf, mod_id, target->id, "IMPORTS",
+                lsm_gbuf_insert_edge(ctx->gbuf, mod_id, target->id, "IMPORTS",
                                      "{\"via\":\"kustomize\"}");
                 import_count++;
             }
         }
 
         if (allocated) {
-            cbm_free_result(res);
+            lsm_free_result(res);
         }
     }
 
-    cbm_log_info("pass.k8s.kustomize", "file", rel_path, "imports", itoa_k8s(import_count));
+    lsm_log_info("pass.k8s.kustomize", "file", rel_path, "imports", itoa_k8s(import_count));
 }
 
 /* ── K8s cross-manifest label-selector matching ──────────────────────
@@ -254,7 +254,7 @@ static void k8s_scan_labels(const char *source, k8s_record_t *rec) {
     while (p && *p) {
         const char *eol = strchr(p, '\n');
         size_t len = eol ? (size_t)(eol - p) : strlen(p);
-        char line[CBM_SZ_512];
+        char line[LSM_SZ_512];
         size_t cp = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
         memcpy(line, p, cp);
         line[cp] = '\0';
@@ -339,7 +339,7 @@ static bool k8s_selector_matches(const k8s_record_t *svc, const k8s_record_t *wl
 
 /* After all manifests are recorded, connect each Service to the workload(s) its
  * selector targets via an INFRA_MAPS edge (Service Resource → workload Resource). */
-static void k8s_link_selectors(cbm_pipeline_ctx_t *ctx, const k8s_record_array_t *recs) {
+static void k8s_link_selectors(lsm_pipeline_ctx_t *ctx, const k8s_record_array_t *recs) {
     int edges = 0;
     for (int i = 0; i < recs->count; i++) {
         const k8s_record_t *svc = &recs->items[i];
@@ -352,17 +352,17 @@ static void k8s_link_selectors(cbm_pipeline_ctx_t *ctx, const k8s_record_array_t
                 continue;
             }
             if (k8s_selector_matches(svc, wl)) {
-                char props[CBM_SZ_256];
+                char props[LSM_SZ_256];
                 snprintf(props, sizeof(props),
                          "{\"kind\":\"selector\",\"service\":\"%s\",\"workload\":\"%s\"}",
                          svc->name, wl->name);
-                cbm_gbuf_insert_edge(ctx->gbuf, svc->node_id, wl->node_id, "INFRA_MAPS", props);
+                lsm_gbuf_insert_edge(ctx->gbuf, svc->node_id, wl->node_id, "INFRA_MAPS", props);
                 edges++;
             }
         }
     }
     if (edges > 0) {
-        cbm_log_info("pass.k8s.selectors", "linked", itoa_k8s(edges));
+        lsm_log_info("pass.k8s.selectors", "linked", itoa_k8s(edges));
     }
 }
 
@@ -372,24 +372,24 @@ static void k8s_link_selectors(cbm_pipeline_ctx_t *ctx, const k8s_record_array_t
  * must free after this call returns).  When `rec` is non-NULL it is populated
  * with the first Resource's node id, name and label/selector values for later
  * cross-manifest selector matching. */
-static void handle_k8s_manifest(cbm_pipeline_ctx_t *ctx, const char *path, const char *rel_path,
+static void handle_k8s_manifest(lsm_pipeline_ctx_t *ctx, const char *path, const char *rel_path,
                                 const char *source, int src_len, k8s_record_t *rec) {
     (void)path; /* retained for symmetry; source is always provided now */
     int resource_count = 0;
 
-    CBMFileResult *res = cbm_extract_file(source, src_len, CBM_LANG_K8S, ctx->project_name,
-                                          rel_path, CBM_EXTRACT_BUDGET, NULL, NULL);
+    LSMFileResult *res = lsm_extract_file(source, src_len, LSM_LANG_K8S, ctx->project_name,
+                                          rel_path, LSM_EXTRACT_BUDGET, NULL, NULL);
     if (!res) {
         return;
     }
 
     /* Compute file node QN for DEFINES edges */
-    char *file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
-    const cbm_gbuf_node_t *file_node = file_qn ? cbm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
+    char *file_qn = lsm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
+    const lsm_gbuf_node_t *file_node = file_qn ? lsm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
     free(file_qn);
 
     for (int d = 0; d < res->defs.count; d++) {
-        CBMDefinition *def = &res->defs.items[d];
+        LSMDefinition *def = &res->defs.items[d];
         if (!def->label || strcmp(def->label, "Resource") != 0) {
             continue;
         }
@@ -398,12 +398,12 @@ static void handle_k8s_manifest(cbm_pipeline_ctx_t *ctx, const char *path, const
         }
 
         int64_t node_id =
-            cbm_gbuf_upsert_node(ctx->gbuf, "Resource", def->name, def->qualified_name, rel_path,
+            lsm_gbuf_upsert_node(ctx->gbuf, "Resource", def->name, def->qualified_name, rel_path,
                                  (int)def->start_line, (int)def->end_line, "{\"source\":\"k8s\"}");
 
         /* DEFINES edge: File → Resource */
         if (file_node && node_id > 0) {
-            cbm_gbuf_insert_edge(ctx->gbuf, file_node->id, node_id, "DEFINES", "{}");
+            lsm_gbuf_insert_edge(ctx->gbuf, file_node->id, node_id, "DEFINES", "{}");
         }
 
         /* Capture the first Resource for cross-manifest selector matching. */
@@ -414,14 +414,14 @@ static void handle_k8s_manifest(cbm_pipeline_ctx_t *ctx, const char *path, const
         resource_count++;
     }
 
-    cbm_free_result(res);
+    lsm_free_result(res);
 
     /* Record selector / pod-label values for later Service → workload linking. */
     if (rec && rec->node_id > 0) {
         k8s_scan_labels(source, rec);
     }
 
-    cbm_log_info("pass.k8s.manifest", "file", rel_path, "resources", itoa_k8s(resource_count));
+    lsm_log_info("pass.k8s.manifest", "file", rel_path, "resources", itoa_k8s(resource_count));
 }
 
 /* ── Helm chart handler ──────────────────────────────────────────── */
@@ -432,25 +432,25 @@ static bool is_helm_chart_file(const char *base) {
 
 /* Emit a Chart node for a Chart.yaml and a DEPENDS_ON edge to a (shared,
  * deduplicated) Chart node per declared dependency (#338). */
-static void handle_helm_chart(cbm_pipeline_ctx_t *ctx, const char *rel_path, const char *source) {
-    cbm_helm_chart_t hc;
-    if (cbm_parse_helm_chart(source, &hc) != 0) {
+static void handle_helm_chart(lsm_pipeline_ctx_t *ctx, const char *rel_path, const char *source) {
+    lsm_helm_chart_t hc;
+    if (lsm_parse_helm_chart(source, &hc) != 0) {
         return;
     }
 
     const char *cname = hc.chart_name[0] ? hc.chart_name : k8s_basename(rel_path);
-    char *chart_qn = cbm_infra_qn(ctx->project_name, rel_path, "helm-chart", NULL);
+    char *chart_qn = lsm_infra_qn(ctx->project_name, rel_path, "helm-chart", NULL);
     if (!chart_qn) {
         return;
     }
-    int64_t chart_id = cbm_gbuf_upsert_node(ctx->gbuf, "Chart", cname, chart_qn, rel_path, SKIP_ONE,
+    int64_t chart_id = lsm_gbuf_upsert_node(ctx->gbuf, "Chart", cname, chart_qn, rel_path, SKIP_ONE,
                                             0, "{\"source\":\"helm\"}");
     free(chart_qn);
 
-    char *file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
-    const cbm_gbuf_node_t *file_node = file_qn ? cbm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
+    char *file_qn = lsm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
+    const lsm_gbuf_node_t *file_node = file_qn ? lsm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
     if (file_node && chart_id > 0) {
-        cbm_gbuf_insert_edge(ctx->gbuf, file_node->id, chart_id, "DEFINES", "{}");
+        lsm_gbuf_insert_edge(ctx->gbuf, file_node->id, chart_id, "DEFINES", "{}");
     }
     free(file_qn);
 
@@ -458,17 +458,17 @@ static void handle_helm_chart(cbm_pipeline_ctx_t *ctx, const char *rel_path, con
     for (int i = 0; i < hc.dep_count && chart_id > 0; i++) {
         /* Stable per-project QN so multiple charts depending on the same chart
          * link to one shared dependency node. */
-        char dep_qn[CBM_SZ_512];
+        char dep_qn[LSM_SZ_512];
         snprintf(dep_qn, sizeof(dep_qn), "%s.__helm_dep__.%s", ctx->project_name, hc.deps[i]);
         int64_t dep_id =
-            cbm_gbuf_upsert_node(ctx->gbuf, "Chart", hc.deps[i], dep_qn, rel_path, SKIP_ONE, 0,
+            lsm_gbuf_upsert_node(ctx->gbuf, "Chart", hc.deps[i], dep_qn, rel_path, SKIP_ONE, 0,
                                  "{\"source\":\"helm\",\"external\":true}");
         if (dep_id > 0) {
-            cbm_gbuf_insert_edge(ctx->gbuf, chart_id, dep_id, "DEPENDS_ON", "{}");
+            lsm_gbuf_insert_edge(ctx->gbuf, chart_id, dep_id, "DEPENDS_ON", "{}");
             dep_edges++;
         }
     }
-    cbm_log_info("pass.k8s.helm", "file", rel_path, "deps", itoa_k8s(dep_edges));
+    lsm_log_info("pass.k8s.helm", "file", rel_path, "deps", itoa_k8s(dep_edges));
 }
 
 /* ── Dependency-manifest handler (go.mod / requirements.txt) ──────── */
@@ -483,19 +483,19 @@ static bool is_requirements_file(const char *base) {
 
 /* Emit a DEPENDS_ON edge from the manifest file node to a (shared, per-project)
  * external Package node.  Mirrors the Helm Chart.yaml DEPENDS_ON shape. */
-static int emit_dep_edge(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src, const char *rel_path,
+static int emit_dep_edge(lsm_pipeline_ctx_t *ctx, const lsm_gbuf_node_t *src, const char *rel_path,
                          const char *ecosystem, const char *name) {
     if (!name || !name[0]) {
         return 0;
     }
-    char dep_qn[CBM_SZ_512];
+    char dep_qn[LSM_SZ_512];
     snprintf(dep_qn, sizeof(dep_qn), "%s.__%s_dep__.%s", ctx->project_name, ecosystem, name);
-    char dep_props[CBM_SZ_256];
+    char dep_props[LSM_SZ_256];
     snprintf(dep_props, sizeof(dep_props), "{\"source\":\"%s\",\"external\":true}", ecosystem);
     int64_t dep_id =
-        cbm_gbuf_upsert_node(ctx->gbuf, "Package", name, dep_qn, rel_path, SKIP_ONE, 0, dep_props);
+        lsm_gbuf_upsert_node(ctx->gbuf, "Package", name, dep_qn, rel_path, SKIP_ONE, 0, dep_props);
     if (dep_id > 0 && dep_id != src->id) {
-        cbm_gbuf_insert_edge(ctx->gbuf, src->id, dep_id, "DEPENDS_ON", "{}");
+        lsm_gbuf_insert_edge(ctx->gbuf, src->id, dep_id, "DEPENDS_ON", "{}");
         return 1;
     }
     return 0;
@@ -519,7 +519,7 @@ static void first_token(const char *line, char *out, size_t out_sz) {
 /* Parse go.mod `require` directives (single-line and block forms) and emit a
  * DEPENDS_ON edge per dependency.  go.mod requires are not surfaced as imports
  * by the extraction layer, so we parse the manifest text directly here. */
-static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
+static int parse_gomod_deps(lsm_pipeline_ctx_t *ctx, const lsm_gbuf_node_t *src,
                             const char *rel_path, const char *source) {
     int edges = 0;
     bool in_block = false;
@@ -527,7 +527,7 @@ static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
     while (p && *p) {
         const char *eol = strchr(p, '\n');
         size_t len = eol ? (size_t)(eol - p) : strlen(p);
-        char line[CBM_SZ_512];
+        char line[LSM_SZ_512];
         size_t cp = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
         memcpy(line, p, cp);
         line[cp] = '\0';
@@ -539,7 +539,7 @@ static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
             if (t[0] == ')') {
                 in_block = false;
             } else if (t[0] && t[0] != '/') {
-                char name[CBM_SZ_256];
+                char name[LSM_SZ_256];
                 first_token(t, name, sizeof(name));
                 edges += emit_dep_edge(ctx, src, rel_path, "gomod", name);
             }
@@ -551,7 +551,7 @@ static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
             if (*rest == '(') {
                 in_block = true;
             } else if (*rest) {
-                char name[CBM_SZ_256];
+                char name[LSM_SZ_256];
                 first_token(rest, name, sizeof(name));
                 edges += emit_dep_edge(ctx, src, rel_path, "gomod", name);
             }
@@ -567,14 +567,14 @@ static int parse_gomod_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
 /* Parse requirements.txt entries (one package spec per line) and emit a
  * DEPENDS_ON edge per dependency.  The package name is the leading token up to
  * the first version/extras/comment delimiter. */
-static int parse_requirements_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_t *src,
+static int parse_requirements_deps(lsm_pipeline_ctx_t *ctx, const lsm_gbuf_node_t *src,
                                    const char *rel_path, const char *source) {
     int edges = 0;
     const char *p = source;
     while (p && *p) {
         const char *eol = strchr(p, '\n');
         size_t len = eol ? (size_t)(eol - p) : strlen(p);
-        char line[CBM_SZ_512];
+        char line[LSM_SZ_512];
         size_t cp = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
         memcpy(line, p, cp);
         line[cp] = '\0';
@@ -584,7 +584,7 @@ static int parse_requirements_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_
         }
         /* Skip blanks, comments, options (-r, --hash), and URLs. */
         if (t[0] && t[0] != '#' && t[0] != '-' && strstr(t, "://") == NULL) {
-            char name[CBM_SZ_256];
+            char name[LSM_SZ_256];
             size_t n = 0;
             while (t[n] && t[n] != '=' && t[n] != '<' && t[n] != '>' && t[n] != '!' &&
                    t[n] != '~' && t[n] != '[' && t[n] != ';' && t[n] != ' ' && t[n] != '\t' &&
@@ -603,13 +603,13 @@ static int parse_requirements_deps(cbm_pipeline_ctx_t *ctx, const cbm_gbuf_node_
     return edges;
 }
 
-static void handle_dep_manifest(cbm_pipeline_ctx_t *ctx, const char *rel_path, const char *source,
+static void handle_dep_manifest(lsm_pipeline_ctx_t *ctx, const char *rel_path, const char *source,
                                 const char *ecosystem) {
     if (!source) {
         return;
     }
-    char *file_qn = cbm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
-    const cbm_gbuf_node_t *src = file_qn ? cbm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
+    char *file_qn = lsm_pipeline_fqn_compute(ctx->project_name, rel_path, "__file__");
+    const lsm_gbuf_node_t *src = file_qn ? lsm_gbuf_find_by_qn(ctx->gbuf, file_qn) : NULL;
     free(file_qn);
     if (!src) {
         return;
@@ -617,15 +617,15 @@ static void handle_dep_manifest(cbm_pipeline_ctx_t *ctx, const char *rel_path, c
     int dep_edges = strcmp(ecosystem, "gomod") == 0
                         ? parse_gomod_deps(ctx, src, rel_path, source)
                         : parse_requirements_deps(ctx, src, rel_path, source);
-    cbm_log_info("pass.k8s.depmanifest", "file", rel_path, "deps", itoa_k8s(dep_edges));
+    lsm_log_info("pass.k8s.depmanifest", "file", rel_path, "deps", itoa_k8s(dep_edges));
 }
 
 /* ── Pass entry point ────────────────────────────────────────────── */
 
-int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files, int file_count) {
-    cbm_log_info("pass.start", "pass", "k8s", "files", itoa_k8s(file_count));
+int lsm_pipeline_pass_k8s(lsm_pipeline_ctx_t *ctx, const lsm_file_info_t *files, int file_count) {
+    lsm_log_info("pass.start", "pass", "k8s", "files", itoa_k8s(file_count));
 
-    cbm_init();
+    lsm_init();
 
     int kustomize_count = 0;
     int manifest_count = 0;
@@ -637,20 +637,20 @@ int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files,
     recs.cap = recs.items ? K8S_MAX_RECORDS : 0;
 
     for (int i = 0; i < file_count; i++) {
-        if (cbm_pipeline_check_cancel(ctx)) {
+        if (lsm_pipeline_check_cancel(ctx)) {
             free(recs.items);
-            return CBM_NOT_FOUND;
+            return LSM_NOT_FOUND;
         }
 
         const char *path = files[i].path;
         const char *rel = files[i].rel_path;
-        CBMLanguage lang = files[i].language;
+        LSMLanguage lang = files[i].language;
         const char *base = k8s_basename(rel);
 
-        CBMFileResult *cached =
+        LSMFileResult *cached =
             (ctx->result_cache && ctx->result_cache[i]) ? ctx->result_cache[i] : NULL;
 
-        if (is_gomod_file(base) || lang == CBM_LANG_GOMOD || is_requirements_file(base)) {
+        if (is_gomod_file(base) || lang == LSM_LANG_GOMOD || is_requirements_file(base)) {
             int dep_len = 0;
             char *dep_src = k8s_read_file(path, &dep_len);
             if (dep_src) {
@@ -658,10 +658,10 @@ int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files,
                                     is_requirements_file(base) ? "pypi" : "gomod");
                 free(dep_src);
             }
-        } else if (cbm_is_kustomize_file(base)) {
+        } else if (lsm_is_kustomize_file(base)) {
             handle_kustomize(ctx, path, rel, cached);
             kustomize_count++;
-        } else if (lang == CBM_LANG_YAML || lang == CBM_LANG_K8S) {
+        } else if (lang == LSM_LANG_YAML || lang == LSM_LANG_K8S) {
             /* Read source once to classify (and reuse for uncached extraction). */
             int src_len = 0;
             char *source = k8s_read_file(path, &src_len);
@@ -669,8 +669,8 @@ int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files,
                 if (is_helm_chart_file(base)) {
                     handle_helm_chart(ctx, rel, source);
                     helm_count++;
-                } else if (cbm_is_k8s_manifest(base, source)) {
-                    /* Always re-extract with CBM_LANG_K8S regardless of any cached
+                } else if (lsm_is_k8s_manifest(base, source)) {
+                    /* Always re-extract with LSM_LANG_K8S regardless of any cached
                      * result: cached results were produced during the parallel YAML
                      * pass and contain no "Resource" definitions.  Pass the already-
                      * read source buffer so handle_k8s_manifest does not re-read. */
@@ -691,7 +691,7 @@ int cbm_pipeline_pass_k8s(cbm_pipeline_ctx_t *ctx, const cbm_file_info_t *files,
     k8s_link_selectors(ctx, &recs);
     free(recs.items);
 
-    cbm_log_info("pass.done", "pass", "k8s", "kustomize", itoa_k8s(kustomize_count), "manifests",
+    lsm_log_info("pass.done", "pass", "k8s", "kustomize", itoa_k8s(kustomize_count), "manifests",
                  itoa_k8s(manifest_count));
     (void)helm_count;
     return 0;

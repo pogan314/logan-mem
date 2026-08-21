@@ -1,4 +1,4 @@
-# Contributing to codebase-memory-mcp
+# Contributing to logan-spine-mcp
 
 Contributions are welcome. This guide covers setup, testing, and PR guidelines.
 
@@ -9,8 +9,8 @@ Contributions are welcome. This guide covers setup, testing, and PR guidelines.
 **Prerequisites**: C compiler (gcc or clang), make, zlib, Git. Optional: Node.js 22+ (for graph UI).
 
 ```bash
-git clone https://github.com/DeusData/codebase-memory-mcp.git
-cd codebase-memory-mcp
+git clone https://github.com/DeusData/logan-spine-mcp.git
+cd logan-spine-mcp
 git config core.hooksPath scripts/hooks  # activates pre-commit security checks
 scripts/build.sh
 ```
@@ -18,7 +18,7 @@ scripts/build.sh
 macOS: `xcode-select --install` provides clang.
 Linux: `sudo apt install build-essential zlib1g-dev` (Debian/Ubuntu) or `sudo dnf install gcc zlib-devel` (Fedora).
 
-The binary is output to `build/c/codebase-memory-mcp`.
+The binary is output to `build/c/logan-spine-mcp`.
 
 ## Run Tests
 
@@ -43,7 +43,7 @@ Runs clang-tidy, cppcheck, and clang-format. All must pass before committing (al
 ## Run Security Audit
 
 ```bash
-make -f Makefile.cbm security
+make -f Makefile.lsm security
 ```
 
 Runs 8 security layers: static allow-list audit, binary string scan, UI audit, install audit, network egress test, MCP robustness (fuzz), vendored dependency integrity, and frontend integrity.
@@ -63,7 +63,7 @@ src/
   watcher/          Git-based background auto-sync
   cli/              CLI subcommands (install, update, uninstall, config)
   ui/               Graph visualization HTTP server (first-party httpd)
-internal/cbm/       Language registry, AST extraction, and vendored grammars
+internal/lsm/       Language registry, AST extraction, and vendored grammars
 vendored/           sqlite3, yyjson, mimalloc, xxhash, tre, nomic
 graph-ui/           React/Three.js frontend for graph visualization
 scripts/            Build, test, lint, security audit scripts
@@ -74,14 +74,14 @@ tests/              All C test files
 
 Language support is split between two layers:
 
-1. **Tree-sitter extraction** (`internal/cbm/`): Grammar loading, AST node type configuration in `lang_specs.c`, function/call/import extraction in `extract_*.c`
+1. **Tree-sitter extraction** (`internal/lsm/`): Grammar loading, AST node type configuration in `lang_specs.c`, function/call/import extraction in `extract_*.c`
 2. **Pipeline passes** (`src/pipeline/`): Call resolution, usage tracking, HTTP route linking
 
 **Workflow for language fixes:**
 
-1. Check the language spec in `internal/cbm/lang_specs.c`
+1. Check the language spec in `internal/lsm/lang_specs.c`
 2. Use regression tests to verify extraction: `tests/test_extraction.c`
-3. Check parity tests: `internal/cbm/regression_test.go` (legacy, being migrated)
+3. Check parity tests: `internal/lsm/regression_test.go` (legacy, being migrated)
 4. Add a test case in `tests/test_pipeline.c` for integration-level fixes
 5. Verify with a real open-source repo
 
@@ -89,14 +89,14 @@ Language support is split between two layers:
 
 Languages like **Dockerfile**, **docker-compose**, **Kubernetes manifests**, and **Kustomize** do not require a new tree-sitter grammar. Instead they follow an *infra-pass* pattern, reusing the existing tree-sitter YAML grammar where applicable:
 
-1. **Detection helpers** in `src/pipeline/pass_infrascan.c` — functions like `cbm_is_dockerfile()`, `cbm_is_k8s_manifest()`, `cbm_is_kustomize_file()` identify files by name and/or content heuristics (e.g., presence of `apiVersion:`).
-2. **Custom extractors** in `internal/cbm/extract_k8s.c` — tree-sitter-based parsers that walk the YAML AST (using the tree-sitter YAML grammar) and populate `CBMFileResult` with imports and definitions.
+1. **Detection helpers** in `src/pipeline/pass_infrascan.c` — functions like `lsm_is_dockerfile()`, `lsm_is_k8s_manifest()`, `lsm_is_kustomize_file()` identify files by name and/or content heuristics (e.g., presence of `apiVersion:`).
+2. **Custom extractors** in `internal/lsm/extract_k8s.c` — tree-sitter-based parsers that walk the YAML AST (using the tree-sitter YAML grammar) and populate `LSMFileResult` with imports and definitions.
 3. **Pipeline pass** (`pass_k8s.c`, `pass_infrascan.c`) — calls the extractor and emits graph nodes/edges. K8s manifests emit `Resource` nodes; Kustomize files emit `Module` nodes with `IMPORTS` edges to referenced resource files.
 
 **When adding a new infrastructure language:**
-- Add a detection helper (`cbm_is_<lang>_file()`) in `pass_infrascan.c` or a new `pass_<lang>.c`.
-- Add the `CBM_LANG_<LANG>` enum value in `internal/cbm/cbm.h` and a row in the language table in `lang_specs.c`.
-- Write a custom extractor that returns `CBMFileResult*` — do not add a tree-sitter grammar.
+- Add a detection helper (`lsm_is_<lang>_file()`) in `pass_infrascan.c` or a new `pass_<lang>.c`.
+- Add the `LSM_LANG_<LANG>` enum value in `internal/lsm/lsm.h` and a row in the language table in `lang_specs.c`.
+- Write a custom extractor that returns `LSMFileResult*` — do not add a tree-sitter grammar.
 - Register the pass in `pipeline.c`.
 - Add tests in `tests/test_pipeline.c` following the `TEST(infra_is_dockerfile)` and `TEST(k8s_extract_manifest)` patterns.
 
@@ -160,7 +160,7 @@ If you add a new `system()`, `popen()`, `fork()`, or network call, it must be ju
 
 ## Good First Issues
 
-Check [issues labeled `good first issue`](https://github.com/DeusData/codebase-memory-mcp/labels/good%20first%20issue) for beginner-friendly tasks with clear scope and guidance.
+Check [issues labeled `good first issue`](https://github.com/DeusData/logan-spine-mcp/labels/good%20first%20issue) for beginner-friendly tasks with clear scope and guidance.
 
 ## License and sign-off (DCO) — required on every commit
 

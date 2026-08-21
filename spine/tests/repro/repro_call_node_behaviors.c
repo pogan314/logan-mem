@@ -14,7 +14,7 @@
  * top-level Puppet DSL case), so duplicate emissions and scope drift stay RED.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lang_specs.h"
 #include "macro_table.h"
 
@@ -25,7 +25,7 @@
 
 typedef struct {
     const char *tag;
-    CBMLanguage language;
+    LSMLanguage language;
     const char *filename;
     const char *source;
     const char *ast_kind;
@@ -70,7 +70,7 @@ static int ast_kind_count(TSNode node, const char *kind) {
 }
 
 static void check_exact_ast_kind(const BehaviorCase *test_case, int *failures) {
-    const TSLanguage *language = cbm_ts_language(test_case->language);
+    const TSLanguage *language = lsm_ts_language(test_case->language);
     TSParser *parser = ts_parser_new();
     if (!language || !parser || !ts_parser_set_language(parser, language)) {
         fprintf(stderr,
@@ -99,10 +99,10 @@ static void check_exact_ast_kind(const BehaviorCase *test_case, int *failures) {
     ts_parser_delete(parser);
 }
 
-static CBMFileResult *extract_case_with_macros(const BehaviorCase *test_case,
-                                               const CBMMacroTable *macro_table, int *failures) {
-    CBMFileResult *result =
-        cbm_extract_file_ex(test_case->source, (int)strlen(test_case->source), test_case->language,
+static LSMFileResult *extract_case_with_macros(const BehaviorCase *test_case,
+                                               const LSMMacroTable *macro_table, int *failures) {
+    LSMFileResult *result =
+        lsm_extract_file_ex(test_case->source, (int)strlen(test_case->source), test_case->language,
                             "repro", test_case->filename, 0, NULL, NULL, macro_table, NULL);
     if (!result) {
         fprintf(stderr,
@@ -117,15 +117,15 @@ static CBMFileResult *extract_case_with_macros(const BehaviorCase *test_case,
     return result;
 }
 
-static CBMFileResult *extract_case(const BehaviorCase *test_case, int *failures) {
+static LSMFileResult *extract_case(const BehaviorCase *test_case, int *failures) {
     return extract_case_with_macros(test_case, NULL, failures);
 }
 
-static int call_count_exact(const CBMFileResult *result, const char *caller_qn,
+static int call_count_exact(const LSMFileResult *result, const char *caller_qn,
                             const char *callee) {
     int count = 0;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         if (call->callee_name && call->enclosing_func_qn &&
             strcmp(call->callee_name, callee) == 0 &&
             strcmp(call->enclosing_func_qn, caller_qn) == 0)
@@ -134,11 +134,11 @@ static int call_count_exact(const CBMFileResult *result, const char *caller_qn,
     return count;
 }
 
-static int usage_count_exact(const CBMFileResult *result, const char *caller_qn,
+static int usage_count_exact(const LSMFileResult *result, const char *caller_qn,
                              const char *reference) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
+        const LSMUsage *usage = &result->usages.items[i];
         if (usage->ref_name && usage->enclosing_func_qn &&
             strcmp(usage->ref_name, reference) == 0 &&
             strcmp(usage->enclosing_func_qn, caller_qn) == 0)
@@ -147,12 +147,12 @@ static int usage_count_exact(const CBMFileResult *result, const char *caller_qn,
     return count;
 }
 
-static int value_usage_count_exact(const CBMFileResult *result, const char *caller_qn,
+static int value_usage_count_exact(const LSMFileResult *result, const char *caller_qn,
                                    const char *reference) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->ref_name && usage->enclosing_func_qn &&
+        const LSMUsage *usage = &result->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->ref_name && usage->enclosing_func_qn &&
             strcmp(usage->ref_name, reference) == 0 &&
             strcmp(usage->enclosing_func_qn, caller_qn) == 0) {
             count++;
@@ -161,11 +161,11 @@ static int value_usage_count_exact(const CBMFileResult *result, const char *call
     return count;
 }
 
-static int callable_definition_count_exact(const CBMFileResult *result, const char *name,
+static int callable_definition_count_exact(const LSMFileResult *result, const char *name,
                                            const char *qualified_name) {
     int count = 0;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         int callable_label = definition->label && (strcmp(definition->label, "Function") == 0 ||
                                                    strcmp(definition->label, "Method") == 0);
         if (callable_label && definition->name && definition->qualified_name &&
@@ -177,11 +177,11 @@ static int callable_definition_count_exact(const CBMFileResult *result, const ch
     return count;
 }
 
-static int call_count_in_routine(const CBMFileResult *result, const char *caller,
+static int call_count_in_routine(const LSMFileResult *result, const char *caller,
                                  const char *callee) {
     int count = 0;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         if (call->callee_name && strcmp(call->callee_name, callee) == 0 &&
             terminal_name_matches(call->enclosing_func_qn, caller))
             count++;
@@ -190,14 +190,14 @@ static int call_count_in_routine(const CBMFileResult *result, const char *caller
 }
 
 static int exact_semantic_candidate_count_in_routine(const BehaviorCase *test_case,
-                                                     const CBMFileResult *result,
+                                                     const LSMFileResult *result,
                                                      const char *caller, const char *callee,
                                                      const char *site_text) {
     int count = 0;
     size_t source_len = strlen(test_case->source);
     size_t site_len = strlen(site_text);
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         if (!call->requires_lsp_resolution || !call->callee_name ||
             strcmp(call->callee_name, callee) != 0 ||
             !terminal_name_matches(call->enclosing_func_qn, caller) ||
@@ -211,12 +211,12 @@ static int exact_semantic_candidate_count_in_routine(const BehaviorCase *test_ca
     return count;
 }
 
-static int usage_count_in_routine(const CBMFileResult *result, const char *caller,
+static int usage_count_in_routine(const LSMFileResult *result, const char *caller,
                                   const char *reference) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->ref_name &&
+        const LSMUsage *usage = &result->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->ref_name &&
             strcmp(usage->ref_name, reference) == 0 &&
             terminal_name_matches(usage->enclosing_func_qn, caller))
             count++;
@@ -224,12 +224,12 @@ static int usage_count_in_routine(const CBMFileResult *result, const char *calle
     return count;
 }
 
-static int callable_reference_count_in_routine(const CBMFileResult *result, const char *caller,
+static int callable_reference_count_in_routine(const LSMFileResult *result, const char *caller,
                                                const char *reference) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
-        if (usage->kind == CBM_USAGE_CALL_REFERENCE && usage->ref_name &&
+        const LSMUsage *usage = &result->usages.items[i];
+        if (usage->kind == LSM_USAGE_CALL_REFERENCE && usage->ref_name &&
             strcmp(usage->ref_name, reference) == 0 &&
             terminal_name_matches(usage->enclosing_func_qn, caller))
             count++;
@@ -237,13 +237,13 @@ static int callable_reference_count_in_routine(const CBMFileResult *result, cons
     return count;
 }
 
-static int semantic_reference_candidate_count_in_routine(const CBMFileResult *result,
+static int semantic_reference_candidate_count_in_routine(const LSMFileResult *result,
                                                          const char *caller,
                                                          const char *reference) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->may_be_call_reference && usage->ref_name &&
+        const LSMUsage *usage = &result->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->may_be_call_reference && usage->ref_name &&
             strcmp(usage->ref_name, reference) == 0 &&
             terminal_name_matches(usage->enclosing_func_qn, caller)) {
             count++;
@@ -252,12 +252,12 @@ static int semantic_reference_candidate_count_in_routine(const CBMFileResult *re
     return count;
 }
 
-static int resolved_call_count_in_routine(const CBMFileResult *result, const char *caller,
+static int resolved_call_count_in_routine(const LSMFileResult *result, const char *caller,
                                           const char *callee) {
     int count = 0;
     for (int i = 0; i < result->resolved_calls.count; i++) {
-        const CBMResolvedCall *call = &result->resolved_calls.items[i];
-        if (call->kind == CBM_RESOLVED_INVOCATION &&
+        const LSMResolvedCall *call = &result->resolved_calls.items[i];
+        if (call->kind == LSM_RESOLVED_INVOCATION &&
             terminal_name_matches(call->caller_qn, caller) &&
             terminal_name_matches(call->callee_qn, callee)) {
             count++;
@@ -266,10 +266,10 @@ static int resolved_call_count_in_routine(const CBMFileResult *result, const cha
     return count;
 }
 
-static int resolved_call_total_in_routine(const CBMFileResult *result, const char *caller) {
+static int resolved_call_total_in_routine(const LSMFileResult *result, const char *caller) {
     int count = 0;
     for (int i = 0; i < result->resolved_calls.count; i++) {
-        if (result->resolved_calls.items[i].kind == CBM_RESOLVED_INVOCATION &&
+        if (result->resolved_calls.items[i].kind == LSM_RESOLVED_INVOCATION &&
             terminal_name_matches(result->resolved_calls.items[i].caller_qn, caller)) {
             count++;
         }
@@ -277,12 +277,12 @@ static int resolved_call_total_in_routine(const CBMFileResult *result, const cha
     return count;
 }
 
-static int resolved_reference_count_in_routine(const CBMFileResult *result, const char *caller,
+static int resolved_reference_count_in_routine(const LSMFileResult *result, const char *caller,
                                                const char *callee) {
     int count = 0;
     for (int i = 0; i < result->resolved_calls.count; i++) {
-        const CBMResolvedCall *reference = &result->resolved_calls.items[i];
-        if (reference->kind == CBM_RESOLVED_CALL_REFERENCE &&
+        const LSMResolvedCall *reference = &result->resolved_calls.items[i];
+        if (reference->kind == LSM_RESOLVED_CALL_REFERENCE &&
             terminal_name_matches(reference->caller_qn, caller) &&
             terminal_name_matches(reference->callee_qn, callee)) {
             count++;
@@ -291,11 +291,11 @@ static int resolved_reference_count_in_routine(const CBMFileResult *result, cons
     return count;
 }
 
-static void check_caller_definition(const BehaviorCase *test_case, const CBMFileResult *result,
+static void check_caller_definition(const BehaviorCase *test_case, const LSMFileResult *result,
                                     const char *caller, int *failures) {
     int count = 0;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         int callable_label = definition->label && (strcmp(definition->label, "Function") == 0 ||
                                                    strcmp(definition->label, "Method") == 0);
         if (callable_label && definition->name && strcmp(definition->name, caller) == 0 &&
@@ -306,7 +306,7 @@ static void check_caller_definition(const BehaviorCase *test_case, const CBMFile
     check_exact(test_case, "caller_callable_definition", count, 1, failures);
 }
 
-static const char *checked_module_qn(const BehaviorCase *test_case, const CBMFileResult *result,
+static const char *checked_module_qn(const BehaviorCase *test_case, const LSMFileResult *result,
                                      int *failures) {
     if (result->module_qn && result->module_qn[0])
         return result->module_qn;
@@ -317,10 +317,10 @@ static const char *checked_module_qn(const BehaviorCase *test_case, const CBMFil
     return "<missing-module-qn>";
 }
 
-static int begin_routine_case(const BehaviorCase *test_case, CBMFileResult **result_out,
+static int begin_routine_case(const BehaviorCase *test_case, LSMFileResult **result_out,
                               int *failures) {
     check_exact_ast_kind(test_case, failures);
-    CBMFileResult *result = extract_case(test_case, failures);
+    LSMFileResult *result = extract_case(test_case, failures);
     *result_out = result;
     if (!result)
         return 0;
@@ -328,15 +328,15 @@ static int begin_routine_case(const BehaviorCase *test_case, CBMFileResult **res
     return 1;
 }
 
-static int finish_case(CBMFileResult *result, int failures) {
+static int finish_case(LSMFileResult *result, int failures) {
     if (result)
-        cbm_free_result(result);
+        lsm_free_result(result);
     return failures == 0 ? 0 : 1;
 }
 
 static int run_binary_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "operator_call_in_run",
                     call_count_in_routine(result, "run", "operator+"), 1, &failures);
@@ -355,7 +355,7 @@ static int run_binary_behavior(const BehaviorCase *test_case) {
 
 static int run_subscript_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "operator_call_in_run",
                     call_count_in_routine(result, "run", "operator[]"), 1, &failures);
@@ -374,7 +374,7 @@ static int run_subscript_behavior(const BehaviorCase *test_case) {
 
 static int run_unary_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "operator_call_in_run",
                     call_count_in_routine(result, "run", "operator-"), 1, &failures);
@@ -389,7 +389,7 @@ static int run_unary_behavior(const BehaviorCase *test_case) {
 
 static int run_update_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "operator_call_in_run",
                     call_count_in_routine(result, "run", "operator++"), 1, &failures);
@@ -408,7 +408,7 @@ static int run_update_behavior(const BehaviorCase *test_case) {
  * drops the candidate instead of falling back to the operand's spelling. */
 static int run_delete_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "raw_delete_semantic_candidate_in_run",
                     call_count_in_routine(result, "run", "~"), 1, &failures);
@@ -431,7 +431,7 @@ static int run_delete_behavior(const BehaviorCase *test_case) {
 
 static int run_field_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "receiver_usage_in_run",
                     usage_count_in_routine(result, "run", "receiver"), 1, &failures);
@@ -450,7 +450,7 @@ static int run_callable_value_behavior(const BehaviorCase *test_case,
                                        int expect_raw_typed_reference,
                                        int expect_semantic_reference) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_caller_definition(test_case, result, "handler", &failures);
         check_exact(test_case, "outer_accept_call_in_run",
@@ -485,7 +485,7 @@ static int run_callable_value_behavior(const BehaviorCase *test_case,
 
 static int run_arrow_behavior(const BehaviorCase *test_case) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(test_case, &result, &failures)) {
         check_exact(test_case, "operator_arrow_call_in_run",
                     call_count_in_routine(result, "run", "operator->"), 1, &failures);
@@ -504,9 +504,9 @@ static int run_arrow_behavior(const BehaviorCase *test_case) {
 
 static int run_objectscript_call_behavior(const BehaviorCase *test_case, const char *caller_qn,
                                           const char *callee, const char *callee_reference,
-                                          const CBMMacroTable *macro_table) {
+                                          const LSMMacroTable *macro_table) {
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     check_exact_ast_kind(test_case, &failures);
     result = extract_case_with_macros(test_case, macro_table, &failures);
     if (result) {
@@ -659,12 +659,12 @@ static const char PUPPET_RESOURCE_SOURCE[] = "$watched = 'ready'\n"
 
 #define DEFINE_CPP_CUDA_BEHAVIOR_TESTS(name, source_value, ast_value, runner, reason_value) \
     TEST(repro_call_node_behavior_cpp_##name) {                                             \
-        static const BehaviorCase test_case = {"cpp/" #name, CBM_LANG_CPP, "behavior.cpp",  \
+        static const BehaviorCase test_case = {"cpp/" #name, LSM_LANG_CPP, "behavior.cpp",  \
                                                source_value, ast_value,    reason_value};   \
         return runner(&test_case);                                                          \
     }                                                                                       \
     TEST(repro_call_node_behavior_cuda_##name) {                                            \
-        static const BehaviorCase test_case = {"cuda/" #name, CBM_LANG_CUDA, "behavior.cu", \
+        static const BehaviorCase test_case = {"cuda/" #name, LSM_LANG_CUDA, "behavior.cu", \
                                                source_value,  ast_value,     reason_value}; \
         return runner(&test_case);                                                          \
     }
@@ -696,7 +696,7 @@ DEFINE_CPP_CUDA_BEHAVIOR_TESTS(
 TEST(repro_call_node_behavior_objectscript_udl_class_method_call) {
     static const BehaviorCase test_case = {
         "objectscript-udl/class-method-call",
-        CBM_LANG_OBJECTSCRIPT_UDL,
+        LSM_LANG_OBJECTSCRIPT_UDL,
         "Behavior.cls",
         OBJECTSCRIPT_CLASS_METHOD_SOURCE,
         "class_method_call",
@@ -709,7 +709,7 @@ TEST(repro_call_node_behavior_objectscript_udl_class_method_call) {
 TEST(repro_call_node_behavior_objectscript_udl_method_call) {
     static const BehaviorCase test_case = {
         "objectscript-udl/method-call",
-        CBM_LANG_OBJECTSCRIPT_UDL,
+        LSM_LANG_OBJECTSCRIPT_UDL,
         "Behavior.cls",
         OBJECTSCRIPT_METHOD_SOURCE,
         "method_call",
@@ -722,7 +722,7 @@ TEST(repro_call_node_behavior_objectscript_udl_method_call) {
 TEST(repro_call_node_behavior_objectscript_udl_relative_dot_method) {
     static const BehaviorCase test_case = {
         "objectscript-udl/relative-dot-method",
-        CBM_LANG_OBJECTSCRIPT_UDL,
+        LSM_LANG_OBJECTSCRIPT_UDL,
         "Behavior.cls",
         OBJECTSCRIPT_RELATIVE_DOT_METHOD_SOURCE,
         "relative_dot_method",
@@ -735,25 +735,25 @@ TEST(repro_call_node_behavior_objectscript_udl_relative_dot_method) {
 TEST(repro_call_node_behavior_objectscript_udl_macro) {
     static const BehaviorCase test_case = {
         "objectscript-udl/macro",
-        CBM_LANG_OBJECTSCRIPT_UDL,
+        LSM_LANG_OBJECTSCRIPT_UDL,
         "Behavior.cls",
         OBJECTSCRIPT_MACRO_SOURCE,
         "macro",
         "the system $$$ISERR(watched) macro maps to %SYSTEM.Status.IsError while watched "
         "remains a value usage"};
-    CBMMacroTable *macro_table = calloc(1, sizeof(*macro_table));
+    LSMMacroTable *macro_table = calloc(1, sizeof(*macro_table));
     ASSERT_NOT_NULL(macro_table);
-    cbm_macro_table_init_system(macro_table);
+    lsm_macro_table_init_system(macro_table);
     int status = run_objectscript_call_behavior(&test_case, "repro.Behavior.Sample.Behavior.run",
                                                 "%SYSTEM.Status.IsError", "ISERR", macro_table);
-    cbm_macro_table_free(macro_table);
+    lsm_macro_table_free(macro_table);
     return status;
 }
 
 TEST(repro_call_node_behavior_objectscript_routine_extrinsic_function) {
     static const BehaviorCase test_case = {
         "objectscript-routine/extrinsic-function",
-        CBM_LANG_OBJECTSCRIPT_ROUTINE,
+        LSM_LANG_OBJECTSCRIPT_ROUTINE,
         "Behavior.mac",
         OBJECTSCRIPT_EXTRINSIC_SOURCE,
         "extrinsic_function",
@@ -766,7 +766,7 @@ TEST(repro_call_node_behavior_objectscript_routine_extrinsic_function) {
 TEST(repro_call_node_behavior_objectscript_routine_tag_call) {
     static const BehaviorCase test_case = {
         "objectscript-routine/routine-tag-call",
-        CBM_LANG_OBJECTSCRIPT_ROUTINE,
+        LSM_LANG_OBJECTSCRIPT_ROUTINE,
         "Behavior.mac",
         OBJECTSCRIPT_ROUTINE_TAG_SOURCE,
         "routine_tag_call",
@@ -779,13 +779,13 @@ TEST(repro_call_node_behavior_objectscript_routine_tag_call) {
 TEST(repro_call_node_behavior_scala_user_infix) {
     static const BehaviorCase test_case = {
         "scala/user-infix",
-        CBM_LANG_SCALA,
+        LSM_LANG_SCALA,
         "Behavior.scala",
         SCALA_INFIX_SOURCE,
         "infix_expression",
         "user-defined infix merge is the callee while lhs and rhs remain value usages"};
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(&test_case, &result, &failures)) {
         check_exact(&test_case, "merge_call_in_run", call_count_in_routine(result, "run", "merge"),
                     1, &failures);
@@ -805,13 +805,13 @@ TEST(repro_call_node_behavior_scala_user_infix) {
 TEST(repro_call_node_behavior_elixir_binary_plus) {
     static const BehaviorCase test_case = {
         "elixir/binary-plus",
-        CBM_LANG_ELIXIR,
+        LSM_LANG_ELIXIR,
         "behavior.ex",
         ELIXIR_BINARY_SOURCE,
         "binary_operator",
         "binary + belongs to the operator callee, not to its watched operand"};
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(&test_case, &result, &failures)) {
         check_exact(&test_case, "plus_call_in_run", call_count_in_routine(result, "run", "+"), 1,
                     &failures);
@@ -827,14 +827,14 @@ TEST(repro_call_node_behavior_elixir_binary_plus) {
 TEST(repro_call_node_behavior_puppet_resource_ownership) {
     static const BehaviorCase test_case = {
         "puppet/resource",
-        CBM_LANG_PUPPET,
+        LSM_LANG_PUPPET,
         "behavior.pp",
         PUPPET_RESOURCE_SOURCE,
         "resource_declaration",
         "resource declarations are Puppet DSL ownership and must not fabricate generic calls"};
     int failures = 0;
     check_exact_ast_kind(&test_case, &failures);
-    CBMFileResult *result = extract_case(&test_case, &failures);
+    LSMFileResult *result = extract_case(&test_case, &failures);
     if (result) {
         const char *module_qn = checked_module_qn(&test_case, result, &failures);
         check_exact(&test_case, "resource_value_usage_in_module",
@@ -849,7 +849,7 @@ TEST(repro_call_node_behavior_puppet_resource_ownership) {
 TEST(repro_call_node_behavior_java_method_reference_value) {
     static const BehaviorCase test_case = {
         "java/method-reference-value",
-        CBM_LANG_JAVA,
+        LSM_LANG_JAVA,
         "Behavior.java",
         JAVA_METHOD_REFERENCE_SOURCE,
         "method_reference",
@@ -860,7 +860,7 @@ TEST(repro_call_node_behavior_java_method_reference_value) {
 TEST(repro_call_node_behavior_kotlin_callable_reference_value) {
     static const BehaviorCase test_case = {
         "kotlin/callable-reference-value",
-        CBM_LANG_KOTLIN,
+        LSM_LANG_KOTLIN,
         "Behavior.kt",
         KOTLIN_CALLABLE_REFERENCE_SOURCE,
         "callable_reference",
@@ -871,7 +871,7 @@ TEST(repro_call_node_behavior_kotlin_callable_reference_value) {
 TEST(repro_call_node_behavior_csharp_method_group_value) {
     static const BehaviorCase test_case = {
         "csharp/method-group-value",
-        CBM_LANG_CSHARP,
+        LSM_LANG_CSHARP,
         "Behavior.cs",
         CSHARP_METHOD_GROUP_SOURCE,
         "invocation_expression",
@@ -882,7 +882,7 @@ TEST(repro_call_node_behavior_csharp_method_group_value) {
 TEST(repro_call_node_behavior_cpp_function_value) {
     static const BehaviorCase test_case = {
         "cpp/function-value",
-        CBM_LANG_CPP,
+        LSM_LANG_CPP,
         "behavior.cpp",
         CPP_FUNCTION_VALUE_SOURCE,
         "call_expression",
@@ -893,7 +893,7 @@ TEST(repro_call_node_behavior_cpp_function_value) {
 TEST(repro_call_node_behavior_rust_function_item_value) {
     static const BehaviorCase test_case = {
         "rust/function-item-value",
-        CBM_LANG_RUST,
+        LSM_LANG_RUST,
         "behavior.rs",
         RUST_FUNCTION_ITEM_SOURCE,
         "call_expression",
@@ -904,14 +904,14 @@ TEST(repro_call_node_behavior_rust_function_item_value) {
 TEST(repro_call_node_behavior_cpp_delete_name_collision) {
     static const BehaviorCase test_case = {
         "cpp/delete-name-collision",
-        CBM_LANG_CPP,
+        LSM_LANG_CPP,
         "behavior.cpp",
         CPP_DELETE_COLLISION_SOURCE,
         "delete_expression",
         "delete must key the implicit ~Value destructor, not operand text that collides with "
         "victim()"};
     int failures = 0;
-    CBMFileResult *result = NULL;
+    LSMFileResult *result = NULL;
     if (begin_routine_case(&test_case, &result, &failures)) {
         check_caller_definition(&test_case, result, "victim", &failures);
         check_exact(&test_case, "destructor_call_in_run",

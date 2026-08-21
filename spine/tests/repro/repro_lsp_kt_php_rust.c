@@ -1,7 +1,7 @@
 /*
  * repro_lsp_kt_php_rust.c — EXHAUSTIVE per-LSP-pass invariant suite for the
  * Kotlin, PHP and Rust hybrid LSPs
- *   (internal/cbm/lsp/kotlin_lsp.c, php_lsp.c, rust_lsp.c).
+ *   (internal/lsm/lsp/kotlin_lsp.c, php_lsp.c, rust_lsp.c).
  *
  * MIRRORS repro_lsp_c_cpp.c exactly: same shared assert_lsp_strategy runner,
  * same two invariants per (lang,strategy) — (a) inv_count_calls_by_source
@@ -38,7 +38,7 @@
  *               the graph. The TEST documents the exact gap for the fixer.
  *
  * RUST CROSS-LSP CONTRACT. src/pipeline/pass_lsp_cross.c dispatches
- *   CBM_LANG_RUST through the project-wide Rust registry, including exact
+ *   LSM_LANG_RUST through the project-wide Rust registry, including exact
  *   impl-block provenance and independent `impl Trait for Type` relations for
  *   default-only impls. The Rust cases below are intended GREEN regression
  *   guards. Dispatch follows Rust precedence: an inherent method wins over a
@@ -141,7 +141,7 @@
 static int assert_lsp_strategy(const char *filename, const char *src,
                                const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -195,7 +195,7 @@ static int assert_rust_dispatch_files(const RFile *files, int nfiles, const char
                                       const char *callee_suffix, const char *required_strategy,
                                       const char *forbidden_strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for Rust %s -> %s dispatch\n", tf_red(), tf_reset(),
                __FILE__, __LINE__, caller_substr, callee_suffix);
@@ -203,10 +203,10 @@ static int assert_rust_dispatch_files(const RFile *files, int nfiles, const char
         return 1;
     }
 
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    if (cbm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &edge_count) !=
-        CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &edge_count) !=
+        LSM_STORE_OK) {
         printf("  %sFAIL%s %s:%d: CALLS query failed for Rust %s -> %s dispatch\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, caller_substr, callee_suffix);
         rh_cleanup(&lp, store);
@@ -219,10 +219,10 @@ static int assert_rust_dispatch_files(const RFile *files, int nfiles, const char
     const char *observed_properties = NULL;
     size_t suffix_len = strlen(callee_suffix);
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t source;
-        cbm_node_t target;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &source) != CBM_STORE_OK ||
-            cbm_store_find_node_by_id(store, edges[i].target_id, &target) != CBM_STORE_OK) {
+        lsm_node_t source;
+        lsm_node_t target;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &source) != LSM_STORE_OK ||
+            lsm_store_find_node_by_id(store, edges[i].target_id, &target) != LSM_STORE_OK) {
             continue;
         }
         const char *source_label = source.label ? source.label : "";
@@ -269,7 +269,7 @@ static int assert_rust_dispatch_files(const RFile *files, int nfiles, const char
         rc = 1;
     }
 
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     rh_cleanup(&lp, store);
     return rc;
 }
@@ -313,7 +313,7 @@ static const char kKtStatic[] =
     "fun caller(v: Int): Int { return MathKt.square(v) }\n";
 
 /* lsp_kt_extension — extension function dispatch (kotlin_lsp.c:2461:
- * cbm_registry_lookup_method finds a func whose receiver_type == recv type and
+ * lsm_registry_lookup_method finds a func whose receiver_type == recv type and
  * whose short_name == the member). `fun Int.doubled()` is an extension on Int;
  * a value of that type calling .doubled() dispatches to it. */
 static const char kKtExtension[] =
@@ -751,7 +751,7 @@ TEST(repro_lsp_rust_macro) {
      * in-file dispatch edge carries the strategy — that is impossible by design.
      * See inv_no_calls_edge_to_qn (repro_invariant_lib.h). */
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, "main.rs", kRustMacro);
+    lsm_store_t *store = rh_index(&lp, "main.rs", kRustMacro);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for rust macro no-edge invariant\n",
                tf_red(), tf_reset(), __FILE__, __LINE__);

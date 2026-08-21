@@ -1,13 +1,13 @@
 /*
  * test_extraction.c — Regression tests for the extraction module.
  *
- * Port of internal/cbm/regression_test.go (1282 LOC, ~80 test cases).
- * Exercises cbm_extract_file() on code snippets across 30+ languages,
+ * Port of internal/lsm/regression_test.go (1282 LOC, ~80 test cases).
+ * Exercises lsm_extract_file() on code snippets across 30+ languages,
  * verifying definitions, calls, and imports are correctly extracted.
  */
 #include "test_framework.h"
-#include "cbm.h"
-#include "../src/foundation/compat.h" /* cbm_clock_gettime (wide-flat scaling guard) */
+#include "lsm.h"
+#include "../src/foundation/compat.h" /* lsm_clock_gettime (wide-flat scaling guard) */
 #include "../src/foundation/compat_fs.h"
 #include <time.h>
 #include "macro_table.h"
@@ -16,7 +16,7 @@
 /* ── Helpers ───────────────────────────────────────────────────── */
 
 /* Check if any definition with the given label has the given name. */
-static int has_def(CBMFileResult *r, const char *label, const char *name) {
+static int has_def(LSMFileResult *r, const char *label, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].label, label) == 0 && strcmp(r->defs.items[i].name, name) == 0)
             return 1;
@@ -25,7 +25,7 @@ static int has_def(CBMFileResult *r, const char *label, const char *name) {
 }
 
 /* Check if any definition has the given name (any label). */
-static int has_def_any(CBMFileResult *r, const char *name) {
+static int has_def_any(LSMFileResult *r, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].name, name) == 0)
             return 1;
@@ -34,7 +34,7 @@ static int has_def_any(CBMFileResult *r, const char *name) {
 }
 
 /* Check if any call to the given callee exists. */
-static int has_call(CBMFileResult *r, const char *callee) {
+static int has_call(LSMFileResult *r, const char *callee) {
     for (int i = 0; i < r->calls.count; i++) {
         if (strstr(r->calls.items[i].callee_name, callee) != NULL)
             return 1;
@@ -43,7 +43,7 @@ static int has_call(CBMFileResult *r, const char *callee) {
 }
 
 /* Check if any import with the given module path exists. */
-static int __attribute__((unused)) has_import(CBMFileResult *r, const char *path_substr) {
+static int __attribute__((unused)) has_import(LSMFileResult *r, const char *path_substr) {
     for (int i = 0; i < r->imports.count; i++) {
         if (r->imports.items[i].module_path &&
             strstr(r->imports.items[i].module_path, path_substr) != NULL)
@@ -57,7 +57,7 @@ static int __attribute__((unused)) has_import(CBMFileResult *r, const char *path
  * find_def_by_name, which returns the first match by NAME and so cannot tell two
  * same-named definitions in different scopes apart — exactly the case that
  * attrpath qualification exists to separate. */
-static int has_def_qn(CBMFileResult *r, const char *qn) {
+static int has_def_qn(LSMFileResult *r, const char *qn) {
     for (int i = 0; i < r->defs.count; i++) {
         if (r->defs.items[i].qualified_name && strcmp(r->defs.items[i].qualified_name, qn) == 0)
             return 1;
@@ -65,7 +65,7 @@ static int has_def_qn(CBMFileResult *r, const char *qn) {
     return 0;
 }
 
-static int count_defs_with_label(CBMFileResult *r, const char *label) {
+static int count_defs_with_label(LSMFileResult *r, const char *label) {
     int count = 0;
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].label, label) == 0)
@@ -75,17 +75,17 @@ static int count_defs_with_label(CBMFileResult *r, const char *label) {
 }
 
 /* Convenience: extract, assert no error, return result. Caller frees. */
-static CBMFileResult *extract(const char *src, CBMLanguage lang, const char *proj,
+static LSMFileResult *extract(const char *src, LSMLanguage lang, const char *proj,
                               const char *path) {
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src), lang, proj, path, 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src), lang, proj, path, 0, NULL, NULL);
     return r;
 }
 
 /* As extract(), but threads an ObjectScript macro table through. */
-static CBMFileResult *extract_with_macros(const char *src, CBMLanguage lang, const char *proj,
-                                          const char *path, const CBMMacroTable *mt) {
-    CBMFileResult *r =
-        cbm_extract_file_ex(src, (int)strlen(src), lang, proj, path, 0, NULL, NULL, mt, NULL);
+static LSMFileResult *extract_with_macros(const char *src, LSMLanguage lang, const char *proj,
+                                          const char *path, const LSMMacroTable *mt) {
+    LSMFileResult *r =
+        lsm_extract_file_ex(src, (int)strlen(src), lang, proj, path, 0, NULL, NULL, mt, NULL);
     return r;
 }
 
@@ -95,13 +95,13 @@ static CBMFileResult *extract_with_macros(const char *src, CBMLanguage lang, con
 
 /* --- R: box::use imports (#218) + module$fn calls (#219) --- */
 TEST(extract_r_box_use_imports_issue218) {
-    CBMFileResult *r = extract("box::use(\n"
+    LSMFileResult *r = extract("box::use(\n"
                                "  shiny[moduleServer, NS],\n"
                                "  app/logic/validation[validate_input],\n"
                                ")\n"
                                "library(dplyr)\n"
                                "source(\"helpers.R\")\n",
-                               CBM_LANG_R, "t", "app.R");
+                               LSM_LANG_R, "t", "app.R");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* box::use specs → one IMPORTS edge per module (symbol list stripped). */
@@ -110,30 +110,30 @@ TEST(extract_r_box_use_imports_issue218) {
     /* base-R imports work too. */
     ASSERT(has_import(r, "dplyr"));
     ASSERT(has_import(r, "helpers"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(extract_r_dollar_call_issue219) {
-    CBMFileResult *r = extract("validation$validate_input(x)\n", CBM_LANG_R, "t", "app.R");
+    LSMFileResult *r = extract("validation$validate_input(x)\n", LSM_LANG_R, "t", "app.R");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* module$fn() now produces a CALLS edge (was silently dropped). */
     ASSERT(has_call(r, "validation.validate_input"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- TS: object-literal arrow methods from a factory (Zustand, #341) --- */
 TEST(extract_ts_factory_object_methods_issue341) {
-    CBMFileResult *r = extract("export function createItemActions(set, get) {\n"
+    LSMFileResult *r = extract("export function createItemActions(set, get) {\n"
                                "  return {\n"
                                "    addItem: (type, id) => { return 1; },\n"
                                "    moveItem: (id, target) => { return 2; },\n"
                                "    deleteItem: (id) => { return 3; },\n"
                                "  };\n"
                                "}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "item-actions.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "item-actions.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* The factory itself + each returned arrow method are Function nodes. */
@@ -141,49 +141,49 @@ TEST(extract_ts_factory_object_methods_issue341) {
     ASSERT(has_def_any(r, "addItem"));
     ASSERT(has_def_any(r, "moveItem"));
     ASSERT(has_def_any(r, "deleteItem"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- C/C++ preprocessor macros become Macro nodes (#375) --- */
 TEST(extract_c_macros_issue375) {
-    CBMFileResult *r = extract("#define SIMPLE_MACRO 1\n"
+    LSMFileResult *r = extract("#define SIMPLE_MACRO 1\n"
                                "#define FN_MACRO(x) (2 * (x))\n"
                                "#define EMPTY_MACRO\n"
                                "int main(void) { return FN_MACRO(SIMPLE_MACRO); }\n",
-                               CBM_LANG_C, "p", "macros.c");
+                               LSM_LANG_C, "p", "macros.c");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Macro", "SIMPLE_MACRO"));
     ASSERT(has_def(r, "Macro", "FN_MACRO"));
     ASSERT(has_def(r, "Macro", "EMPTY_MACRO"));
     ASSERT(has_def(r, "Function", "main")); /* macros don't displace function defs */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(extract_cpp_macros_issue375) {
-    CBMFileResult *r = extract("#define MAX(a, b) ((a) > (b) ? (a) : (b))\n"
+    LSMFileResult *r = extract("#define MAX(a, b) ((a) > (b) ? (a) : (b))\n"
                                "#define PI 3.14159\n"
                                "namespace n {\n"
                                "int f() { return MAX(1, 2); }\n"
                                "}\n",
-                               CBM_LANG_CPP, "p", "macros.cpp");
+                               LSM_LANG_CPP, "p", "macros.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Macro", "MAX"));
     ASSERT(has_def(r, "Macro", "PI"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* #1071: a function-like macro invocation whose argument is a TYPE token
  * (SYNTH_ALLOC_ARRAY(char, n)) makes tree-sitter's C++ grammar emit an ERROR
- * node — it parses `char` in expression position — which cbm_collect_error_regions
+ * node — it parses `char` in expression position — which lsm_collect_error_regions
  * records as a `parse_partial` coverage gap, even though the file is a valid,
  * in-file macro use with nothing actually missing from the graph. */
 TEST(extract_cpp_functionlike_macro_type_arg_no_false_parse_partial_issue1071) {
-    CBMFileResult *r = extract("#include <cstddef>\n"
+    LSMFileResult *r = extract("#include <cstddef>\n"
                                "#include <cstdlib>\n"
                                "\n"
                                "#define SYNTH_ALLOC_ARRAY(Type, Count) \\\n"
@@ -200,12 +200,12 @@ TEST(extract_cpp_functionlike_macro_type_arg_no_false_parse_partial_issue1071) {
                                "  b.size = n;\n"
                                "  return b;\n"
                                "}\n",
-                               CBM_LANG_CPP, "t", "alloc.cpp");
+                               LSM_LANG_CPP, "t", "alloc.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->parse_incomplete); /* benign in-body macro call — not a coverage gap */
     ASSERT(has_def(r, "Function", "make_buffer"));
     ASSERT(has_def(r, "Macro", "SYNTH_ALLOC_ARRAY"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -215,20 +215,20 @@ TEST(extract_cpp_functionlike_macro_type_arg_no_false_parse_partial_issue1071) {
 TEST(extract_cpp_real_in_body_error_still_flagged_issue1071) {
     /* `int x = ;` is a genuine syntax error inside foo()'s body — no macro
      * involved, so the coverage gap must not be suppressed. */
-    CBMFileResult *r = extract("int foo() {\n"
+    LSMFileResult *r = extract("int foo() {\n"
                                "  int x = ;\n"
                                "  return x;\n"
                                "}\n",
-                               CBM_LANG_CPP, "t", "broken.cpp");
+                               LSM_LANG_CPP, "t", "broken.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_TRUE(r->parse_incomplete); /* real gap stays reported */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- GDScript: AST -> graph visitor (Godot, #186) --- */
 TEST(extract_gdscript_issue186) {
-    CBMFileResult *r = extract("extends Node\n"
+    LSMFileResult *r = extract("extends Node\n"
                                "class_name Player\n"
                                "\n"
                                "var health = 100\n"
@@ -242,20 +242,20 @@ TEST(extract_gdscript_issue186) {
                                "class Inner:\n"
                                "    func helper():\n"
                                "        pass\n",
-                               CBM_LANG_GDSCRIPT, "game", "player.gd");
+                               LSM_LANG_GDSCRIPT, "game", "player.gd");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "_ready"));
     ASSERT(has_def(r, "Function", "take_damage"));
     ASSERT(has_def(r, "Class", "Inner"));
     ASSERT(has_call(r, "take_damage"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- PowerShell: AST -> graph visitor (#35) --- */
 TEST(extract_powershell_issue35) {
-    CBMFileResult *r = extract("function Get-Greeting {\n"
+    LSMFileResult *r = extract("function Get-Greeting {\n"
                                "    param($Name)\n"
                                "    Write-Output \"Hello $Name\"\n"
                                "}\n"
@@ -263,34 +263,34 @@ TEST(extract_powershell_issue35) {
                                "function Set-Config {\n"
                                "    Get-Greeting -Name 'World'\n"
                                "}\n",
-                               CBM_LANG_POWERSHELL, "ops", "greet.ps1");
+                               LSM_LANG_POWERSHELL, "ops", "greet.ps1");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(count_defs_with_label(r, "Function") >= 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Luau: AST -> graph visitor (Roblox, #39) --- */
 TEST(extract_luau_issue39) {
-    CBMFileResult *r = extract("local function add(a, b)\n"
+    LSMFileResult *r = extract("local function add(a, b)\n"
                                "    return a + b\n"
                                "end\n"
                                "\n"
                                "function multiply(a, b)\n"
                                "    return add(a, a) * b\n"
                                "end\n",
-                               CBM_LANG_LUAU, "game", "math.luau");
+                               LSM_LANG_LUAU, "game", "math.luau");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(count_defs_with_label(r, "Function") >= 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- QML: AST -> graph visitor (Qt, #42) --- */
 TEST(extract_qml_issue42) {
-    CBMFileResult *r = extract("import QtQuick 2.15\n"
+    LSMFileResult *r = extract("import QtQuick 2.15\n"
                                "\n"
                                "Rectangle {\n"
                                "    id: root\n"
@@ -307,19 +307,19 @@ TEST(extract_qml_issue42) {
                                "        return n * 2\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_QML, "app", "Main.qml");
+                               LSM_LANG_QML, "app", "Main.qml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "increment"));
     ASSERT(has_def(r, "Function", "compute"));
     ASSERT(has_call(r, "compute"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- CFML script dialect: .cfc components (Lucee/ColdFusion, #38) --- */
 TEST(extract_cfscript_issue38) {
-    CBMFileResult *r = extract("component {\n"
+    LSMFileResult *r = extract("component {\n"
                                "    public function getUser(numeric id) {\n"
                                "        return loadUser(id);\n"
                                "    }\n"
@@ -327,33 +327,33 @@ TEST(extract_cfscript_issue38) {
                                "        return id * 2;\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_CFSCRIPT, "app", "User.cfc");
+                               LSM_LANG_CFSCRIPT, "app", "User.cfc");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(count_defs_with_label(r, "Function") >= 2);
     ASSERT(has_def(r, "Function", "getUser"));
     ASSERT(has_def(r, "Function", "loadUser"));
     ASSERT(has_call(r, "loadUser"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- CFML tag dialect: .cfm templates with <cffunction> (#38) --- */
 TEST(extract_cfml_tag_issue38) {
-    CBMFileResult *r = extract("<cffunction name=\"greet\" returntype=\"string\">\n"
+    LSMFileResult *r = extract("<cffunction name=\"greet\" returntype=\"string\">\n"
                                "    <cfargument name=\"who\" type=\"string\">\n"
                                "    <cfreturn \"Hello \" & arguments.who>\n"
                                "</cffunction>\n",
-                               CBM_LANG_CFML, "app", "index.cfm");
+                               LSM_LANG_CFML, "app", "index.cfm");
     ASSERT_NOT_NULL(r);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Helm / Go template: named templates + include calls (#338) --- */
 TEST(extract_helm_templates_issue338) {
-    CBMFileResult *r = extract("{{- define \"chart.fullname\" -}}\n"
+    LSMFileResult *r = extract("{{- define \"chart.fullname\" -}}\n"
                                "{{- .Release.Name -}}\n"
                                "{{- end -}}\n"
                                "\n"
@@ -361,7 +361,7 @@ TEST(extract_helm_templates_issue338) {
                                "app: {{ include \"chart.fullname\" . }}\n"
                                "chart: {{ template \"chart.fullname\" . }}\n"
                                "{{- end -}}\n",
-                               CBM_LANG_GOTEMPLATE, "chart", "templates/_helpers.tpl");
+                               LSM_LANG_GOTEMPLATE, "chart", "templates/_helpers.tpl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* define -> Function nodes */
@@ -369,19 +369,19 @@ TEST(extract_helm_templates_issue338) {
     ASSERT(has_def(r, "Function", "chart.labels"));
     /* include / template -> CALLS to the named template (not to "include") */
     ASSERT(has_call(r, "chart.fullname"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Helm values.yaml: top-level keys only, no leaf flood (#338) --- */
 TEST(extract_helm_values_toplevel_issue338) {
-    CBMFileResult *r = extract("image:\n"
+    LSMFileResult *r = extract("image:\n"
                                "  repository: nginx\n"
                                "  tag: latest\n"
                                "replicaCount: 3\n"
                                "service:\n"
                                "  port: 80\n",
-                               CBM_LANG_YAML, "chart", "values.yaml");
+                               LSM_LANG_YAML, "chart", "values.yaml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Variable", "image"));
@@ -392,42 +392,42 @@ TEST(extract_helm_values_toplevel_issue338) {
     ASSERT(!has_def(r, "Variable", "tag"));
     ASSERT(!has_def(r, "Variable", "port"));
     ASSERT_EQ(count_defs_with_label(r, "Variable"), 3);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Java --- */
 TEST(java_class) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "public class Animal { private String name; public String getName() { return name; } }",
-        CBM_LANG_JAVA, "t", "Animal.java");
+        LSM_LANG_JAVA, "t", "Animal.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Animal"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(java_method) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "public class Svc { public void doWork() {} public int compute(int x) { return x; } }",
-        CBM_LANG_JAVA, "t", "Svc.java");
+        LSM_LANG_JAVA, "t", "Svc.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Method", "doWork"));
     ASSERT(has_def(r, "Method", "compute"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(java_interface) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("public interface Repository { void save(Object o); Object findById(long id); }",
-                CBM_LANG_JAVA, "t", "Repo.java");
+                LSM_LANG_JAVA, "t", "Repo.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def_any(r, "Repository"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -438,12 +438,12 @@ TEST(java_interface) {
  * containers, stopping the fallback path from re-walking method_declaration
  * children as top-level functions. */
 TEST(java_interface_no_duplicate_function_issue1234) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("public interface MarketplaceService {\n"
                 "    ReservationDTO createReservation(Authentication auth, RequestDTO req);\n"
                 "    void cancelReservation(long id);\n"
                 "}\n",
-                CBM_LANG_JAVA, "t", "MarketplaceService.java");
+                LSM_LANG_JAVA, "t", "MarketplaceService.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -452,12 +452,12 @@ TEST(java_interface_no_duplicate_function_issue1234) {
     ASSERT(has_def(r, "Method", "cancelReservation"));
     ASSERT_EQ(count_defs_with_label(r, "Function"), 0);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(java_enum_dedup_preserves_calls_issue1234) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("package app;\n\nenum Day {\n"
                 "    MON, TUE, WED, THU, FRI, SAT, SUN;\n\n"
                 "    public boolean isWeekend() { return this == SAT || this == SUN; }\n"
@@ -465,7 +465,7 @@ TEST(java_enum_dedup_preserves_calls_issue1234) {
                 "class DayUtil {\n"
                 "    static String describe(Day d) {\n"
                 "        return d.label() + (d.isWeekend() ? \"(rest)\" : \"(work)\");\n    }\n}\n",
-                CBM_LANG_JAVA, "t", "Day.java");
+                LSM_LANG_JAVA, "t", "Day.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -476,7 +476,7 @@ TEST(java_enum_dedup_preserves_calls_issue1234) {
     ASSERT(has_def(r, "Method", "describe"));
     ASSERT_EQ(count_defs_with_label(r, "Function"), 0);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -488,14 +488,14 @@ TEST(java_enum_dedup_preserves_calls_issue1234) {
  *      was emitted, the interfaces were dropped.
  *   2) the emitted name was the full field text including the keyword. */
 TEST(java_class_extends_and_implements) {
-    CBMFileResult *r = extract("public class DefaultLinkTool extends DefaultDiagramTool implements "
+    LSMFileResult *r = extract("public class DefaultLinkTool extends DefaultDiagramTool implements "
                                "ILinkTool, Closeable { }",
-                               CBM_LANG_JAVA, "t", "DefaultLinkTool.java");
+                               LSM_LANG_JAVA, "t", "DefaultLinkTool.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
     /* Find the class def and inspect its base_classes list. */
-    CBMDefinition *cls = NULL;
+    LSMDefinition *cls = NULL;
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].label, "Class") == 0 &&
             strcmp(r->defs.items[i].name, "DefaultLinkTool") == 0) {
@@ -525,14 +525,14 @@ TEST(java_class_extends_and_implements) {
     ASSERT_TRUE(saw_iface_a);
     ASSERT_TRUE(saw_iface_b);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* REPRODUCTION (RED until fixed) — Python `class Animal(Base):` must extract the
  * BARE base name "Base", but extract_base_classes captures the whole
  * `superclasses` argument_list text "(Base)" instead: collect_bases_from_field
- * (internal/cbm/extract_defs.c) matches only type_identifier / generic_type /
+ * (internal/lsm/extract_defs.c) matches only type_identifier / generic_type /
  * qualified_name / scoped_type_identifier / user_type, while tree-sitter-python
  * uses a plain `identifier` node for the base — so no child matches and the
  * raw-field fallback grabs the argument_list text "(Base)" (parens included).
@@ -543,11 +543,11 @@ TEST(java_class_extends_and_implements) {
  * guard / reproduction until the fix lands — see CLAUDE.md "Bug Fixing —
  * Reproduce-First". */
 TEST(python_class_base_extracted_bare) {
-    CBMFileResult *r = extract("class Base:\n    pass\n\n\nclass Animal(Base):\n    pass\n",
-                               CBM_LANG_PYTHON, "t", "models.py");
+    LSMFileResult *r = extract("class Base:\n    pass\n\n\nclass Animal(Base):\n    pass\n",
+                               LSM_LANG_PYTHON, "t", "models.py");
     ASSERT_NOT_NULL(r);
 
-    CBMDefinition *cls = NULL;
+    LSMDefinition *cls = NULL;
     for (int i = 0; i < r->defs.count; i++) {
         if (r->defs.items[i].label && strcmp(r->defs.items[i].label, "Class") == 0 &&
             r->defs.items[i].name && strcmp(r->defs.items[i].name, "Animal") == 0) {
@@ -568,165 +568,165 @@ TEST(python_class_base_extracted_bare) {
      * bare "Base" needed for INHERITS resolution. */
     ASSERT_TRUE(saw_bare_base);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- PHP --- */
 TEST(php_class) {
-    CBMFileResult *r = extract("<?php\nclass User { public string $name; public function "
+    LSMFileResult *r = extract("<?php\nclass User { public string $name; public function "
                                "getName(): string { return $this->name; } }",
-                               CBM_LANG_PHP, "t", "User.php");
+                               LSM_LANG_PHP, "t", "User.php");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "User"));
     ASSERT(has_def(r, "Method", "getName"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(php_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("<?php\nfunction greet(string $name): string { return 'Hello ' . $name; }",
-                CBM_LANG_PHP, "t", "helpers.php");
+                LSM_LANG_PHP, "t", "helpers.php");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Ruby --- */
 TEST(ruby_class) {
-    CBMFileResult *r = extract("class Animal\n  def initialize(name)\n    @name = name\n  end\n  "
+    LSMFileResult *r = extract("class Animal\n  def initialize(name)\n    @name = name\n  end\n  "
                                "def speak\n    puts @name\n  end\nend\n",
-                               CBM_LANG_RUBY, "t", "animal.rb");
+                               LSM_LANG_RUBY, "t", "animal.rb");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Animal"));
     ASSERT(has_def(r, "Method", "speak"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ruby_module) {
-    CBMFileResult *r = extract("module Greetable\n  def greet\n    \"Hello\"\n  end\nend\n",
-                               CBM_LANG_RUBY, "t", "greetable.rb");
+    LSMFileResult *r = extract("module Greetable\n  def greet\n    \"Hello\"\n  end\nend\n",
+                               LSM_LANG_RUBY, "t", "greetable.rb");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def_any(r, "Greetable"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- C# --- */
 TEST(csharp_class) {
-    CBMFileResult *r = extract("namespace App { public class Service { public void Run() {} public "
+    LSMFileResult *r = extract("namespace App { public class Service { public void Run() {} public "
                                "int Compute(int x) => x * 2; } }",
-                               CBM_LANG_CSHARP, "t", "Service.cs");
+                               LSM_LANG_CSHARP, "t", "Service.cs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Service"));
     ASSERT(has_def(r, "Method", "Run"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(csharp_interface) {
-    CBMFileResult *r = extract("public interface IService { void Execute(); string GetStatus(); }",
-                               CBM_LANG_CSHARP, "t", "IService.cs");
+    LSMFileResult *r = extract("public interface IService { void Execute(); string GetStatus(); }",
+                               LSM_LANG_CSHARP, "t", "IService.cs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def_any(r, "IService"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Swift --- */
 TEST(swift_class) {
-    CBMFileResult *r = extract("class Vehicle {\n    var speed: Int = 0\n    func accelerate() { "
+    LSMFileResult *r = extract("class Vehicle {\n    var speed: Int = 0\n    func accelerate() { "
                                "speed += 10 }\n    func stop() { speed = 0 }\n}\n",
-                               CBM_LANG_SWIFT, "t", "Vehicle.swift");
+                               LSM_LANG_SWIFT, "t", "Vehicle.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Vehicle"));
     ASSERT(has_def(r, "Method", "accelerate"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Kotlin --- */
 TEST(kotlin_function) {
-    CBMFileResult *r = extract("fun greet(name: String): String = \"Hello $name\"\nfun main() { "
+    LSMFileResult *r = extract("fun greet(name: String): String = \"Hello $name\"\nfun main() { "
                                "println(greet(\"World\")) }\n",
-                               CBM_LANG_KOTLIN, "t", "main.kt");
+                               LSM_LANG_KOTLIN, "t", "main.kt");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
     ASSERT(has_def(r, "Function", "main"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(kotlin_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class User(val name: String) {\n    fun display(): String = \"User: $name\"\n}\n",
-                CBM_LANG_KOTLIN, "t", "User.kt");
+                LSM_LANG_KOTLIN, "t", "User.kt");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "User"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Scala --- */
 TEST(scala_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("object Main {\n  def greet(name: String): String = s\"Hello $name\"\n  def "
                 "main(args: Array[String]): Unit = println(greet(\"World\"))\n}\n",
-                CBM_LANG_SCALA, "t", "Main.scala");
+                LSM_LANG_SCALA, "t", "Main.scala");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Method", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(scala_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class Animal(val name: String) {\n  def speak(): String = s\"I am $name\"\n}\n",
-                CBM_LANG_SCALA, "t", "Animal.scala");
+                LSM_LANG_SCALA, "t", "Animal.scala");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Animal"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Dart --- */
 TEST(dart_class) {
-    CBMFileResult *r = extract("class Animal {\n  String name;\n  Animal(this.name);\n  String "
+    LSMFileResult *r = extract("class Animal {\n  String name;\n  Animal(this.name);\n  String "
                                "speak() => 'I am $name';\n}\n",
-                               CBM_LANG_DART, "t", "animal.dart");
+                               LSM_LANG_DART, "t", "animal.dart");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Animal"));
     ASSERT(has_def(r, "Method", "speak"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Groovy --- */
 TEST(groovy_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class Greeter {\n    String name\n    String greet() { \"Hello, $name\" }\n    "
                 "static void main(args) { println new Greeter(name:'World').greet() }\n}\n",
-                CBM_LANG_GROOVY, "t", "Greeter.groovy");
+                LSM_LANG_GROOVY, "t", "Greeter.groovy");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Greeter"));
     ASSERT(has_def(r, "Method", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -736,111 +736,111 @@ TEST(groovy_class) {
 
 /* --- Rust --- */
 TEST(rust_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("fn main() { println!(\"Hello\"); }\npub fn add(a: i32, b: i32) -> i32 { a + b }\n",
-                CBM_LANG_RUST, "t", "main.rs");
+                LSM_LANG_RUST, "t", "main.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "main"));
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(rust_struct) {
-    CBMFileResult *r = extract("pub struct Point { pub x: f64, pub y: f64 }\nimpl Point { pub fn "
+    LSMFileResult *r = extract("pub struct Point { pub x: f64, pub y: f64 }\nimpl Point { pub fn "
                                "new(x: f64, y: f64) -> Self { Point { x, y } } }\n",
-                               CBM_LANG_RUST, "t", "point.rs");
+                               LSM_LANG_RUST, "t", "point.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Struct", "Point"));
     ASSERT(has_def(r, "Method", "new"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Go --- */
 TEST(go_function) {
-    CBMFileResult *r = extract("package main\nfunc Greet(name string) string { return \"Hello, \" "
+    LSMFileResult *r = extract("package main\nfunc Greet(name string) string { return \"Hello, \" "
                                "+ name }\nfunc main() { Greet(\"World\") }\n",
-                               CBM_LANG_GO, "t", "main.go");
+                               LSM_LANG_GO, "t", "main.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Greet"));
     ASSERT(has_def(r, "Function", "main"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(go_struct) {
-    CBMFileResult *r = extract("package main\ntype Server struct { Host string; Port int }\nfunc "
+    LSMFileResult *r = extract("package main\ntype Server struct { Host string; Port int }\nfunc "
                                "(s *Server) Start() error { return nil }\n",
-                               CBM_LANG_GO, "t", "server.go");
+                               LSM_LANG_GO, "t", "server.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Struct", "Server"));
     ASSERT(has_def(r, "Method", "Start"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(go_interface) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("package main\ntype Handler interface { ServeHTTP() error; Close() }\n",
-                CBM_LANG_GO, "t", "handler.go");
+                LSM_LANG_GO, "t", "handler.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def_any(r, "Handler"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Zig --- */
 TEST(zig_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("const std = @import(\"std\");\npub fn add(a: i32, b: i32) i32 { return a + b; }\n",
-                CBM_LANG_ZIG, "t", "main.zig");
+                LSM_LANG_ZIG, "t", "main.zig");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- C --- */
 TEST(c_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("int add(int a, int b) { return a + b; }\nvoid greet() { printf(\"Hello\"); }\n",
-                CBM_LANG_C, "t", "math.c");
+                LSM_LANG_C, "t", "math.c");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(c_struct) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("struct Point { int x; int y; };\nvoid init_point(struct Point *p) { p->x = 0; }\n",
-                CBM_LANG_C, "t", "point.c");
+                LSM_LANG_C, "t", "point.c");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "init_point"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- C++ --- */
 TEST(cpp_class) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "class Widget {\npublic:\n    void draw() {}\n    int width() const { return 0; }\n};\n",
-        CBM_LANG_CPP, "t", "widget.cpp");
+        LSM_LANG_CPP, "t", "widget.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Widget"));
     ASSERT(has_def(r, "Method", "draw"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -850,85 +850,85 @@ TEST(cpp_class) {
 
 /* --- Python --- */
 TEST(python_function) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "def greet(name):\n    return f\"Hello {name}\"\n\ndef main():\n    greet(\"World\")\n",
-        CBM_LANG_PYTHON, "t", "main.py");
+        LSM_LANG_PYTHON, "t", "main.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
     ASSERT(has_def(r, "Function", "main"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(python_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class Dog:\n    def __init__(self, name):\n        self.name = name\n    def "
                 "speak(self):\n        return f\"Woof from {self.name}\"\n",
-                CBM_LANG_PYTHON, "t", "dog.py");
+                LSM_LANG_PYTHON, "t", "dog.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Dog"));
     ASSERT(has_def(r, "Method", "speak"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- JavaScript --- */
 TEST(js_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("function greet(name) { return `Hello ${name}`; }\nconst add = (a, b) => a + b;\n",
-                CBM_LANG_JAVASCRIPT, "t", "util.js");
+                LSM_LANG_JAVASCRIPT, "t", "util.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(js_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class Counter {\n  constructor() { this.count = 0; }\n  increment() { "
                 "this.count++; }\n  get value() { return this.count; }\n}\n",
-                CBM_LANG_JAVASCRIPT, "t", "counter.js");
+                LSM_LANG_JAVASCRIPT, "t", "counter.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Counter"));
     ASSERT(has_def(r, "Method", "increment"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- TypeScript --- */
 TEST(ts_function) {
-    CBMFileResult *r = extract("export function greet(name: string): string { return `Hello "
+    LSMFileResult *r = extract("export function greet(name: string): string { return `Hello "
                                "${name}`; }\nfunction helper(): void {}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "util.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "util.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ts_class) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("class Service {\n  private name: string;\n  constructor(name: string) { this.name "
                 "= name; }\n  getName(): string { return this.name; }\n}\n",
-                CBM_LANG_TYPESCRIPT, "t", "service.ts");
+                LSM_LANG_TYPESCRIPT, "t", "service.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Service"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(body_tokens_type_identifier) {
-    CBMFileResult *r = extract("function serialize(obj: MyModel): SerializedResult {\n"
+    LSMFileResult *r = extract("function serialize(obj: MyModel): SerializedResult {\n"
                                "  const result: SerializedResult = new SerializedResult();\n"
                                "  return result;\n"
                                "}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "serial.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "serial.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     for (int i = 0; i < r->defs.count; i++) {
@@ -938,54 +938,54 @@ TEST(body_tokens_type_identifier) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lua --- */
 TEST(lua_function) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "function greet(name)\n  return \"Hello \" .. name\nend\nlocal function helper() end\n",
-        CBM_LANG_LUA, "t", "main.lua");
+        LSM_LANG_LUA, "t", "main.lua");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Bash --- */
 TEST(bash_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("greet() {\n  echo \"Hello $1\"\n}\nmain() {\n  greet \"World\"\n}\n",
-                CBM_LANG_BASH, "t", "script.sh");
+                LSM_LANG_BASH, "t", "script.sh");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Perl --- */
 TEST(perl_function) {
-    CBMFileResult *r = extract("sub greet {\n    my ($name) = @_;\n    return \"Hello "
+    LSMFileResult *r = extract("sub greet {\n    my ($name) = @_;\n    return \"Hello "
                                "$name\";\n}\nsub main { greet(\"World\"); }\n",
-                               CBM_LANG_PERL, "t", "main.pl");
+                               LSM_LANG_PERL, "t", "main.pl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- R --- */
 TEST(r_function) {
-    CBMFileResult *r = extract("add <- function(x, y) x + y\nmultiply <- function(x, y) x * y\n",
-                               CBM_LANG_R, "t", "math.R");
+    LSMFileResult *r = extract("add <- function(x, y) x + y\nmultiply <- function(x, y) x * y\n",
+                               LSM_LANG_R, "t", "math.R");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -995,48 +995,48 @@ TEST(r_function) {
 
 /* --- Elixir --- */
 TEST(elixir_function) {
-    CBMFileResult *r = extract("defmodule Greeter do\n  def greet(name), do: \"Hello #{name}\"\n  "
+    LSMFileResult *r = extract("defmodule Greeter do\n  def greet(name), do: \"Hello #{name}\"\n  "
                                "defp helper, do: nil\nend\n",
-                               CBM_LANG_ELIXIR, "t", "greeter.ex");
+                               LSM_LANG_ELIXIR, "t", "greeter.ex");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Haskell --- */
 TEST(haskell_function) {
-    CBMFileResult *r = extract("add :: Int -> Int -> Int\nadd x y = x + y\n\nmultiply :: Int -> "
+    LSMFileResult *r = extract("add :: Int -> Int -> Int\nadd x y = x + y\n\nmultiply :: Int -> "
                                "Int -> Int\nmultiply x y = x * y\n",
-                               CBM_LANG_HASKELL, "t", "Math.hs");
+                               LSM_LANG_HASKELL, "t", "Math.hs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- OCaml --- */
 TEST(ocaml_function) {
-    CBMFileResult *r =
-        extract("let add x y = x + y\nlet multiply x y = x * y\n", CBM_LANG_OCAML, "t", "math.ml");
+    LSMFileResult *r =
+        extract("let add x y = x + y\nlet multiply x y = x * y\n", LSM_LANG_OCAML, "t", "math.ml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Erlang --- */
 TEST(erlang_function) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "-module(math).\n-export([add/2]).\nadd(X, Y) -> X + Y.\nmultiply(X, Y) -> X * Y.\n",
-        CBM_LANG_ERLANG, "t", "math.erl");
+        LSM_LANG_ERLANG, "t", "math.erl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1046,52 +1046,52 @@ TEST(erlang_function) {
 
 /* --- YAML --- */
 TEST(yaml_variables) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("name: myapp\nversion: 1.0\ndatabase:\n  host: localhost\n  port: 5432\n",
-                CBM_LANG_YAML, "t", "config.yml");
+                LSM_LANG_YAML, "t", "config.yml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* YAML should extract top-level keys as variables */
     ASSERT_GT(r->defs.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- HCL --- */
 TEST(hcl_blocks) {
-    CBMFileResult *r = extract("resource \"aws_instance\" \"web\" {\n  ami = \"abc-123\"\n  "
+    LSMFileResult *r = extract("resource \"aws_instance\" \"web\" {\n  ami = \"abc-123\"\n  "
                                "instance_type = \"t2.micro\"\n}\n"
                                "variable \"region\" {\n  default = \"us-east-1\"\n}\n",
-                               CBM_LANG_HCL, "t", "main.tf");
+                               LSM_LANG_HCL, "t", "main.tf");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->defs.count, 0);
     /* Block labels are folded into the name so blocks are distinguishable (#337). */
     ASSERT(has_def(r, "Class", "resource.aws_instance.web"));
     ASSERT(has_def(r, "Class", "variable.region"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- SQL --- */
 TEST(sql_create_table) {
-    CBMFileResult *r = extract("CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT "
+    LSMFileResult *r = extract("CREATE TABLE users (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT "
                                "NULL\n);\nCREATE VIEW active_users AS SELECT * FROM users;\n",
-                               CBM_LANG_SQL, "t", "schema.sql");
+                               LSM_LANG_SQL, "t", "schema.sql");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Dockerfile --- */
 TEST(dockerfile_stages) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "FROM node:18 AS builder\nRUN npm install\nFROM node:18-slim\nCOPY --from=builder /app .\n",
-        CBM_LANG_DOCKERFILE, "t", "Dockerfile");
+        LSM_LANG_DOCKERFILE, "t", "Dockerfile");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1101,58 +1101,58 @@ TEST(dockerfile_stages) {
 
 /* --- MATLAB --- */
 TEST(matlab_function) {
-    CBMFileResult *r =
-        extract("function y = square(x)\n  y = x.^2;\nend\n", CBM_LANG_MATLAB, "t", "square.m");
+    LSMFileResult *r =
+        extract("function y = square(x)\n  y = x.^2;\nend\n", LSM_LANG_MATLAB, "t", "square.m");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "square"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lean 4 --- */
 TEST(lean_function) {
-    CBMFileResult *r =
-        extract("def add (x y : Nat) : Nat := x + y\n", CBM_LANG_LEAN, "t", "Math.lean");
+    LSMFileResult *r =
+        extract("def add (x y : Nat) : Nat := x + y\n", LSM_LANG_LEAN, "t", "Math.lean");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- FORM --- */
 TEST(form_procedure) {
-    CBMFileResult *r = extract("#procedure doSomething\n  id x = y;\n#endprocedure\n",
-                               CBM_LANG_FORM, "t", "test.frm");
+    LSMFileResult *r = extract("#procedure doSomething\n  id x = y;\n#endprocedure\n",
+                               LSM_LANG_FORM, "t", "test.frm");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "doSomething"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram --- */
 TEST(wolfram_function) {
-    CBMFileResult *r =
-        extract("square[x_] := x^2\nadd[x_, y_] := x + y\n", CBM_LANG_WOLFRAM, "t", "math.wl");
+    LSMFileResult *r =
+        extract("square[x_] := x^2\nadd[x_, y_] := x + y\n", LSM_LANG_WOLFRAM, "t", "math.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "square"));
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma --- */
 TEST(magma_function) {
-    CBMFileResult *r = extract("function Factorial(n)\n  if n le 1 then\n    return 1;\n  end "
+    LSMFileResult *r = extract("function Factorial(n)\n  if n le 1 then\n    return 1;\n  end "
                                "if;\n  return n * Factorial(n - 1);\nend function;\n",
-                               CBM_LANG_MAGMA, "t", "test.m");
+                               LSM_LANG_MAGMA, "t", "test.m");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Factorial"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1163,46 +1163,46 @@ TEST(magma_function) {
 /* --- F# --- */
 TEST(fsharp_function) {
     /* Go test only asserts >=1 def — F# name extraction is incomplete */
-    CBMFileResult *r = extract("module Greeter\nlet greet name = sprintf \"Hello %s\" name\n",
-                               CBM_LANG_FSHARP, "t", "Greeter.fs");
+    LSMFileResult *r = extract("module Greeter\nlet greet name = sprintf \"Hello %s\" name\n",
+                               LSM_LANG_FSHARP, "t", "Greeter.fs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Julia --- */
 TEST(julia_function) {
-    CBMFileResult *r = extract("function add(x, y)\n    x + y\nend\nadd2(x, y) = x + y\n",
-                               CBM_LANG_JULIA, "t", "math.jl");
+    LSMFileResult *r = extract("function add(x, y)\n    x + y\nend\nadd2(x, y) = x + y\n",
+                               LSM_LANG_JULIA, "t", "math.jl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Elm --- */
 TEST(elm_function) {
-    CBMFileResult *r =
-        extract("add x y = x + y\nmultiply x y = x * y\n", CBM_LANG_ELM, "t", "Math.elm");
+    LSMFileResult *r =
+        extract("add x y = x + y\nmultiply x y = x * y\n", LSM_LANG_ELM, "t", "Math.elm");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "add"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Nix --- */
 TEST(nix_function) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("{ pkgs ? import <nixpkgs> {} }:\nlet\n  hello = pkgs.writeShellScriptBin "
                 "\"hello\" ''echo hello'';\nin { inherit hello; }\n",
-                CBM_LANG_NIX, "t", "default.nix");
+                LSM_LANG_NIX, "t", "default.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1212,36 +1212,36 @@ TEST(nix_function) {
  * `nix_function` above deliberately stays as-is: its binding is an application, not
  * a function, so it pins the "parses, no def" case and cannot cover this. */
 TEST(nix_defs_in_let_rooted_file) {
-    CBMFileResult *r = extract("let\n  alpha = x: x + 1;\n  beta = { a, b }: a + b;\nin\n"
+    LSMFileResult *r = extract("let\n  alpha = x: x + 1;\n  beta = { a, b }: a + b;\nin\n"
                                "{ inherit alpha beta; }\n",
-                               CBM_LANG_NIX, "t", "bare.nix");
+                               LSM_LANG_NIX, "t", "bare.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "alpha"));
     ASSERT(has_def(r, "Function", "beta"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(nix_defs_in_attrset_rooted_file) {
-    CBMFileResult *r = extract("{\n  epsilon = x: x + 1;\n  zeta = { a, b }: a + b;\n}\n",
-                               CBM_LANG_NIX, "t", "attrset.nix");
+    LSMFileResult *r = extract("{\n  epsilon = x: x + 1;\n  zeta = { a, b }: a + b;\n}\n",
+                               LSM_LANG_NIX, "t", "attrset.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "epsilon"));
     ASSERT(has_def(r, "Function", "zeta"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(nix_defs_in_nested_let) {
-    CBMFileResult *r = extract("let\n  outer =\n    let theta = x: x + 1;\n    in theta;\n"
+    LSMFileResult *r = extract("let\n  outer =\n    let theta = x: x + 1;\n    in theta;\n"
                                "in\n{ inherit outer; }\n",
-                               CBM_LANG_NIX, "t", "nested.nix");
+                               LSM_LANG_NIX, "t", "nested.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "theta"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1249,24 +1249,24 @@ TEST(nix_defs_in_nested_let) {
  * nix_func_types, resolves no name of its own, and — before the fix — terminated the
  * walk, so nothing below the header was ever visited. */
 TEST(nix_defs_survive_function_header_let) {
-    CBMFileResult *r = extract("{ prelude }:\nlet\n  gamma = x: x + 1;\n"
+    LSMFileResult *r = extract("{ prelude }:\nlet\n  gamma = x: x + 1;\n"
                                "  delta = { a, b }: a + b;\nin\n{ inherit gamma delta; }\n",
-                               CBM_LANG_NIX, "t", "wrapped.nix");
+                               LSM_LANG_NIX, "t", "wrapped.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "gamma"));
     ASSERT(has_def(r, "Function", "delta"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(nix_defs_survive_function_header_attrset) {
-    CBMFileResult *r = extract("{ prelude }:\n{\n  eta = x: x + 1;\n}\n", CBM_LANG_NIX, "t",
+    LSMFileResult *r = extract("{ prelude }:\n{\n  eta = x: x + 1;\n}\n", LSM_LANG_NIX, "t",
                                "wrapped_attrset.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "eta"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1274,12 +1274,12 @@ TEST(nix_defs_survive_function_header_attrset) {
  * the most common multi-arm header in the ecosystem. Two nested function_expressions sit
  * between the file root and the body. */
 TEST(nix_defs_survive_curried_header) {
-    CBMFileResult *r =
-        extract("final: prev: {\n  kappa = x: x + 1;\n}\n", CBM_LANG_NIX, "t", "overlay.nix");
+    LSMFileResult *r =
+        extract("final: prev: {\n  kappa = x: x + 1;\n}\n", LSM_LANG_NIX, "t", "overlay.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "kappa"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1288,9 +1288,9 @@ TEST(nix_defs_survive_curried_header) {
  * `serialize`, QN `proj.file.ns.serialize` — so a Nix binding is name = leaf
  * segment, QN = enclosing scope + leaf. */
 TEST(nix_attrset_scope_disambiguates_leaf_names) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("{\n  setA = { dup = x: x + 1; };\n  setB = { dup = y: y + 2; };\n}\n",
-                CBM_LANG_NIX, "t", "collide.nix");
+                LSM_LANG_NIX, "t", "collide.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Both survive. Unqualified, these shared one QN, so the second definition —
@@ -1298,27 +1298,27 @@ TEST(nix_attrset_scope_disambiguates_leaf_names) {
     ASSERT(count_defs_with_label(r, "Function") == 2);
     ASSERT(has_def_qn(r, "t.collide.setA.dup"));
     ASSERT(has_def_qn(r, "t.collide.setB.dup"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* `a.b.fn = …` is sugar for `a = { b = { fn = …; }; }`. Both spellings must yield
  * the same name and the same QN; the leading segments are scope, not name. */
 TEST(nix_dotted_attrpath_qualifies_like_nested) {
-    CBMFileResult *r = extract("{\n  wrap.deep.fn = z: z + 1;\n}\n", CBM_LANG_NIX, "t", "d.nix");
+    LSMFileResult *r = extract("{\n  wrap.deep.fn = z: z + 1;\n}\n", LSM_LANG_NIX, "t", "d.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "fn"));
     ASSERT(has_def_qn(r, "t.d.wrap.deep.fn"));
 
-    CBMFileResult *n =
-        extract("{\n  wrap = { deep = { fn = z: z + 1; }; };\n}\n", CBM_LANG_NIX, "t", "d.nix");
+    LSMFileResult *n =
+        extract("{\n  wrap = { deep = { fn = z: z + 1; }; };\n}\n", LSM_LANG_NIX, "t", "d.nix");
     ASSERT_NOT_NULL(n);
     ASSERT_FALSE(n->has_error);
     /* The equality that makes this a correctness fix rather than a preference. */
     ASSERT(has_def_qn(n, "t.d.wrap.deep.fn"));
-    cbm_free_result(n);
-    cbm_free_result(r);
+    lsm_free_result(n);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1326,8 +1326,8 @@ TEST(nix_dotted_attrpath_qualifies_like_nested) {
  * delimiters are not part of it, and leaving them in means every consumer keying
  * on the name has to know to re-quote. */
 TEST(nix_quoted_attr_name_strips_quotes) {
-    CBMFileResult *r = extract("{\n  \"kebab-case\" = a: a;\n  svc.\"my.name\" = b: b;\n}\n",
-                               CBM_LANG_NIX, "t", "q.nix");
+    LSMFileResult *r = extract("{\n  \"kebab-case\" = a: a;\n  svc.\"my.name\" = b: b;\n}\n",
+                               LSM_LANG_NIX, "t", "q.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "kebab-case"));
@@ -1336,7 +1336,7 @@ TEST(nix_quoted_attr_name_strips_quotes) {
     /* A quoted segment may itself contain dots; they are part of the name, not
      * path separators, but the QN is a dotted string either way. */
     ASSERT(has_def(r, "Function", "my.name"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1344,13 +1344,13 @@ TEST(nix_quoted_attr_name_strips_quotes) {
  * `"${x}"` that nothing can look up or resolve a call against, so mint nothing —
  * the same call the Makefile dot-prefix guard makes. */
 TEST(nix_interpolated_attr_mints_no_def) {
-    CBMFileResult *r =
-        extract("{\n  \"${dynamic}\" = a: a;\n  fixed = b: b;\n}\n", CBM_LANG_NIX, "t", "i.nix");
+    LSMFileResult *r =
+        extract("{\n  \"${dynamic}\" = a: a;\n  fixed = b: b;\n}\n", LSM_LANG_NIX, "t", "i.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "fixed"));
     ASSERT(count_defs_with_label(r, "Function") == 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1363,7 +1363,7 @@ TEST(nix_interpolated_attr_mints_no_def) {
  * anything in a deeper attrset is not. Without that bound a NixOS module's
  * settings tree would mint a node per `enable = true`. */
 TEST(nix_module_level_bindings_mint_variables) {
-    CBMFileResult *r = extract("{ pkgs, lib, ... }:\n"
+    LSMFileResult *r = extract("{ pkgs, lib, ... }:\n"
                                "let\n"
                                "  privateConst = 42;\n"
                                "in\n"
@@ -1371,7 +1371,7 @@ TEST(nix_module_level_bindings_mint_variables) {
                                "  exported = \"value\";\n"
                                "  services.nginx.enable = true;\n"
                                "}\n",
-                               CBM_LANG_NIX, "t", "mod.nix");
+                               LSM_LANG_NIX, "t", "mod.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* A let binding is file scope in the same sense a C++ file-static is. */
@@ -1380,14 +1380,14 @@ TEST(nix_module_level_bindings_mint_variables) {
     /* The QN carries the attrpath, exactly as it does for functions. */
     ASSERT(has_def(r, "Variable", "enable"));
     ASSERT(has_def_qn(r, "t.mod.services.nginx.enable"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* The flood guard. Each absence assertion is paired with a positive one on the
  * same predicate in the same result, so none can pass by extracting nothing. */
 TEST(nix_nested_bindings_are_not_module_level) {
-    CBMFileResult *r = extract("{ pkgs }:\n"
+    LSMFileResult *r = extract("{ pkgs }:\n"
                                "{\n"
                                "  topLevel = 1;\n"
                                "  deep = {\n"
@@ -1396,7 +1396,7 @@ TEST(nix_nested_bindings_are_not_module_level) {
                                "    };\n"
                                "  };\n"
                                "}\n",
-                               CBM_LANG_NIX, "t", "deep.nix");
+                               LSM_LANG_NIX, "t", "deep.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Variable", "topLevel")); /* positive control */
@@ -1404,22 +1404,22 @@ TEST(nix_nested_bindings_are_not_module_level) {
     /* `deep` is an attrset — a scope, not a value — so not a Variable either. */
     ASSERT_FALSE(has_def(r, "Variable", "deep"));
     ASSERT_FALSE(has_def(r, "Variable", "nested"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* A lambda-valued binding is already minted as a Function by the def walk. Minting
  * it again here would double-count every helper in the ecosystem. */
 TEST(nix_lambda_binding_is_function_not_variable) {
-    CBMFileResult *r =
-        extract("{\n  fn = x: x + 1;\n  val = 7;\n}\n", CBM_LANG_NIX, "t", "mix.nix");
+    LSMFileResult *r =
+        extract("{\n  fn = x: x + 1;\n  val = 7;\n}\n", LSM_LANG_NIX, "t", "mix.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "fn"));
     ASSERT_FALSE(has_def(r, "Variable", "fn"));
     ASSERT(has_def(r, "Variable", "val")); /* positive control */
     ASSERT_FALSE(has_def(r, "Function", "val"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1427,25 +1427,25 @@ TEST(nix_lambda_binding_is_function_not_variable) {
  * arm: `iota = a: b: ...` is one named function, not two. The inner `b:` has a
  * function_expression parent, resolves no name, and must stay out. */
 TEST(nix_curried_lambda_mints_one_def) {
-    CBMFileResult *r = extract("{ prelude }:\nlet\n  iota = a: b: a + b;\nin\n{ inherit iota; }\n",
-                               CBM_LANG_NIX, "t", "curried.nix");
+    LSMFileResult *r = extract("{ prelude }:\nlet\n  iota = a: b: a + b;\nin\n{ inherit iota; }\n",
+                               LSM_LANG_NIX, "t", "curried.nix");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "iota"));
     ASSERT(count_defs_with_label(r, "Function") == 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Fortran --- */
 TEST(fortran_function) {
     /* Fortran subroutine name extraction is incomplete — just verify no crash */
-    CBMFileResult *r = extract("subroutine greet(name)\n  character(*), intent(in) :: name\n  "
+    LSMFileResult *r = extract("subroutine greet(name)\n  character(*), intent(in) :: name\n  "
                                "print *, 'Hello ', name\nend subroutine\n",
-                               CBM_LANG_FORTRAN, "t", "greet.f90");
+                               LSM_LANG_FORTRAN, "t", "greet.f90");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1455,125 +1455,125 @@ TEST(fortran_function) {
 
 /* --- Swift struct --- */
 TEST(swift_struct) {
-    CBMFileResult *r = extract("struct Point {\n    var x: Double\n    var y: Double\n    func "
+    LSMFileResult *r = extract("struct Point {\n    var x: Double\n    var y: Double\n    func "
                                "distance() -> Double { return (x*x + y*y).squareRoot() }\n}\n",
-                               CBM_LANG_SWIFT, "t", "Point.swift");
+                               LSM_LANG_SWIFT, "t", "Point.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Method", "distance"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Swift calls (port of PR #47 Go tests) --- */
 TEST(swift_simple_call) {
-    CBMFileResult *r = extract("func main() { greet() }\nfunc greet() { print(\"hello\") }\n",
-                               CBM_LANG_SWIFT, "t", "main.swift");
+    LSMFileResult *r = extract("func main() { greet() }\nfunc greet() { print(\"hello\") }\n",
+                               LSM_LANG_SWIFT, "t", "main.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(swift_method_call) {
-    CBMFileResult *r =
-        extract("class Foo {\n    func bar() { baz.run() }\n}\n", CBM_LANG_SWIFT, "t", "Foo.swift");
+    LSMFileResult *r =
+        extract("class Foo {\n    func bar() { baz.run() }\n}\n", LSM_LANG_SWIFT, "t", "Foo.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "baz.run"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(swift_constructor_call) {
-    CBMFileResult *r =
-        extract("func create() { let x = MyClass() }\n", CBM_LANG_SWIFT, "t", "create.swift");
+    LSMFileResult *r =
+        extract("func create() { let x = MyClass() }\n", LSM_LANG_SWIFT, "t", "create.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "MyClass"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(swift_chained_call) {
-    CBMFileResult *r = extract("func setup() { AlarmScheduler.shared.startKeepAlive() }\n",
-                               CBM_LANG_SWIFT, "t", "setup.swift");
+    LSMFileResult *r = extract("func setup() { AlarmScheduler.shared.startKeepAlive() }\n",
+                               LSM_LANG_SWIFT, "t", "setup.swift");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(r->calls.count > 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Objective-C --- */
 TEST(objc_interface) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("@interface Animal : NSObject\n- (NSString *)name;\n- (void)speak;\n@end\n",
-                CBM_LANG_OBJC, "t", "Animal.h");
+                LSM_LANG_OBJC, "t", "Animal.h");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objc_implementation) {
-    CBMFileResult *r = extract("@implementation Animal\n- (NSString *)name { return @\"Animal\"; "
+    LSMFileResult *r = extract("@implementation Animal\n- (NSString *)name { return @\"Animal\"; "
                                "}\n- (void)speak { NSLog(@\"...\"); }\n@end\n",
-                               CBM_LANG_OBJC, "t", "Animal.m");
+                               LSM_LANG_OBJC, "t", "Animal.m");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Dart top-level function --- */
 TEST(dart_top_level_function) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "void main() {\n  print('Hello');\n}\nString greet(String name) => 'Hello $name';\n",
-        CBM_LANG_DART, "t", "main.dart");
+        LSM_LANG_DART, "t", "main.dart");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "main"));
     ASSERT(has_def(r, "Function", "greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Rust enum --- */
 TEST(rust_enum) {
-    CBMFileResult *r =
-        extract("pub enum Direction { North, South, East, West }\n", CBM_LANG_RUST, "t", "dir.rs");
+    LSMFileResult *r =
+        extract("pub enum Direction { North, South, East, West }\n", LSM_LANG_RUST, "t", "dir.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Zig struct --- */
 TEST(zig_struct) {
-    CBMFileResult *r = extract("const Point = struct { x: f32, y: f32, pub fn dist(self: Point) "
+    LSMFileResult *r = extract("const Point = struct { x: f32, y: f32, pub fn dist(self: Point) "
                                "f32 { return self.x + self.y; } };\n",
-                               CBM_LANG_ZIG, "t", "point.zig");
+                               LSM_LANG_ZIG, "t", "point.zig");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- C++ function (standalone) --- */
 TEST(cpp_function) {
-    CBMFileResult *r = extract("#include <string>\nstd::string greet(const std::string& name) { "
+    LSMFileResult *r = extract("#include <string>\nstd::string greet(const std::string& name) { "
                                "return \"Hello \" + name; }\nint main() { return 0; }\n",
-                               CBM_LANG_CPP, "t", "main.cpp");
+                               LSM_LANG_CPP, "t", "main.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1581,34 +1581,34 @@ TEST(cpp_function) {
  * node when multiple tests share a file. Each must mint a distinct Function
  * node whose name encodes the suite and case arguments. */
 TEST(cpp_gtest_same_name_collision_issue1266) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "namespace demo { int assembleWidget(int s) { return s * 2; } }\n"
         "TEST(WidgetSuite, DoublesSmallSize) { demo::assembleWidget(1); }\n"
         "TEST(WidgetSuite, DoublesZero) { demo::assembleWidget(0); }\n"
         "TEST(WidgetSuite, DoublesLargeSize) {\n"
         "  demo::assembleWidget(1000);\n"
         "}\n",
-        CBM_LANG_CPP, "t", "direct_test.cpp");
+        LSM_LANG_CPP, "t", "direct_test.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT(has_def(r, "Function", "TEST_WidgetSuite_DoublesSmallSize"));
     ASSERT(has_def(r, "Function", "TEST_WidgetSuite_DoublesZero"));
     ASSERT(has_def(r, "Function", "TEST_WidgetSuite_DoublesLargeSize"));
     ASSERT(!has_def(r, "Function", "TEST"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* #1266: TEST_F fixture macro also produces unique names. */
 TEST(cpp_gtest_f_unique_name_issue1266) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "TEST_F(MyFixture, FirstTest) { doStuff(); }\n"
         "TEST_F(MyFixture, SecondTest) { doOtherStuff(); }\n",
-        CBM_LANG_CPP, "t", "fixture_test.cpp");
+        LSM_LANG_CPP, "t", "fixture_test.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT(has_def(r, "Function", "TEST_F_MyFixture_FirstTest"));
     ASSERT(has_def(r, "Function", "TEST_F_MyFixture_SecondTest"));
     ASSERT(!has_def(r, "Function", "TEST_F"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1621,9 +1621,9 @@ TEST(cpp_gtest_f_unique_name_issue1266) {
  * out-of-line def in isolation as an ERROR node, so that path is exercised by
  * real codebases rather than this isolated unit fixture.) */
 TEST(cpp_out_of_line_method_issue428) {
-    CBMFileResult *r = extract("void Foo::bar() {}\n"
+    LSMFileResult *r = extract("void Foo::bar() {}\n"
                                "int Foo::baz() { return 0; }\n",
-                               CBM_LANG_CPP, "t", "foo.cpp");
+                               LSM_LANG_CPP, "t", "foo.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT(has_def(r, "Method", "bar"));
     ASSERT(has_def(r, "Method", "baz"));
@@ -1631,7 +1631,7 @@ TEST(cpp_out_of_line_method_issue428) {
     /* parent_class links to the enclosing class QN */
     int checked = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        const CBMDefinition *d = &r->defs.items[i];
+        const LSMDefinition *d = &r->defs.items[i];
         if (strcmp(d->name, "bar") == 0 && strcmp(d->label, "Method") == 0) {
             ASSERT_NOT_NULL(d->parent_class);
             ASSERT(strstr(d->parent_class, "Foo") != NULL);
@@ -1639,91 +1639,91 @@ TEST(cpp_out_of_line_method_issue428) {
         }
     }
     ASSERT(checked);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- COBOL paragraph --- */
 TEST(cobol_paragraph) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("IDENTIFICATION DIVISION.\nPROGRAM-ID. HELLO.\nPROCEDURE DIVISION.\n    "
                 "DISPLAY-GREETING.\n        DISPLAY 'HELLO WORLD'.\n        STOP RUN.\n",
-                CBM_LANG_COBOL, "t", "hello.cbl");
+                LSM_LANG_COBOL, "t", "hello.cbl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Verilog module --- */
 TEST(verilog_module) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("module adder(input a, input b, output sum);\n  assign sum = a + b;\nendmodule\n",
-                CBM_LANG_VERILOG, "t", "adder.v");
+                LSM_LANG_VERILOG, "t", "adder.v");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- CUDA kernel --- */
 TEST(cuda_kernel) {
-    CBMFileResult *r = extract("__global__ void vectorAdd(float *a, float *b, float *c, int n) {\n "
+    LSMFileResult *r = extract("__global__ void vectorAdd(float *a, float *b, float *c, int n) {\n "
                                "   int i = blockIdx.x * blockDim.x + threadIdx.x;\n    if (i < n) "
                                "c[i] = a[i] + b[i];\n}\nint main() { return 0; }\n",
-                               CBM_LANG_CUDA, "t", "vector.cu");
+                               LSM_LANG_CUDA, "t", "vector.cu");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Python decorator --- */
 TEST(python_decorator) {
-    CBMFileResult *r = extract("class Router:\n    @staticmethod\n    def route(path: str):\n      "
+    LSMFileResult *r = extract("class Router:\n    @staticmethod\n    def route(path: str):\n      "
                                "  def decorator(func): return func\n        return decorator\n",
-                               CBM_LANG_PYTHON, "t", "router.py");
+                               LSM_LANG_PYTHON, "t", "router.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Router"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- TypeScript interface --- */
 TEST(ts_interface) {
-    CBMFileResult *r = extract("export interface Repository<T> { findById(id: number): T; "
+    LSMFileResult *r = extract("export interface Repository<T> { findById(id: number): T; "
                                "save(entity: T): void; delete(id: number): void; }\n",
-                               CBM_LANG_TYPESCRIPT, "t", "repo.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "repo.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- TSX component --- */
 TEST(tsx_component) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "import React from 'react';\ninterface Props { name: string; }\nexport function Greeting({ "
         "name }: Props) {\n    return <div>Hello {name}</div>;\n}\nexport default Greeting;\n",
-        CBM_LANG_TSX, "t", "Greeting.tsx");
+        LSM_LANG_TSX, "t", "Greeting.tsx");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Greeting"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lua table method --- */
 TEST(lua_table_method) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("local M = {}\nfunction M.create(name)\n    return { name = name }\nend\nfunction "
                 "M.greet(self)\n    return 'Hi ' .. self.name\nend\nreturn M\n",
-                CBM_LANG_LUA, "t", "module.lua");
+                LSM_LANG_LUA, "t", "module.lua");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Should extract at least one Function from Lua table method */
@@ -1733,57 +1733,57 @@ TEST(lua_table_method) {
             fn_count++;
     }
     ASSERT_GTE(fn_count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Emacs Lisp defun --- */
 TEST(emacs_lisp_defun) {
-    CBMFileResult *r = extract("(defun greet (name)\n  (message \"Hello %s\" name))\n(defun main "
+    LSMFileResult *r = extract("(defun greet (name)\n  (message \"Hello %s\" name))\n(defun main "
                                "()\n  (greet \"World\"))\n",
-                               CBM_LANG_EMACSLISP, "t", "init.el");
+                               LSM_LANG_EMACSLISP, "t", "init.el");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "greet"));
     ASSERT(has_def(r, "Function", "main"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Emacs Lisp defvar --- */
 TEST(emacs_lisp_defvar) {
-    CBMFileResult *r = extract("(defvar my-count 0 \"A counter.\")\n(defcustom my-name \"World\" "
+    LSMFileResult *r = extract("(defvar my-count 0 \"A counter.\")\n(defcustom my-name \"World\" "
                                "\"The name.\"\n  :type 'string)\n",
-                               CBM_LANG_EMACSLISP, "t", "vars.el");
+                               LSM_LANG_EMACSLISP, "t", "vars.el");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Haskell data type --- */
 TEST(haskell_data_type) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("data Shape = Circle Double | Rectangle Double Double\narea :: Shape -> "
                 "Double\narea (Circle r) = pi * r * r\narea (Rectangle w h) = w * h\n",
-                CBM_LANG_HASKELL, "t", "Shape.hs");
+                LSM_LANG_HASKELL, "t", "Shape.hs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Clojure function (known limitation: defn produces list_lit) --- */
 TEST(clojure_function) {
-    CBMFileResult *r = extract("(ns greeter.core)\n(defn greet [name]\n  (str \"Hello \" "
+    LSMFileResult *r = extract("(ns greeter.core)\n(defn greet [name]\n  (str \"Hello \" "
                                "name))\n(defn -main [& args]\n  (println (greet \"World\")))\n",
-                               CBM_LANG_CLOJURE, "t", "core.clj");
+                               LSM_LANG_CLOJURE, "t", "core.clj");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Clojure uses list_lit for all forms — no function defs extracted (known limitation) */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1793,175 +1793,175 @@ TEST(clojure_function) {
 
 /* --- HTML elements --- */
 TEST(html_elements) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "<!DOCTYPE "
         "html><html><head><title>Test</title></head><body><h1>Hello</h1><p>World</p></body></html>",
-        CBM_LANG_HTML, "t", "index.html");
+        LSM_LANG_HTML, "t", "index.html");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- SQL function (CREATE FUNCTION) --- */
 TEST(sql_function) {
-    CBMFileResult *r = extract("CREATE FUNCTION get_user_count() RETURNS INTEGER AS $$ SELECT "
+    LSMFileResult *r = extract("CREATE FUNCTION get_user_count() RETURNS INTEGER AS $$ SELECT "
                                "COUNT(*) FROM users; $$ LANGUAGE SQL;\n",
-                               CBM_LANG_SQL, "t", "funcs.sql");
+                               LSM_LANG_SQL, "t", "funcs.sql");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Meson project --- */
 TEST(meson_project) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "project('myapp', 'c', version: '1.0.0')\nexecutable('myapp', 'main.c', install: true)\n",
-        CBM_LANG_MESON, "t", "meson.build");
+        LSM_LANG_MESON, "t", "meson.build");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- CSS rules --- */
 TEST(css_rules) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         ".container { display: flex; width: 100%; }\n.button { background: #007bff; color: white; "
         "border: none; }\n@media (max-width: 768px) { .container { flex-direction: column; } }\n",
-        CBM_LANG_CSS, "t", "styles.css");
+        LSM_LANG_CSS, "t", "styles.css");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- SCSS rules --- */
 TEST(scss_rules) {
-    CBMFileResult *r = extract("$primary: #007bff;\n.container {\n  width: 100%;\n  .button {\n    "
+    LSMFileResult *r = extract("$primary: #007bff;\n.container {\n  width: 100%;\n  .button {\n    "
                                "background: $primary;\n    &:hover { opacity: 0.8; }\n  }\n}\n",
-                               CBM_LANG_SCSS, "t", "styles.scss");
+                               LSM_LANG_SCSS, "t", "styles.scss");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- TOML basic --- */
 TEST(toml_basic) {
-    CBMFileResult *r = extract("[server]\nhost = \"localhost\"\nport = 8080\n\n[database]\nurl = "
+    LSMFileResult *r = extract("[server]\nhost = \"localhost\"\nport = 8080\n\n[database]\nurl = "
                                "\"postgres://localhost/db\"\nmax_connections = 10\n",
-                               CBM_LANG_TOML, "t", "config.toml");
+                               LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "server"));
     ASSERT(has_def(r, "Class", "database"));
     ASSERT(has_def(r, "Variable", "host"));
     ASSERT(has_def(r, "Variable", "port"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- CMake function --- */
 TEST(cmake_function) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "cmake_minimum_required(VERSION 3.16)\nproject(MyApp VERSION 1.0)\nadd_executable(myapp "
         "main.cpp)\ntarget_compile_features(myapp PRIVATE cxx_std_17)\n",
-        CBM_LANG_CMAKE, "t", "CMakeLists.txt");
+        LSM_LANG_CMAKE, "t", "CMakeLists.txt");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- JSON object --- */
 TEST(json_object) {
-    CBMFileResult *r = extract("{\"name\": \"myapp\", \"version\": \"1.0.0\", \"scripts\": "
+    LSMFileResult *r = extract("{\"name\": \"myapp\", \"version\": \"1.0.0\", \"scripts\": "
                                "{\"build\": \"go build\", \"test\": \"go test ./...\"}}",
-                               CBM_LANG_JSON, "t", "config.json");
+                               LSM_LANG_JSON, "t", "config.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Variable", "name"));
     ASSERT(has_def(r, "Variable", "version"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Protobuf message --- */
 TEST(protobuf_message) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "syntax = \"proto3\";\npackage user;\nmessage User { int64 id = 1; string name = 2; string "
         "email = 3; }\nservice UserService { rpc GetUser(User) returns (User); }\n",
-        CBM_LANG_PROTOBUF, "t", "user.proto");
+        LSM_LANG_PROTOBUF, "t", "user.proto");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- GraphQL type --- */
 TEST(graphql_type) {
-    CBMFileResult *r = extract("type User {\n  id: ID!\n  name: String!\n  email: String!\n}\ntype "
+    LSMFileResult *r = extract("type User {\n  id: ID!\n  name: String!\n  email: String!\n}\ntype "
                                "Query {\n  user(id: ID!): User\n  users: [User!]!\n}\n",
-                               CBM_LANG_GRAPHQL, "t", "schema.graphql");
+                               LSM_LANG_GRAPHQL, "t", "schema.graphql");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Svelte component --- */
 TEST(svelte_component) {
-    CBMFileResult *r = extract("<script>\n  let name = 'World';\n  function greet() {\n    return "
+    LSMFileResult *r = extract("<script>\n  let name = 'World';\n  function greet() {\n    return "
                                "`Hello ${name}`;\n  }\n</script>\n<h1>{greet()}</h1>\n",
-                               CBM_LANG_SVELTE, "t", "App.svelte");
+                               LSM_LANG_SVELTE, "t", "App.svelte");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Vue component --- */
 TEST(vue_component) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("<template><div>{{ message }}</div></template>\n<script>\nexport default {\n  "
                 "name: 'App',\n  data() { return { message: 'Hello World' }; },\n  methods: { "
                 "greet() { return this.message; } }\n};\n</script>\n",
-                CBM_LANG_VUE, "t", "App.vue");
+                LSM_LANG_VUE, "t", "App.vue");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- GLSL shader --- */
 TEST(glsl_shader) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "#version 330 core\nvoid main() {\n    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);\n}\nvec3 "
         "transform(vec3 pos, mat4 mvp) {\n    return (mvp * vec4(pos, 1.0)).xyz;\n}\n",
-        CBM_LANG_GLSL, "t", "vertex.glsl");
+        LSM_LANG_GLSL, "t", "vertex.glsl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- VimScript function --- */
 TEST(vimscript_function) {
-    CBMFileResult *r = extract("function! SayHello()\n  echo 'Hello'\nendfunction\n",
-                               CBM_LANG_VIMSCRIPT, "t", "plugin.vim");
+    LSMFileResult *r = extract("function! SayHello()\n  echo 'Hello'\nendfunction\n",
+                               LSM_LANG_VIMSCRIPT, "t", "plugin.vim");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* VimScript extraction may or may not produce named functions */
@@ -1973,7 +1973,7 @@ TEST(vimscript_function) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "SayHello"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1983,54 +1983,54 @@ TEST(vimscript_function) {
 
 /* --- MATLAB parse (simple expression) --- */
 TEST(matlab_parse) {
-    CBMFileResult *r = extract("x = 1;\ny = x + 2;\n", CBM_LANG_MATLAB, "t", "simple.matlab");
+    LSMFileResult *r = extract("x = 1;\ny = x + 2;\n", LSM_LANG_MATLAB, "t", "simple.matlab");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- MATLAB call --- */
 TEST(matlab_call) {
-    CBMFileResult *r = extract("function y = foo(x)\n  y = inv(x);\n  disp hello\nend\n",
-                               CBM_LANG_MATLAB, "t", "foo.matlab");
+    LSMFileResult *r = extract("function y = foo(x)\n  y = inv(x);\n  disp hello\nend\n",
+                               LSM_LANG_MATLAB, "t", "foo.matlab");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
     ASSERT(has_call(r, "inv"));
     ASSERT(has_call(r, "disp"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lean parse (theorem) --- */
 TEST(lean_parse) {
-    CBMFileResult *r = extract("theorem add_comm (a b : Nat) : a + b = b + a := by omega\n",
-                               CBM_LANG_LEAN, "t", "Comm.lean");
+    LSMFileResult *r = extract("theorem add_comm (a b : Nat) : a + b = b + a := by omega\n",
+                               LSM_LANG_LEAN, "t", "Comm.lean");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lean call (recursive fib) --- */
 TEST(lean_call) {
-    CBMFileResult *r = extract("def fib : Nat \xe2\x86\x92 Nat\n  | 0 => 1\n  | 1 => 1\n  | n + 2 "
+    LSMFileResult *r = extract("def fib : Nat \xe2\x86\x92 Nat\n  | 0 => 1\n  | 1 => 1\n  | n + 2 "
                                "=> fib (n + 1) + fib n\n",
-                               CBM_LANG_LEAN, "t", "Fib.lean");
+                               LSM_LANG_LEAN, "t", "Fib.lean");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
     ASSERT(has_call(r, "fib"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Lean type annotation not call --- */
 TEST(lean_type_annotation_not_call) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "def listLen (xs : List Nat) : Nat := 0\ndef greet : IO Unit := IO.println \"hi\"\n",
-        CBM_LANG_LEAN, "t", "Types.lean");
+        LSM_LANG_LEAN, "t", "Types.lean");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* "List" in binder type position should NOT be extracted as a call */
@@ -2045,37 +2045,37 @@ TEST(lean_type_annotation_not_call) {
         }
     }
     ASSERT_TRUE(found_println);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- FORM parse (simple expression) --- */
 TEST(form_parse) {
-    CBMFileResult *r = extract("Symbols x, y;\nLocal F = x + y;\nPrint;\n.end\n", CBM_LANG_FORM,
+    LSMFileResult *r = extract("Symbols x, y;\nLocal F = x + y;\nPrint;\n.end\n", LSM_LANG_FORM,
                                "t", "example.frm");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- FORM call (#call) --- */
 TEST(form_call) {
-    CBMFileResult *r = extract("#procedure myproc(x)\n  id `x' = 0;\n#endprocedure\n#procedure "
+    LSMFileResult *r = extract("#procedure myproc(x)\n  id `x' = 0;\n#endprocedure\n#procedure "
                                "caller()\n  #call myproc(1)\n#endprocedure\n",
-                               CBM_LANG_FORM, "t", "calc.frm");
+                               LSM_LANG_FORM, "t", "calc.frm");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
     ASSERT(has_call(r, "myproc"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma procedure --- */
 TEST(magma_procedure) {
-    CBMFileResult *r = extract("procedure PrintHello()\n  print \"Hello\";\nend procedure;\n",
-                               CBM_LANG_MAGMA, "t", "hello.mag");
+    LSMFileResult *r = extract("procedure PrintHello()\n  print \"Hello\";\nend procedure;\n",
+                               LSM_LANG_MAGMA, "t", "hello.mag");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2086,47 +2086,47 @@ TEST(magma_procedure) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "PrintHello"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma parse (simple) --- */
 TEST(magma_parse) {
-    CBMFileResult *r = extract("x := 42;\ny := x + 1;\n", CBM_LANG_MAGMA, "t", "simple.mag");
+    LSMFileResult *r = extract("x := 42;\ny := x + 1;\n", LSM_LANG_MAGMA, "t", "simple.mag");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma import (load) --- */
 TEST(magma_import) {
-    CBMFileResult *r = extract("load \"utils.mag\";\nload \"lib/helpers.mag\";\n", CBM_LANG_MAGMA,
+    LSMFileResult *r = extract("load \"utils.mag\";\nload \"lib/helpers.mag\";\n", LSM_LANG_MAGMA,
                                "t", "main.mag");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->imports.count, 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma call --- */
 TEST(magma_call) {
-    CBMFileResult *r = extract("function Foo(x)\n  y := Bar(x);\n  return y;\nend function;\n",
-                               CBM_LANG_MAGMA, "t", "calls.mag");
+    LSMFileResult *r = extract("function Foo(x)\n  y := Bar(x);\n  return y;\nend function;\n",
+                               LSM_LANG_MAGMA, "t", "calls.mag");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
     ASSERT(has_call(r, "Bar"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Magma disambiguation (.m file as Magma) --- */
 TEST(magma_disambiguation) {
-    CBMFileResult *r = extract("function Factorial(n)\n  if n le 1 then\n    return 1;\n  end "
+    LSMFileResult *r = extract("function Factorial(n)\n  if n le 1 then\n    return 1;\n  end "
                                "if;\n  return n * Factorial(n - 1);\nend function;\n",
-                               CBM_LANG_MAGMA, "t", "test.m");
+                               LSM_LANG_MAGMA, "t", "test.m");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2138,13 +2138,13 @@ TEST(magma_disambiguation) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "Factorial"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram function (both := and =) --- */
 TEST(wolfram_function_extended) {
-    CBMFileResult *r = extract("f[x_] := x^2\ng[x_] = x + 1\n", CBM_LANG_WOLFRAM, "t", "funcs.wl");
+    LSMFileResult *r = extract("f[x_] := x^2\ng[x_] = x + 1\n", LSM_LANG_WOLFRAM, "t", "funcs.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2155,13 +2155,13 @@ TEST(wolfram_function_extended) {
     ASSERT_GTE(fn_count, 2);
     ASSERT(has_def(r, "Function", "f"));
     ASSERT(has_def(r, "Function", "g"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram call --- */
 TEST(wolfram_call) {
-    CBMFileResult *r = extract("f[x_] := g[x] + h[x]\n", CBM_LANG_WOLFRAM, "t", "calls.wl");
+    LSMFileResult *r = extract("f[x_] := g[x] + h[x]\n", LSM_LANG_WOLFRAM, "t", "calls.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
@@ -2171,13 +2171,13 @@ TEST(wolfram_call) {
     for (int i = 0; i < r->calls.count; i++) {
         ASSERT_FALSE(strcmp(r->calls.items[i].callee_name, "f") == 0);
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram caller attribution --- */
 TEST(wolfram_caller_attribution) {
-    CBMFileResult *r = extract("f[x_] := g[x] + h[x]\n", CBM_LANG_WOLFRAM, "t", "caller.wl");
+    LSMFileResult *r = extract("f[x_] := g[x] + h[x]\n", LSM_LANG_WOLFRAM, "t", "caller.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
@@ -2191,7 +2191,7 @@ TEST(wolfram_caller_attribution) {
             ASSERT_FALSE(strcmp(r->calls.items[i].enclosing_func_qn, "t.caller") == 0);
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2199,9 +2199,9 @@ TEST(wolfram_caller_attribution) {
  * declarator chain. Calls inside a C function must be attributed to the enclosing
  * function, not the module. Pre-fix, enclosing_func_qn fell back to the module QN. */
 TEST(c_caller_attribution) {
-    CBMFileResult *r = extract("int helper(int x) { return x; }\n"
+    LSMFileResult *r = extract("int helper(int x) { return x; }\n"
                                "int caller(void) { return helper(1); }\n",
-                               CBM_LANG_C, "t", "main.c");
+                               LSM_LANG_C, "t", "main.c");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
@@ -2216,7 +2216,7 @@ TEST(c_caller_attribution) {
         }
     }
     ASSERT(saw_helper);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2228,10 +2228,10 @@ TEST(c_caller_attribution) {
  * module — i.e. that the dedup did not reintroduce the #438 regression on the
  * qualified-declarator path. Module QN for "m.cpp" under prefix "t" is "t.m". */
 TEST(cpp_out_of_line_method_caller_attribution) {
-    CBMFileResult *r = extract("struct Foo { void bar(); };\n"
+    LSMFileResult *r = extract("struct Foo { void bar(); };\n"
                                "int helper(int x) { return x; }\n"
                                "void Foo::bar() { helper(1); }\n",
-                               CBM_LANG_CPP, "t", "m.cpp");
+                               LSM_LANG_CPP, "t", "m.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
@@ -2246,7 +2246,7 @@ TEST(cpp_out_of_line_method_caller_attribution) {
         }
     }
     ASSERT(saw_helper);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2254,11 +2254,11 @@ TEST(cpp_out_of_line_method_caller_attribution) {
  * identifier and destructor_name branches of resolve_qualified_name(). A call
  * inside either must attribute to that special member, not the module. */
 TEST(cpp_out_of_line_ctor_dtor_caller_attribution) {
-    CBMFileResult *r = extract("struct Foo { Foo(); ~Foo(); };\n"
+    LSMFileResult *r = extract("struct Foo { Foo(); ~Foo(); };\n"
                                "int helper(int x) { return x; }\n"
                                "Foo::Foo() { helper(1); }\n"
                                "Foo::~Foo() { helper(2); }\n",
-                               CBM_LANG_CPP, "t", "m.cpp");
+                               LSM_LANG_CPP, "t", "m.cpp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->calls.count, 0);
@@ -2272,50 +2272,50 @@ TEST(cpp_out_of_line_ctor_dtor_caller_attribution) {
         }
     }
     ASSERT(helper_calls >= 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram parse (simple assignment) --- */
 TEST(wolfram_parse) {
-    CBMFileResult *r = extract("x = 42;\ny = x + 1;\n", CBM_LANG_WOLFRAM, "t", "simple.wl");
+    LSMFileResult *r = extract("x = 42;\ny = x + 1;\n", LSM_LANG_WOLFRAM, "t", "simple.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram import --- */
 TEST(wolfram_import) {
-    CBMFileResult *r =
-        extract("<< \"utils.wl\"\nNeeds[\"Package`\"]\n", CBM_LANG_WOLFRAM, "t", "main.wl");
+    LSMFileResult *r =
+        extract("<< \"utils.wl\"\nNeeds[\"Package`\"]\n", LSM_LANG_WOLFRAM, "t", "main.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Wolfram nested def --- */
 TEST(wolfram_nested_def) {
-    CBMFileResult *r = extract("main[x_] := Module[{localF}, localF[t_] := t + 1; localF[x]]\n",
-                               CBM_LANG_WOLFRAM, "t", "nested.wl");
+    LSMFileResult *r = extract("main[x_] := Module[{localF}, localF[t_] := t + 1; localF[x]]\n",
+                               LSM_LANG_WOLFRAM, "t", "nested.wl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "main"));
     ASSERT(has_def(r, "Function", "localF"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * Group I: cbm_test.go ports
+ * Group I: lsm_test.go ports
  * ═══════════════════════════════════════════════════════════════════ */
 
 TEST(python_docstring) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "def compute(x, y):\n    \"\"\"Compute the sum of x and y.\"\"\"\n    return x + y\n",
-        CBM_LANG_PYTHON, "test", "test.py");
+        LSM_LANG_PYTHON, "test", "test.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "compute"));
@@ -2329,32 +2329,32 @@ TEST(python_docstring) {
         }
     }
     ASSERT_TRUE(found);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(go_function_extraction) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("package main\n\n// Greet returns a greeting.\nfunc Greet(name string) string "
                 "{\n\treturn \"Hello, \" + name\n}\n\nfunc main() {\n\tGreet(\"world\")\n}\n",
-                CBM_LANG_GO, "test", "main.go");
+                LSM_LANG_GO, "test", "main.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Greet"));
     ASSERT(has_def(r, "Function", "main"));
     ASSERT(has_call(r, "Greet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(js_arrow_function) {
-    CBMFileResult *r = extract("const greet = (name) => {\n  return \"Hello \" + "
+    LSMFileResult *r = extract("const greet = (name) => {\n  return \"Hello \" + "
                                "name;\n};\n\nconst result = greet(\"world\");\n",
-                               CBM_LANG_JAVASCRIPT, "test", "app.js");
+                               LSM_LANG_JAVASCRIPT, "test", "app.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->defs.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2364,68 +2364,68 @@ TEST(js_arrow_function) {
 
 /* CommonLisp — defun extraction (known limitation: grammar produces list_lit) */
 TEST(commonlisp_defun) {
-    CBMFileResult *r =
-        extract("(defun hello () \"world\")\n", CBM_LANG_COMMONLISP, "test", "hello.lisp");
+    LSMFileResult *r =
+        extract("(defun hello () \"world\")\n", LSM_LANG_COMMONLISP, "test", "hello.lisp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Known limitation: CommonLisp grammar produces list_lit, not defun nodes.
      * Function extraction returns 0 — this test documents the limitation. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(commonlisp_multiple_functions) {
-    CBMFileResult *r = extract("(defun add (a b) (+ a b))\n(defun mul (a b) (* a b))\n",
-                               CBM_LANG_COMMONLISP, "test", "math.lisp");
+    LSMFileResult *r = extract("(defun add (a b) (+ a b))\n(defun mul (a b) (* a b))\n",
+                               LSM_LANG_COMMONLISP, "test", "math.lisp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(commonlisp_defmacro) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("(defmacro when2 (condition &body body)\n  `(if ,condition (progn ,@body)))\n",
-                CBM_LANG_COMMONLISP, "test", "macros.lisp");
+                LSM_LANG_COMMONLISP, "test", "macros.lisp");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(makefile_rule_as_function) {
-    CBMFileResult *r = extract("all:\n\t@echo hello\n", CBM_LANG_MAKEFILE, "test", "Makefile");
+    LSMFileResult *r = extract("all:\n\t@echo hello\n", LSM_LANG_MAKEFILE, "test", "Makefile");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "all"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(makefile_multiple_targets) {
-    CBMFileResult *r = extract("all: main.o\n\tgcc -o all main.o\n\nbuild:\n\tgo build ./...\n",
-                               CBM_LANG_MAKEFILE, "test", "Makefile");
+    LSMFileResult *r = extract("all: main.o\n\tgcc -o all main.o\n\nbuild:\n\tgo build ./...\n",
+                               LSM_LANG_MAKEFILE, "test", "Makefile");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "all"));
     ASSERT(has_def(r, "Function", "build"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(makefile_variable_extraction) {
-    CBMFileResult *r =
-        extract("CC := gcc\nCFLAGS := -Wall\n", CBM_LANG_MAKEFILE, "test", "Makefile");
+    LSMFileResult *r =
+        extract("CC := gcc\nCFLAGS := -Wall\n", LSM_LANG_MAKEFILE, "test", "Makefile");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Variable extraction may or may not work depending on Makefile grammar support */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(vimscript_function_extraction) {
-    CBMFileResult *r = extract("function! SayHello()\n  echo 'Hello'\nendfunction\n",
-                               CBM_LANG_VIMSCRIPT, "test", "plugin.vim");
+    LSMFileResult *r = extract("function! SayHello()\n  echo 'Hello'\nendfunction\n",
+                               LSM_LANG_VIMSCRIPT, "test", "plugin.vim");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* VimScript function extraction may or may not produce named functions */
@@ -2437,13 +2437,13 @@ TEST(vimscript_function_extraction) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "SayHello"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(vimscript_function_without_bang) {
-    CBMFileResult *r = extract("function MyFunc(arg)\n  return arg\nendfunction\n",
-                               CBM_LANG_VIMSCRIPT, "test", "plugin.vim");
+    LSMFileResult *r = extract("function MyFunc(arg)\n  return arg\nendfunction\n",
+                               LSM_LANG_VIMSCRIPT, "test", "plugin.vim");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2454,13 +2454,13 @@ TEST(vimscript_function_without_bang) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "MyFunc"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(julia_function_extraction) {
-    CBMFileResult *r = extract("function hello()\n  println(\"Hello, World!\")\nend\n",
-                               CBM_LANG_JULIA, "test", "hello.jl");
+    LSMFileResult *r = extract("function hello()\n  println(\"Hello, World!\")\nend\n",
+                               LSM_LANG_JULIA, "test", "hello.jl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2471,13 +2471,13 @@ TEST(julia_function_extraction) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "hello"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(julia_function_with_args) {
-    CBMFileResult *r = extract("function add(a::Int, b::Int)::Int\n  return a + b\nend\n",
-                               CBM_LANG_JULIA, "test", "math.jl");
+    LSMFileResult *r = extract("function add(a::Int, b::Int)::Int\n  return a + b\nend\n",
+                               LSM_LANG_JULIA, "test", "math.jl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int fn_count = 0;
@@ -2488,7 +2488,7 @@ TEST(julia_function_with_args) {
     if (fn_count > 0) {
         ASSERT(has_def(r, "Function", "add"));
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2497,135 +2497,135 @@ TEST(julia_function_with_args) {
  * ═══════════════════════════════════════════════════════════════════ */
 
 TEST(python_calls) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("import os\ndef main():\n    os.path.exists('/tmp')\n    print('hello')\n",
-                CBM_LANG_PYTHON, "t", "main.py");
+                LSM_LANG_PYTHON, "t", "main.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Python unified extraction produces calls — verify at least some exist */
     ASSERT_GT(r->calls.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(python_iris_classMethodValue) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("import iris\n"
                 "iris_obj = iris.cls('%Library.ObjectScript')\n"
                 "def call_bfs(n):\n"
                 "    return iris_obj.classMethodValue('Graph.KG.TraversalBFS', 'BFSFastJson', n)\n",
-                CBM_LANG_PYTHON, "t", "store.py");
+                LSM_LANG_PYTHON, "t", "store.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "Graph.KG.TraversalBFS.BFSFastJson"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(go_calls) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"hello\") }\n",
-                CBM_LANG_GO, "t", "main.go");
+                LSM_LANG_GO, "t", "main.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "fmt.Println"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(python_imports) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("import os\nfrom sys import argv\nfrom collections import defaultdict\n",
-                CBM_LANG_PYTHON, "t", "main.py");
+                LSM_LANG_PYTHON, "t", "main.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(js_imports) {
-    CBMFileResult *r = extract("import React from 'react';\nimport { useState } from "
+    LSMFileResult *r = extract("import React from 'react';\nimport { useState } from "
                                "'react';\nconst fs = require('fs');\n",
-                               CBM_LANG_JAVASCRIPT, "t", "app.js");
+                               LSM_LANG_JAVASCRIPT, "t", "app.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(go_imports) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("package main\n\nimport \"fmt\"\nimport (\n    \"os\"\n    net \"net/http\"\n)\n",
-                CBM_LANG_GO, "t", "main.go");
+                LSM_LANG_GO, "t", "main.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "fmt"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(java_imports) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "import java.util.List;\nimport java.util.ArrayList;\nimport static java.lang.Math.PI;\n"
         "public class Foo {}\n",
-        CBM_LANG_JAVA, "t", "Foo.java");
+        LSM_LANG_JAVA, "t", "Foo.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "java.util.List"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(rust_imports) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "use std::collections::HashMap;\nuse std::io::{self, Write};\nuse serde::Serialize;\n"
         "fn main() {}\n",
-        CBM_LANG_RUST, "t", "main.rs");
+        LSM_LANG_RUST, "t", "main.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "std::collections::HashMap"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(c_imports) {
-    CBMFileResult *r = extract("#include <stdio.h>\n#include <stdlib.h>\n#include "
+    LSMFileResult *r = extract("#include <stdio.h>\n#include <stdlib.h>\n#include "
                                "\"mylib.h\"\n\nint main() { return 0; }\n",
-                               CBM_LANG_C, "t", "main.c");
+                               LSM_LANG_C, "t", "main.c");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "stdio.h"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ruby_imports) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "require 'json'\nrequire 'net/http'\nrequire_relative 'helpers'\n\nclass Foo; end\n",
-        CBM_LANG_RUBY, "t", "app.rb");
+        LSM_LANG_RUBY, "t", "app.rb");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "json"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(lua_imports) {
-    CBMFileResult *r = extract("local json = require(\"dkjson\")\nlocal http = "
+    LSMFileResult *r = extract("local json = require(\"dkjson\")\nlocal http = "
                                "require(\"socket.http\")\n\nlocal function greet() end\n",
-                               CBM_LANG_LUA, "t", "main.lua");
+                               LSM_LANG_LUA, "t", "main.lua");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GT(r->imports.count, 0);
     ASSERT(has_import(r, "dkjson"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2644,12 +2644,12 @@ TEST(import_stress_go) {
         pos += snprintf(src + pos, (size_t)(buf_size - pos), "import \"pkg/%05d\"\n", k);
     }
 
-    CBMFileResult *r = extract(src, CBM_LANG_GO, "t", "stress.go");
+    LSMFileResult *r = extract(src, LSM_LANG_GO, "t", "stress.go");
     free(src);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(r->imports.count, N);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2663,70 +2663,70 @@ TEST(import_stress_go) {
 
 TEST(svelte_imports_basic) {
     /* Default import + named imports + namespace import */
-    CBMFileResult *r = extract("<script>\n"
+    LSMFileResult *r = extract("<script>\n"
                                "import Foo from './Foo.svelte';\n"
                                "import { bar, baz } from '../lib/utils';\n"
                                "import * as helpers from './helpers';\n"
                                "export let value = 42;\n"
                                "</script>\n"
                                "<h1>Hello {value}</h1>\n",
-                               CBM_LANG_SVELTE, "t", "Comp.svelte");
+                               LSM_LANG_SVELTE, "t", "Comp.svelte");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->imports.count, 3);
     ASSERT(has_import(r, "Foo.svelte"));
     ASSERT(has_import(r, "lib/utils"));
     ASSERT(has_import(r, "helpers"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(svelte_imports_no_script) {
     /* .svelte with no <script> block must not crash, 0 imports */
-    CBMFileResult *r = extract("<h1>Static page</h1>\n"
+    LSMFileResult *r = extract("<h1>Static page</h1>\n"
                                "<p>No script here.</p>\n",
-                               CBM_LANG_SVELTE, "t", "Static.svelte");
+                               LSM_LANG_SVELTE, "t", "Static.svelte");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(r->imports.count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(vue_imports_basic) {
     /* Vue SFC: same document→script_element→raw_text AST structure */
-    CBMFileResult *r = extract("<template><div>{{ msg }}</div></template>\n"
+    LSMFileResult *r = extract("<template><div>{{ msg }}</div></template>\n"
                                "<script>\n"
                                "import MyComp from './MyComp.vue';\n"
                                "import { ref } from 'vue';\n"
                                "export default { name: 'App' };\n"
                                "</script>\n",
-                               CBM_LANG_VUE, "t", "App.vue");
+                               LSM_LANG_VUE, "t", "App.vue");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->imports.count, 2);
     ASSERT(has_import(r, "MyComp.vue"));
     ASSERT(has_import(r, "vue"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(html_imports_basic) {
     /* Plain HTML with inline ES module imports — same generic walker. */
-    CBMFileResult *r = extract("<!DOCTYPE html><html><head>\n"
+    LSMFileResult *r = extract("<!DOCTYPE html><html><head>\n"
                                "<script type=\"module\">\n"
                                "import { renderApp } from './app.js';\n"
                                "import * as utils from './utils.js';\n"
                                "renderApp();\n"
                                "</script>\n"
                                "</head><body></body></html>\n",
-                               CBM_LANG_HTML, "t", "index.html");
+                               LSM_LANG_HTML, "t", "index.html");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(r->imports.count, 2);
     ASSERT(has_import(r, "app.js"));
     ASSERT(has_import(r, "utils.js"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -2737,7 +2737,7 @@ TEST(html_imports_basic) {
 /* --- TOML (8 tests) --- */
 
 TEST(toml_basic_table_and_pair) {
-    CBMFileResult *r = extract("[database]\nhost = \"localhost\"\nport = 5432\n", CBM_LANG_TOML,
+    LSMFileResult *r = extract("[database]\nhost = \"localhost\"\nport = 5432\n", LSM_LANG_TOML,
                                "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
@@ -2746,173 +2746,173 @@ TEST(toml_basic_table_and_pair) {
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
     ASSERT(has_def(r, "Variable", "host"));
     ASSERT(has_def(r, "Variable", "port"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_nested_table) {
-    CBMFileResult *r = extract("[server.http]\nport = 8080\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r = extract("[server.http]\nport = 8080\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_table_array_element) {
-    CBMFileResult *r = extract("[[servers]]\nname = \"alpha\"\n[[servers]]\nname = \"beta\"\n",
-                               CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r = extract("[[servers]]\nname = \"alpha\"\n[[servers]]\nname = \"beta\"\n",
+                               LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 2);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_dotted_key) {
-    CBMFileResult *r =
-        extract("database.host = \"localhost\"\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r =
+        extract("database.host = \"localhost\"\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_quoted_key) {
-    CBMFileResult *r = extract("\"unusual-key\" = \"value\"\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r = extract("\"unusual-key\" = \"value\"\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_empty_table) {
-    CBMFileResult *r = extract("[empty]\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r = extract("[empty]\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(count_defs_with_label(r, "Class"), 1);
     ASSERT(has_def(r, "Class", "empty"));
     ASSERT_EQ(count_defs_with_label(r, "Variable"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_comments_only) {
-    CBMFileResult *r =
-        extract("# just a comment\n# another comment\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r =
+        extract("# just a comment\n# another comment\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(count_defs_with_label(r, "Class"), 0);
     ASSERT_EQ(count_defs_with_label(r, "Variable"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(toml_boolean_and_integer_values) {
-    CBMFileResult *r =
-        extract("enabled = true\ncount = 42\nname = \"test\"\n", CBM_LANG_TOML, "t", "config.toml");
+    LSMFileResult *r =
+        extract("enabled = true\ncount = 42\nname = \"test\"\n", LSM_LANG_TOML, "t", "config.toml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 3);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- INI (4 tests) --- */
 
 TEST(ini_basic_section_and_setting) {
-    CBMFileResult *r =
-        extract("[database]\nhost = localhost\nport = 5432\n", CBM_LANG_INI, "t", "config.ini");
+    LSMFileResult *r =
+        extract("[database]\nhost = localhost\nport = 5432\n", LSM_LANG_INI, "t", "config.ini");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 1);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ini_multiple_sections) {
-    CBMFileResult *r = extract("[section1]\nkey1 = val1\n[section2]\nkey2 = val2\n", CBM_LANG_INI,
+    LSMFileResult *r = extract("[section1]\nkey1 = val1\n[section2]\nkey2 = val2\n", LSM_LANG_INI,
                                "t", "config.ini");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 2);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ini_global_keys) {
-    CBMFileResult *r = extract("key1 = value1\nkey2 = value2\n", CBM_LANG_INI, "t", "config.ini");
+    LSMFileResult *r = extract("key1 = value1\nkey2 = value2\n", LSM_LANG_INI, "t", "config.ini");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(count_defs_with_label(r, "Class"), 0);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(ini_comments) {
-    CBMFileResult *r = extract("; comment\n# another comment\n[section]\nkey = val\n", CBM_LANG_INI,
+    LSMFileResult *r = extract("; comment\n# another comment\n[section]\nkey = val\n", LSM_LANG_INI,
                                "t", "config.ini");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 1);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- JSON (5 tests) --- */
 
 TEST(json_basic_pair) {
-    CBMFileResult *r =
-        extract("{\"host\": \"localhost\", \"port\": 5432}", CBM_LANG_JSON, "t", "config.json");
+    LSMFileResult *r =
+        extract("{\"host\": \"localhost\", \"port\": 5432}", LSM_LANG_JSON, "t", "config.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 2);
     ASSERT(has_def(r, "Variable", "host"));
     ASSERT(has_def(r, "Variable", "port"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(json_nested_object) {
-    CBMFileResult *r = extract("{\"database\": {\"host\": \"localhost\", \"port\": 5432}}",
-                               CBM_LANG_JSON, "t", "config.json");
+    LSMFileResult *r = extract("{\"database\": {\"host\": \"localhost\", \"port\": 5432}}",
+                               LSM_LANG_JSON, "t", "config.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 3);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(json_empty_object) {
-    CBMFileResult *r = extract("{}", CBM_LANG_JSON, "t", "config.json");
+    LSMFileResult *r = extract("{}", LSM_LANG_JSON, "t", "config.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(count_defs_with_label(r, "Variable"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(json_boolean_null_values) {
-    CBMFileResult *r = extract("{\"enabled\": true, \"value\": null, \"name\": \"test\"}",
-                               CBM_LANG_JSON, "t", "config.json");
+    LSMFileResult *r = extract("{\"enabled\": true, \"value\": null, \"name\": \"test\"}",
+                               LSM_LANG_JSON, "t", "config.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 3);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(json_package_json_deps) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("{\"name\":\"pkg\",\"dependencies\":{\"express\":\"^4.0\",\"lodash\":\"^4.17\"}}",
-                CBM_LANG_JSON, "t", "package.json");
+                LSM_LANG_JSON, "t", "package.json");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Variable"), 4);
@@ -2920,100 +2920,100 @@ TEST(json_package_json_deps) {
     ASSERT(has_def(r, "Variable", "dependencies"));
     ASSERT(has_def(r, "Variable", "express"));
     ASSERT(has_def(r, "Variable", "lodash"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- XML (4 tests) --- */
 
 TEST(xml_basic_element) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "<?xml version=\"1.0\"?><config><database><host>localhost</host></database></config>",
-        CBM_LANG_XML, "t", "config.xml");
+        LSM_LANG_XML, "t", "config.xml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 3);
     ASSERT(has_def(r, "Class", "config"));
     ASSERT(has_def(r, "Class", "database"));
     ASSERT(has_def(r, "Class", "host"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(xml_self_closing_tag) {
-    CBMFileResult *r =
-        extract("<?xml version=\"1.0\"?><config><feature enabled=\"true\"/></config>", CBM_LANG_XML,
+    LSMFileResult *r =
+        extract("<?xml version=\"1.0\"?><config><feature enabled=\"true\"/></config>", LSM_LANG_XML,
                 "t", "config.xml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(xml_empty_document) {
-    CBMFileResult *r = extract("<?xml version=\"1.0\"?><root/>", CBM_LANG_XML, "t", "config.xml");
+    LSMFileResult *r = extract("<?xml version=\"1.0\"?><root/>", LSM_LANG_XML, "t", "config.xml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(xml_multiple_children) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("<?xml version=\"1.0\"?><servers><server/><server/><server/></servers>",
-                CBM_LANG_XML, "t", "config.xml");
+                LSM_LANG_XML, "t", "config.xml");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Class"), 4); /* servers + 3x server */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* --- Markdown (4 tests) --- */
 
 TEST(markdown_atx_headings) {
-    CBMFileResult *r =
-        extract("# Title\n## Section\n### Subsection\n", CBM_LANG_MARKDOWN, "t", "README.md");
+    LSMFileResult *r =
+        extract("# Title\n## Section\n### Subsection\n", LSM_LANG_MARKDOWN, "t", "README.md");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Section"), 3);
     ASSERT_EQ(count_defs_with_label(r, "Class"), 0); /* Markdown: Section, not Class */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(markdown_setext_headings) {
-    CBMFileResult *r =
-        extract("Title\n=====\nSection\n------\n", CBM_LANG_MARKDOWN, "t", "README.md");
+    LSMFileResult *r =
+        extract("Title\n=====\nSection\n------\n", LSM_LANG_MARKDOWN, "t", "README.md");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Section"), 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(markdown_heading_content) {
-    CBMFileResult *r = extract("# Installation Guide\n## Prerequisites\n## Setup\n",
-                               CBM_LANG_MARKDOWN, "t", "README.md");
+    LSMFileResult *r = extract("# Installation Guide\n## Prerequisites\n## Setup\n",
+                               LSM_LANG_MARKDOWN, "t", "README.md");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_GTE(count_defs_with_label(r, "Section"), 3);
     ASSERT(has_def(r, "Section", "Installation Guide"));
     ASSERT(has_def(r, "Section", "Prerequisites"));
     ASSERT(has_def(r, "Section", "Setup"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(markdown_no_headings) {
-    CBMFileResult *r =
-        extract("Just a paragraph\n\nAnother paragraph\n", CBM_LANG_MARKDOWN, "t", "README.md");
+    LSMFileResult *r =
+        extract("Just a paragraph\n\nAnother paragraph\n", LSM_LANG_MARKDOWN, "t", "README.md");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_EQ(count_defs_with_label(r, "Section"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3026,8 +3026,8 @@ TEST(python_init_module_qn_not_collide_with_folder) {
      * same directory, causing the Folder node to be overwritten when the
      * Module was upserted. The Module QN must contain "__init__" to
      * distinguish it from the Folder QN. */
-    CBMFileResult *r = extract("class Config:\n    DEBUG = True\n\ndef setup():\n    pass\n",
-                               CBM_LANG_PYTHON, "proj", "mypackage/__init__.py");
+    LSMFileResult *r = extract("class Config:\n    DEBUG = True\n\ndef setup():\n    pass\n",
+                               LSM_LANG_PYTHON, "proj", "mypackage/__init__.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -3051,51 +3051,51 @@ TEST(python_init_module_qn_not_collide_with_folder) {
     }
     ASSERT_EQ(found_config, 1);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(python_init_nested_module_qn) {
     /* Deeply nested __init__.py — same collision must not happen */
-    CBMFileResult *r = extract("def greet():\n    return 'hello'\n", CBM_LANG_PYTHON, "proj",
+    LSMFileResult *r = extract("def greet():\n    return 'hello'\n", LSM_LANG_PYTHON, "proj",
                                "docker-images/cloud-runs/bq-sync-api/__init__.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_NOT_NULL(r->module_qn);
     /* Must contain __init__ to not collide with Folder QN */
     ASSERT_NOT_NULL(strstr(r->module_qn, "__init__"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(js_index_module_qn_not_collide_with_folder) {
     /* Same bug for JS/TS index.ts files */
-    CBMFileResult *r = extract("export function App() { return null; }\n", CBM_LANG_TYPESCRIPT,
+    LSMFileResult *r = extract("export function App() { return null; }\n", LSM_LANG_TYPESCRIPT,
                                "proj", "src/components/index.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_NOT_NULL(r->module_qn);
     /* Must contain "index" to not collide with Folder QN */
     ASSERT_NOT_NULL(strstr(r->module_qn, "index"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(python_regular_module_qn_unchanged) {
     /* Non-__init__.py Python files should be unaffected */
-    CBMFileResult *r =
-        extract("def helper():\n    pass\n", CBM_LANG_PYTHON, "proj", "mypackage/utils.py");
+    LSMFileResult *r =
+        extract("def helper():\n    pass\n", LSM_LANG_PYTHON, "proj", "mypackage/utils.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT_NOT_NULL(r->module_qn);
     /* Regular module QN should not contain __init__ or index */
     ASSERT_STR_EQ(r->module_qn, "proj.mypackage.utils");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Find a definition by name; returns the item or NULL. */
-static const CBMDefinition *find_def_by_name(CBMFileResult *r, const char *name) {
+static const LSMDefinition *find_def_by_name(LSMFileResult *r, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
         if (r->defs.items[i].name && strcmp(r->defs.items[i].name, name) == 0) {
             return &r->defs.items[i];
@@ -3104,7 +3104,7 @@ static const CBMDefinition *find_def_by_name(CBMFileResult *r, const char *name)
     return NULL;
 }
 
-static int decorators_contain(const CBMDefinition *d, const char *needle) {
+static int decorators_contain(const LSMDefinition *d, const char *needle) {
     if (!d || !d->decorators) {
         return 0;
     }
@@ -3118,19 +3118,19 @@ static int decorators_contain(const CBMDefinition *d, const char *needle) {
 
 /* Issue #382: Java Method nodes had empty decorators / signature. */
 TEST(extract_java_method_annotations_issue382) {
-    CBMFileResult *r = extract("public class C {\n"
+    LSMFileResult *r = extract("public class C {\n"
                                "  @GetMapping(\"/x\")\n"
                                "  public String cmd(String c) { return c; }\n"
                                "}\n",
-                               CBM_LANG_JAVA, "t", "C.java");
+                               LSM_LANG_JAVA, "t", "C.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *m = find_def_by_name(r, "cmd");
+    const LSMDefinition *m = find_def_by_name(r, "cmd");
     ASSERT_NOT_NULL(m);
     ASSERT(decorators_contain(m, "GetMapping"));
     ASSERT_NOT_NULL(m->signature);
     ASSERT(m->signature[0] != '\0');
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3139,7 +3139,7 @@ TEST(extract_java_method_annotations_issue382) {
  * annotation dropped every method-level @Path, and the class-level @Path
  * prefix was never recognized at all. */
 TEST(extract_java_jaxrs_path_composition_issue1005) {
-    CBMFileResult *r = extract("import jakarta.ws.rs.GET;\n"
+    LSMFileResult *r = extract("import jakarta.ws.rs.GET;\n"
                                "import jakarta.ws.rs.Path;\n"
                                "@Path(\"/api/v1/widgets\")\n"
                                "public class WidgetResource {\n"
@@ -3149,20 +3149,20 @@ TEST(extract_java_jaxrs_path_composition_issue1005) {
                                "  @Path(\"/count\")\n"
                                "  public String count() { return \"\"; }\n"
                                "}\n",
-                               CBM_LANG_JAVA, "t", "WidgetResource.java");
+                               LSM_LANG_JAVA, "t", "WidgetResource.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *list = find_def_by_name(r, "list");
+    const LSMDefinition *list = find_def_by_name(r, "list");
     ASSERT_NOT_NULL(list);
     ASSERT_NOT_NULL(list->route_path);
     ASSERT_STR_EQ(list->route_path, "/api/v1/widgets");
     ASSERT_STR_EQ(list->route_method, "GET");
-    const CBMDefinition *count = find_def_by_name(r, "count");
+    const LSMDefinition *count = find_def_by_name(r, "count");
     ASSERT_NOT_NULL(count);
     ASSERT_NOT_NULL(count->route_path);
     ASSERT_STR_EQ(count->route_path, "/api/v1/widgets/count");
     ASSERT_STR_EQ(count->route_method, "GET");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3171,27 +3171,27 @@ TEST(extract_java_jaxrs_path_composition_issue1005) {
  * at one — a documented route (@Post + @HttpCode above an explanatory comment)
  * silently lost those decorators and disappeared from route/authz queries. */
 TEST(extract_ts_decorators_survive_interleaved_comment) {
-    CBMFileResult *r = extract("class AuthController {\n"
+    LSMFileResult *r = extract("class AuthController {\n"
                                "  @Post('login')\n"
                                "  @HttpCode(HttpStatus.OK)\n"
                                "  // throttled per IP and per account\n"
                                "  @Throttle({ default: { ttl: 900_000, limit: 5 } })\n"
                                "  async login(dto: LoginDto) { return 1; }\n"
                                "}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "auth.controller.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "auth.controller.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *m = find_def_by_name(r, "login");
+    const LSMDefinition *m = find_def_by_name(r, "login");
     ASSERT_NOT_NULL(m);
     ASSERT(decorators_contain(m, "Throttle"));  /* below the comment — always worked */
     ASSERT(decorators_contain(m, "HttpCode"));  /* above the comment — was dropped */
     ASSERT(decorators_contain(m, "Post"));      /* above the comment — was dropped */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Find an in-body call by its raw callee text; returns the call or NULL. */
-static const CBMCall *find_call_by_callee(CBMFileResult *r, const char *callee) {
+static const LSMCall *find_call_by_callee(LSMFileResult *r, const char *callee) {
     for (int i = 0; i < r->calls.count; i++) {
         if (r->calls.items[i].callee_name && strcmp(r->calls.items[i].callee_name, callee) == 0) {
             return &r->calls.items[i];
@@ -3204,16 +3204,16 @@ static const CBMCall *find_call_by_callee(CBMFileResult *r, const char *callee) 
  * to the canonical "{}" placeholder, both as call arguments (HTTP_CALLS) and
  * as URL-shaped string_refs collected from const/return positions. */
 TEST(extract_ts_template_string_url_issue1006) {
-    CBMFileResult *r = extract("export function detailPath(id: string): string {\n"
+    LSMFileResult *r = extract("export function detailPath(id: string): string {\n"
                                "  return `/api/v1/things/${id}/detail`;\n"
                                "}\n"
                                "export function load(id: string) {\n"
                                "  return fetch(`/api/v1/things/${id}`);\n"
                                "}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "paths.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "paths.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMCall *c = find_call_by_callee(r, "fetch");
+    const LSMCall *c = find_call_by_callee(r, "fetch");
     ASSERT_NOT_NULL(c);
     ASSERT_NOT_NULL(c->first_string_arg);
     ASSERT_STR_EQ(c->first_string_arg, "/api/v1/things/{}");
@@ -3226,7 +3226,7 @@ TEST(extract_ts_template_string_url_issue1006) {
         }
     }
     ASSERT(found);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3235,7 +3235,7 @@ TEST(extract_ts_template_string_url_issue1006) {
  * route registration and for an outbound URL built the same way. A real BFF
  * with 47 such registrations produced only 9 Route nodes before this fix. */
 TEST(extract_go_binary_concat_url_issue1249) {
-    CBMFileResult *r = extract("package main\n"
+    LSMFileResult *r = extract("package main\n"
                                "import \"net/http\"\n"
                                "func setup(mux *http.ServeMux, base string) {\n"
                                "    mux.HandleFunc(base+\"/login\", loginHandler)\n"
@@ -3243,21 +3243,21 @@ TEST(extract_go_binary_concat_url_issue1249) {
                                "func report(host string, port string) {\n"
                                "    http.Get(\"http://\" + host + \":\" + port + \"/log\")\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "routes.go");
+                               LSM_LANG_GO, "t", "routes.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
-    const CBMCall *reg = find_call_by_callee(r, "mux.HandleFunc");
+    const LSMCall *reg = find_call_by_callee(r, "mux.HandleFunc");
     ASSERT_NOT_NULL(reg);
     ASSERT_NOT_NULL(reg->first_string_arg);
     ASSERT_STR_EQ(reg->first_string_arg, "/login");
 
-    const CBMCall *out = find_call_by_callee(r, "http.Get");
+    const LSMCall *out = find_call_by_callee(r, "http.Get");
     ASSERT_NOT_NULL(out);
     ASSERT_NOT_NULL(out->first_string_arg);
     ASSERT_STR_EQ(out->first_string_arg, "/log");
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3265,19 +3265,19 @@ TEST(extract_go_binary_concat_url_issue1249) {
  * literal (`base + suffixVar`), there is no literal route to recover. The
  * fix must leave this unresolved rather than fabricate a path. */
 TEST(extract_go_binary_concat_url_no_literal_suffix_issue1249) {
-    CBMFileResult *r = extract("package main\n"
+    LSMFileResult *r = extract("package main\n"
                                "func setup(mux *http.ServeMux, base string, suffix string) {\n"
                                "    mux.HandleFunc(base+suffix, dynHandler)\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "routes.go");
+                               LSM_LANG_GO, "t", "routes.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
-    const CBMCall *reg = find_call_by_callee(r, "mux.HandleFunc");
+    const LSMCall *reg = find_call_by_callee(r, "mux.HandleFunc");
     ASSERT_NOT_NULL(reg);
     ASSERT_NULL(reg->first_string_arg);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3288,13 +3288,13 @@ TEST(extract_go_binary_concat_url_no_literal_suffix_issue1249) {
  * QN the textual calls-enclosing path records for an in-body call (the
  * lsp_resolve join keys on exact caller_qn == enclosing_func_qn equality). */
 TEST(extract_java_no_double_class_qn) {
-    CBMFileResult *r = extract("class Outer {\n"
+    LSMFileResult *r = extract("class Outer {\n"
                                "    int helper(int x) { return x + 2; }\n"
                                "    class Inner {\n"
                                "        int run(int v) { return helper(v); }\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_JAVA, "t", "Outer.java");
+                               LSM_LANG_JAVA, "t", "Outer.java");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -3311,23 +3311,23 @@ TEST(extract_java_no_double_class_qn) {
     }
 
     /* The nested class and its method carry the single-form QN. */
-    const CBMDefinition *outer = find_def_by_name(r, "Outer");
+    const LSMDefinition *outer = find_def_by_name(r, "Outer");
     ASSERT_NOT_NULL(outer);
     ASSERT_STR_EQ(outer->qualified_name, "t.Outer");
 
-    const CBMDefinition *run = find_def_by_name(r, "run");
+    const LSMDefinition *run = find_def_by_name(r, "run");
     ASSERT_NOT_NULL(run);
     ASSERT_STR_EQ(run->qualified_name, "t.Outer.Inner.run");
 
     /* The in-body call to helper() must be attributed to the SAME QN as the
      * method def — this is the equality the LSP cross-resolution join relies on
      * for nested classes (the lsp_outer_dispatch repro). */
-    const CBMCall *call = find_call_by_callee(r, "helper");
+    const LSMCall *call = find_call_by_callee(r, "helper");
     ASSERT_NOT_NULL(call);
     ASSERT_NOT_NULL(call->enclosing_func_qn);
     ASSERT_STR_EQ(call->enclosing_func_qn, run->qualified_name);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3336,10 +3336,10 @@ TEST(extract_java_no_double_class_qn) {
  * belongs to module `proj.myapp.db` and is NOT polluted with the `.conn.`
  * filename segment. */
 TEST(extract_go_no_filename_in_module_qn) {
-    CBMFileResult *r = extract("package db\n\n"
+    LSMFileResult *r = extract("package db\n\n"
                                "type Conn struct{}\n\n"
                                "func (c *Conn) Query() {}\n",
-                               CBM_LANG_GO, "proj", "myapp/db/conn.go");
+                               LSM_LANG_GO, "proj", "myapp/db/conn.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -3348,14 +3348,14 @@ TEST(extract_go_no_filename_in_module_qn) {
     ASSERT_STR_EQ(r->module_qn, "proj.myapp.db");
 
     /* The type and method QNs must not contain the filename segment `.conn.`. */
-    const CBMDefinition *conn = find_def_by_name(r, "Conn");
+    const LSMDefinition *conn = find_def_by_name(r, "Conn");
     ASSERT_NOT_NULL(conn);
     ASSERT_STR_EQ(conn->qualified_name, "proj.myapp.db.Conn");
 
     /* Go method nodes keep a FLAT QN (module + name) with a separate
      * parent_class link to the receiver type — the QN must carry the
      * directory-based module and NOT the `.conn.` filename segment. */
-    const CBMDefinition *query = find_def_by_name(r, "Query");
+    const LSMDefinition *query = find_def_by_name(r, "Query");
     ASSERT_NOT_NULL(query);
     ASSERT_STR_EQ(query->qualified_name, "proj.myapp.db.Query");
     ASSERT_EQ(strstr(query->qualified_name, ".conn."), NULL);
@@ -3363,7 +3363,7 @@ TEST(extract_go_no_filename_in_module_qn) {
     ASSERT_NOT_NULL(query->parent_class);
     ASSERT_STR_EQ(query->parent_class, "proj.myapp.db.Conn");
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3379,12 +3379,12 @@ TEST(extract_large_ts_has_functions_issue213) {
             (size_t)snprintf(src + off, cap - off,
                              "export function fn%d(a: number): number { return a + %d; }\n", i, i);
     }
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)off, CBM_LANG_TYPESCRIPT, "t", "big.ts", 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)off, LSM_LANG_TYPESCRIPT, "t", "big.ts", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int fns = count_defs_with_label(r, "Function");
     ASSERT_GT(fns, 0); /* must not silently produce zero children */
-    cbm_free_result(r);
+    lsm_free_result(r);
     free(src);
     PASS();
 }
@@ -3392,14 +3392,14 @@ TEST(extract_large_ts_has_functions_issue213) {
 /* ═══════════════════════════════════════════════════════════════════
  * Group: per-function complexity metrics (Tier A — local AST metrics)
  *
- * cbm_compute_complexity stamps each Function/Method with cyclomatic,
+ * lsm_compute_complexity stamps each Function/Method with cyclomatic,
  * cognitive, loop_count and loop_depth in the same tree-sitter walk that
  * extracts the definition. loop_depth (max nested-loop depth) is the
  * polynomial-degree proxy used as a queryable bottleneck signal.
  * ═══════════════════════════════════════════════════════════════════ */
 
 /* Return the first definition with the given name, or NULL. */
-static const CBMDefinition *find_def(CBMFileResult *r, const char *name) {
+static const LSMDefinition *find_def(LSMFileResult *r, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].name, name) == 0)
             return &r->defs.items[i];
@@ -3408,7 +3408,7 @@ static const CBMDefinition *find_def(CBMFileResult *r, const char *name) {
 }
 
 TEST(complexity_nested_loops_depth) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func deepLoops() {\n"
                                "    for i := 0; i < 10; i++ {\n"
                                "        for j := 0; j < 10; j++ {\n"
@@ -3418,19 +3418,19 @@ TEST(complexity_nested_loops_depth) {
                                "        }\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "deep.go");
+                               LSM_LANG_GO, "t", "deep.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "deepLoops");
+    const LSMDefinition *d = find_def(r, "deepLoops");
     ASSERT_NOT_NULL(d);
     ASSERT_EQ(d->loop_depth, 3); /* three nested for-loops */
     ASSERT_EQ(d->loop_count, 3);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(complexity_loop_with_branch) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func single() {\n"
                                "    for i := 0; i < 10; i++ {\n"
                                "        if i > 5 {\n"
@@ -3438,10 +3438,10 @@ TEST(complexity_loop_with_branch) {
                                "        }\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "single.go");
+                               LSM_LANG_GO, "t", "single.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "single");
+    const LSMDefinition *d = find_def(r, "single");
     ASSERT_NOT_NULL(d);
     ASSERT_EQ(d->loop_depth, 1);
     ASSERT_EQ(d->loop_count, 1);
@@ -3449,30 +3449,30 @@ TEST(complexity_loop_with_branch) {
      * nesting-weighted cognitive score is non-zero. */
     ASSERT_GT(d->complexity, 1);
     ASSERT_GT(d->cognitive, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(complexity_flat_no_loops) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func flat() {\n"
                                "    doWork()\n"
                                "    doMore()\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "flat.go");
+                               LSM_LANG_GO, "t", "flat.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "flat");
+    const LSMDefinition *d = find_def(r, "flat");
     ASSERT_NOT_NULL(d);
     ASSERT_EQ(d->loop_depth, 0);
     ASSERT_EQ(d->loop_count, 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* A linear-scan call (contains) inside a loop → hidden O(n^2) signal. */
 TEST(complexity_linear_scan_in_loop) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func scanInLoop(xs []int, t int) bool {\n"
                                "    for i := 0; i < len(xs); i++ {\n"
                                "        if contains(xs, t) {\n"
@@ -3481,55 +3481,55 @@ TEST(complexity_linear_scan_in_loop) {
                                "    }\n"
                                "    return false\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "scan.go");
+                               LSM_LANG_GO, "t", "scan.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "scanInLoop");
+    const LSMDefinition *d = find_def(r, "scanInLoop");
     ASSERT_NOT_NULL(d);
     ASSERT_GT(d->linear_scan_in_loop, 0); /* contains() called inside the for-loop */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Self-call inside a loop, not guarded by any conditional → recursion_in_loop
  * and unguarded_recursion both set. */
 TEST(complexity_recursion_in_loop_unguarded) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func recurInLoop(n int) {\n"
                                "    for i := 0; i < n; i++ {\n"
                                "        recurInLoop(n - 1)\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "recur.go");
+                               LSM_LANG_GO, "t", "recur.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "recurInLoop");
+    const LSMDefinition *d = find_def(r, "recurInLoop");
     ASSERT_NOT_NULL(d);
     ASSERT_TRUE(d->is_recursive);
     ASSERT_TRUE(d->recursion_in_loop);
     ASSERT_TRUE(d->unguarded_recursion); /* no self-call inside a conditional */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Self-call inside an `if` (a base-case guard) → recursive but NOT unguarded. */
 TEST(complexity_guarded_recursion) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func guarded(n int) int {\n"
                                "    if n > 0 {\n"
                                "        return guarded(n - 1)\n"
                                "    }\n"
                                "    return 0\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "guarded.go");
+                               LSM_LANG_GO, "t", "guarded.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "guarded");
+    const LSMDefinition *d = find_def(r, "guarded");
     ASSERT_NOT_NULL(d);
     ASSERT_TRUE(d->is_recursive);
     ASSERT_FALSE(d->recursion_in_loop);
     ASSERT_FALSE(d->unguarded_recursion); /* self-call is guarded by `if n > 0` */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3538,34 +3538,34 @@ TEST(complexity_guarded_recursion) {
  * super()-ONLY fixture: no self.save() alongside, so the assertion cannot pass
  * vacuously off a genuine self-call. */
 TEST(complexity_super_only_not_recursive) {
-    CBMFileResult *r = extract("class B(A):\n"
+    LSMFileResult *r = extract("class B(A):\n"
                                "    def save(self):\n"
                                "        super().save()\n",
-                               CBM_LANG_PYTHON, "t", "super_only.py");
+                               LSM_LANG_PYTHON, "t", "super_only.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "save");
+    const LSMDefinition *d = find_def(r, "save");
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* parent-class call, not self-recursion */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* #599: a same-named call on an unrelated receiver (axios.get inside a
  * function also named get) is delegation, not self-recursion. */
 TEST(complexity_same_name_other_receiver_not_recursive) {
-    CBMFileResult *r = extract("function get(url) {\n"
+    LSMFileResult *r = extract("function get(url) {\n"
                                "    return axios.get(url);\n"
                                "}\n",
-                               CBM_LANG_JAVASCRIPT, "t", "axios_get.js");
+                               LSM_LANG_JAVASCRIPT, "t", "axios_get.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "get");
+    const LSMDefinition *d = find_def(r, "get");
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* axios.get targets axios, not this fn */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3573,18 +3573,18 @@ TEST(complexity_same_name_other_receiver_not_recursive) {
  * detector after the receiver-aware narrowing (#599). */
 TEST(complexity_self_receiver_still_recursive) {
     /* Python: self.recur() — same object. */
-    CBMFileResult *r = extract("class C:\n"
+    LSMFileResult *r = extract("class C:\n"
                                "    def recur(self, n):\n"
                                "        if n > 0:\n"
                                "            self.recur(n - 1)\n",
-                               CBM_LANG_PYTHON, "t", "self_recur.py");
+                               LSM_LANG_PYTHON, "t", "self_recur.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "recur");
+    const LSMDefinition *d = find_def(r, "recur");
     ASSERT_NOT_NULL(d);
     ASSERT_TRUE(d->is_recursive);
     ASSERT_FALSE(d->unguarded_recursion); /* guarded by `if n > 0` */
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     /* JS: this.step() — same object. */
     r = extract("class C {\n"
@@ -3592,14 +3592,14 @@ TEST(complexity_self_receiver_still_recursive) {
                 "        if (n > 0) { this.step(n - 1); }\n"
                 "    }\n"
                 "}\n",
-                CBM_LANG_JAVASCRIPT, "t", "this_step.js");
+                LSM_LANG_JAVASCRIPT, "t", "this_step.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     d = find_def(r, "step");
     ASSERT_NOT_NULL(d);
     ASSERT_TRUE(d->is_recursive);
     ASSERT_FALSE(d->unguarded_recursion); /* guarded by `if (n > 0)` */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3607,40 +3607,40 @@ TEST(complexity_self_receiver_still_recursive) {
  * obj, a different object. The whole receiver chain ("self.obj") must be
  * compared, not just its first segment ("self"). */
 TEST(complexity_chained_receiver_not_self) {
-    CBMFileResult *r = extract("class C:\n"
+    LSMFileResult *r = extract("class C:\n"
                                "    def recur(self, n):\n"
                                "        self.obj.recur(n)\n",
-                               CBM_LANG_PYTHON, "t", "chained_recur.py");
+                               LSM_LANG_PYTHON, "t", "chained_recur.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "recur");
+    const LSMDefinition *d = find_def(r, "recur");
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* self.obj is not self */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* #599: Go method receiver — the enclosing def's own receiver identifier
  * (`s` in `func (s *Store) save()`) is whitelisted dynamically from
- * CBMDefinition.receiver, so s.save() still counts as self-recursion while
+ * LSMDefinition.receiver, so s.save() still counts as self-recursion while
  * s.backup.save() (a field's same-named method) does not. */
 TEST(complexity_go_method_receiver_self_recursion) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "type Store struct{}\n"
                                "func (s *Store) save(n int) {\n"
                                "    if n > 0 {\n"
                                "        s.save(n - 1)\n"
                                "    }\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "store.go");
+                               LSM_LANG_GO, "t", "store.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "save");
+    const LSMDefinition *d = find_def(r, "save");
     ASSERT_NOT_NULL(d);
     ASSERT_TRUE(d->is_recursive);         /* s.save() == receiver s → self */
     ASSERT_FALSE(d->unguarded_recursion); /* guarded by `if n > 0` */
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     /* Same-named method on a field of the receiver: NOT self-recursion. */
     r = extract("package p\n"
@@ -3648,14 +3648,14 @@ TEST(complexity_go_method_receiver_self_recursion) {
                 "func (s *Store) save(n int) {\n"
                 "    s.backup.save(n)\n"
                 "}\n",
-                CBM_LANG_GO, "t", "store_backup.go");
+                LSM_LANG_GO, "t", "store_backup.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     d = find_def(r, "save");
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* s.backup is not s */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3668,20 +3668,20 @@ TEST(complexity_go_method_receiver_self_recursion) {
 TEST(complexity_delegation_receivers_not_recursive_issue876) {
     /* Store wrapper: _get_store().get() inside get — receiver is the call
      * result, a different object. */
-    CBMFileResult *r = extract("def _get_store():\n"
+    LSMFileResult *r = extract("def _get_store():\n"
                                "    return object()\n"
                                "\n"
                                "def get(collection, record_id):\n"
                                "    rec = _get_store().get(collection, record_id)\n"
                                "    return rec\n",
-                               CBM_LANG_PYTHON, "t", "soil.py");
+                               LSM_LANG_PYTHON, "t", "soil.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "get");
+    const LSMDefinition *d = find_def(r, "get");
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* _get_store() result is not this fn */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     /* Module-singleton delegation: _default.check() inside check. */
     r = extract("class _Checker:\n"
@@ -3692,7 +3692,7 @@ TEST(complexity_delegation_receivers_not_recursive_issue876) {
                 "\n"
                 "def check(app_id, tool_name):\n"
                 "    return _default.check(app_id, tool_name)\n",
-                CBM_LANG_PYTHON, "t", "gleipnir.py");
+                LSM_LANG_PYTHON, "t", "gleipnir.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* The module-level wrapper (not the method) must stay clean. */
@@ -3706,7 +3706,7 @@ TEST(complexity_delegation_receivers_not_recursive_issue876) {
     ASSERT_NOT_NULL(d);
     ASSERT_FALSE(d->is_recursive); /* _default is not this fn */
     ASSERT_FALSE(d->unguarded_recursion);
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     /* Same-named method on a local, called inside a loop (willow.nuke case):
      * neither recursive nor recursion_in_loop. */
@@ -3715,7 +3715,7 @@ TEST(complexity_delegation_receivers_not_recursive_issue876) {
                 "        cur = conn.cursor()\n"
                 "        cur.execute(\"DELETE FROM t WHERE p = %s\", (p,))\n"
                 "    return True\n",
-                CBM_LANG_PYTHON, "t", "nuke.py");
+                LSM_LANG_PYTHON, "t", "nuke.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     d = find_def(r, "execute");
@@ -3723,24 +3723,24 @@ TEST(complexity_delegation_receivers_not_recursive_issue876) {
     ASSERT_FALSE(d->is_recursive); /* cur is not this fn */
     ASSERT_FALSE(d->unguarded_recursion);
     ASSERT_FALSE(d->recursion_in_loop);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Deep chained member access + parameter count structure smells. */
 TEST(complexity_access_depth_and_params) {
-    CBMFileResult *r = extract("package p\n"
+    LSMFileResult *r = extract("package p\n"
                                "func deepAccess(x Foo, a int, b int, c int) int {\n"
                                "    return x.alpha.beta.gamma.delta\n"
                                "}\n",
-                               CBM_LANG_GO, "t", "access.go");
+                               LSM_LANG_GO, "t", "access.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
-    const CBMDefinition *d = find_def(r, "deepAccess");
+    const LSMDefinition *d = find_def(r, "deepAccess");
     ASSERT_NOT_NULL(d);
     ASSERT_GT(d->max_access_depth, 2); /* x.alpha.beta.gamma.delta */
     ASSERT_GTE(d->param_count, 3);     /* x, a, b, c (grouping may vary) */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3749,7 +3749,7 @@ TEST(complexity_access_depth_and_params) {
  * ═══════════════════════════════════════════════════════════════════ */
 
 /* Count calls whose callee_name is exactly `name` (has_call is substring). */
-static int count_calls_exact(CBMFileResult *r, const char *name) {
+static int count_calls_exact(LSMFileResult *r, const char *name) {
     int n = 0;
     for (int i = 0; i < r->calls.count; i++) {
         if (r->calls.items[i].callee_name && strcmp(r->calls.items[i].callee_name, name) == 0)
@@ -3760,14 +3760,14 @@ static int count_calls_exact(CBMFileResult *r, const char *name) {
 
 /* (b) A dotted config string must never be extracted as a callee. */
 TEST(extract_perl_config_string_not_a_callee) {
-    CBMFileResult *r = extract("package C;\n"
+    LSMFileResult *r = extract("package C;\n"
                                "sub run {\n"
                                "  my $cfg = { \"log4perl.appender.File.utf8\" => 1 };\n"
                                "  helper();\n"
                                "}\n"
                                "sub helper { return 1; }\n"
                                "1;\n",
-                               CBM_LANG_PERL, "t", "app.pl");
+                               LSM_LANG_PERL, "t", "app.pl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* No callee may contain a '.' (config/string tokens are rejected). */
@@ -3776,7 +3776,7 @@ TEST(extract_perl_config_string_not_a_callee) {
     }
     /* (d) The genuine intra-file function call is still extracted. */
     ASSERT_TRUE(count_calls_exact(r, "helper") >= 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3784,14 +3784,14 @@ TEST(extract_perl_config_string_not_a_callee) {
  *     the resulting CALLS edge happens in the resolver (see test_registry.c /
  *     end-to-end); extraction itself keeps the bare builtin token. */
 TEST(extract_perl_builtin_call_is_function_not_method) {
-    CBMFileResult *r = extract("package B;\n"
+    LSMFileResult *r = extract("package B;\n"
                                "sub run {\n"
                                "  my @x;\n"
                                "  push @x, 1;\n"
                                "  keys %h;\n"
                                "}\n"
                                "1;\n",
-                               CBM_LANG_PERL, "t", "b.pl");
+                               LSM_LANG_PERL, "t", "b.pl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* push / keys are extracted (they are valid identifiers) ... */
@@ -3800,14 +3800,14 @@ TEST(extract_perl_builtin_call_is_function_not_method) {
     for (int i = 0; i < r->calls.count; i++) {
         ASSERT_FALSE(r->calls.items[i].is_method);
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* (c) An arrow/method call is extracted with is_method=true so the resolver
  *     can suppress generic short-name matching for it. */
 TEST(extract_perl_method_call_flags_is_method) {
-    CBMFileResult *r = extract("package M;\n"
+    LSMFileResult *r = extract("package M;\n"
                                "sub run {\n"
                                "  my $self = shift;\n"
                                "  $self->commit();\n"
@@ -3816,7 +3816,7 @@ TEST(extract_perl_method_call_flags_is_method) {
                                "}\n"
                                "sub helper { return 1; }\n"
                                "1;\n",
-                               CBM_LANG_PERL, "t", "m.pl");
+                               LSM_LANG_PERL, "t", "m.pl");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Every "commit" call is a method call (is_method set). */
@@ -3834,22 +3834,22 @@ TEST(extract_perl_method_call_flags_is_method) {
     ASSERT_TRUE(commit_calls >= 1);
     /* (d) genuine intra-file function call still extracted. */
     ASSERT_TRUE(count_calls_exact(r, "helper") >= 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* Languages OUTSIDE the is_method flag set (only Perl and TS/JS/TSX set it) must
  * be unaffected: a Go method call never sets is_method. */
 TEST(extract_flag_exempt_method_call_not_flagged_is_method) {
-    CBMFileResult *r = extract("package m\n"
+    LSMFileResult *r = extract("package m\n"
                                "func run(o Obj) { o.Commit(); helper() }\n",
-                               CBM_LANG_GO, "t", "x.go");
+                               LSM_LANG_GO, "t", "x.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     for (int i = 0; i < r->calls.count; i++) {
         ASSERT_FALSE(r->calls.items[i].is_method);
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3858,11 +3858,11 @@ TEST(extract_flag_exempt_method_call_not_flagged_is_method) {
  * the resolver can suppress a weak short-name match (`re.test()` must not bind a
  * project `test`); a bare call is not flagged. */
 TEST(extract_ts_member_call_flags_is_method) {
-    CBMFileResult *r = extract("const re = /^a+$/;\n"
+    LSMFileResult *r = extract("const re = /^a+$/;\n"
                                "export function checkFormat(s: string) { return re.test(s); }\n"
                                "function helper() { return 1; }\n"
                                "export function run() { return helper(); }\n",
-                               CBM_LANG_TYPESCRIPT, "t", "a.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "a.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int member = 0;
@@ -3880,7 +3880,7 @@ TEST(extract_ts_member_call_flags_is_method) {
     }
     ASSERT_TRUE(member >= 1); /* re.test() flagged */
     ASSERT_TRUE(bare >= 1);   /* helper() not flagged */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3888,11 +3888,11 @@ TEST(extract_ts_member_call_flags_is_method) {
  * namespace-proximity match is usually correct — so they are NOT flagged. A
  * new_expression has no member receiver and is never flagged either. */
 TEST(extract_ts_this_super_receiver_not_flagged) {
-    CBMFileResult *r = extract("class A extends B {\n"
+    LSMFileResult *r = extract("class A extends B {\n"
                                "  m() { this.helper(); super.render(); return new A(); }\n"
                                "  helper() {}\n"
                                "}\n",
-                               CBM_LANG_TYPESCRIPT, "t", "b.ts");
+                               LSM_LANG_TYPESCRIPT, "t", "b.ts");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     /* Every call here has a self receiver (this/super) or is a new-expression,
@@ -3903,15 +3903,15 @@ TEST(extract_ts_this_super_receiver_not_flagged) {
     /* Sanity: the this/super member calls were actually extracted. */
     ASSERT_TRUE(has_call(r, "helper")); /* this.helper */
     ASSERT_TRUE(has_call(r, "render")); /* super.render */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* JS dialect behaves like TS (the flag is gated on the language set, not the
  * dialect). Replaces the pre-#592 test that asserted JS never flags is_method. */
 TEST(extract_js_member_call_flags_is_method) {
-    CBMFileResult *r =
-        extract("function run(o){ o.commit(); helper(); }\n", CBM_LANG_JAVASCRIPT, "t", "x.js");
+    LSMFileResult *r =
+        extract("function run(o){ o.commit(); helper(); }\n", LSM_LANG_JAVASCRIPT, "t", "x.js");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int member = 0;
@@ -3929,7 +3929,7 @@ TEST(extract_js_member_call_flags_is_method) {
     }
     ASSERT_TRUE(member >= 1); /* o.commit() flagged */
     ASSERT_TRUE(bare >= 1);   /* helper() not flagged */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -3937,11 +3937,11 @@ TEST(extract_js_member_call_flags_is_method) {
  * branches (one open brace per branch, a single shared close) parses with
  * an ERROR region on the raw source — both branches are present at once —
  * and the defs walk silently dropped the function while its callers stayed
- * (cbm_path_within_root, handle_process_kill). The preprocessed second
+ * (lsm_path_within_root, handle_process_kill). The preprocessed second
  * pass (simplecpp picks one branch, same-file token lines stay aligned)
  * must recover the definition with its original line. */
 TEST(extract_c_ifdef_split_brace_fn_recovered_issue961) {
-    CBMFileResult *r = extract("static int a(void) { return 1; }\n"
+    LSMFileResult *r = extract("static int a(void) { return 1; }\n"
                                "static int b(void) { return 2; }\n"
                                "int split_brace_fn(int x) {\n"
                                "#ifdef _WIN32\n"
@@ -3954,9 +3954,9 @@ TEST(extract_c_ifdef_split_brace_fn_recovered_issue961) {
                                "    return x;\n"
                                "}\n"
                                "int after_fn(int x) { return x; }\n",
-                               CBM_LANG_C, "t", "split.c");
+                               LSM_LANG_C, "t", "split.c");
     ASSERT_NOT_NULL(r);
-    const CBMDefinition *d = find_def(r, "split_brace_fn");
+    const LSMDefinition *d = find_def(r, "split_brace_fn");
     if (!d) {
         fprintf(stderr, "  [961] FAIL split_brace_fn dropped (defs walk lost the "
                         "#ifdef-split function)\n");
@@ -3966,7 +3966,7 @@ TEST(extract_c_ifdef_split_brace_fn_recovered_issue961) {
     /* Error recovery must stay localized: neighbours extract either way. */
     ASSERT_NOT_NULL(find_def(r, "a"));
     ASSERT_NOT_NULL(find_def(r, "after_fn"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4009,13 +4009,13 @@ static const char *CPP_PREPROC_SIGNATURE_GAP_SRC =
 TEST(extract_cpp_preproc_signature_gap_issue946) {
     const char *defines[] = {"FLYME_GRAPHICS_EXTEND_LUMARGB", NULL};
     for (int enabled = 0; enabled < 2; enabled++) {
-        CBMFileResult *r = cbm_extract_file(
-            CPP_PREPROC_SIGNATURE_GAP_SRC, (int)strlen(CPP_PREPROC_SIGNATURE_GAP_SRC), CBM_LANG_CPP,
+        LSMFileResult *r = lsm_extract_file(
+            CPP_PREPROC_SIGNATURE_GAP_SRC, (int)strlen(CPP_PREPROC_SIGNATURE_GAP_SRC), LSM_LANG_CPP,
             "t", "SurfaceFlinger.cpp", 0, enabled ? defines : NULL, NULL);
         ASSERT_NOT_NULL(r);
-        const CBMDefinition *add = find_def(r, "addRegionSamplingListener");
-        const CBMDefinition *commit = find_def(r, "commit");
-        const CBMDefinition *composite = find_def(r, "composite");
+        const LSMDefinition *add = find_def(r, "addRegionSamplingListener");
+        const LSMDefinition *commit = find_def(r, "commit");
+        const LSMDefinition *composite = find_def(r, "composite");
         ASSERT_NOT_NULL(add);
         ASSERT_NOT_NULL(commit);
         ASSERT_NOT_NULL(composite);
@@ -4025,7 +4025,7 @@ TEST(extract_cpp_preproc_signature_gap_issue946) {
         ASSERT_EQ(commit->end_line, 29u);
         ASSERT_EQ(composite->start_line, 31u);
         ASSERT_EQ(composite->end_line, 31u);
-        cbm_free_result(r);
+        lsm_free_result(r);
     }
     PASS();
 }
@@ -4039,15 +4039,15 @@ TEST(extract_cpp_preproc_macro_generated_callable_skipped_issue949) {
                       "#endif\n"
                       "int visible() { return 0; }\n";
     const char *defines[] = {"ENABLE_GENERATED", NULL};
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)strlen(src), CBM_LANG_CPP, "t", "macro.cpp", 0, defines, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)strlen(src), LSM_LANG_CPP, "t", "macro.cpp", 0, defines, NULL);
     ASSERT_NOT_NULL(r);
     ASSERT_NULL(find_def(r, "generated"));
     ASSERT_NOT_NULL(find_def(r, "visible"));
     ASSERT_TRUE(r->parse_incomplete);
     ASSERT_GTE(r->error_region_count, 1);
     ASSERT_NOT_NULL(r->error_ranges);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4057,12 +4057,12 @@ TEST(extract_cpp_preproc_macro_generated_callable_skipped_issue949) {
  * coordinates while keeping header definitions out of the main file. */
 TEST(extract_c_ifdef_split_brace_after_include_remapped_issue949) {
     char tmpdir[512];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/cbm_line_map_XXXXXX", cbm_tmpdir());
-    ASSERT_NOT_NULL(cbm_mkdtemp(tmpdir));
+    snprintf(tmpdir, sizeof(tmpdir), "%s/lsm_line_map_XXXXXX", lsm_tmpdir());
+    ASSERT_NOT_NULL(lsm_mkdtemp(tmpdir));
 
     char header_path[512];
     snprintf(header_path, sizeof(header_path), "%s/padding.h", tmpdir);
-    FILE *header = cbm_fopen(header_path, "wb");
+    FILE *header = lsm_fopen(header_path, "wb");
     ASSERT_NOT_NULL(header);
     for (int i = 0; i < 40; i++) {
         ASSERT_GTE(fprintf(header, "static int header_pad_%d(void) { return %d; }\n", i, i), 0);
@@ -4083,13 +4083,13 @@ TEST(extract_c_ifdef_split_brace_after_include_remapped_issue949) {
                       "    return x;\n"
                       "}\n"
                       "int after(void) { return 2; }\n";
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)strlen(src), CBM_LANG_C, "t", "shifted.c", 0, NULL, includes);
-    cbm_unlink(header_path);
-    cbm_rmdir(tmpdir);
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)strlen(src), LSM_LANG_C, "t", "shifted.c", 0, NULL, includes);
+    lsm_unlink(header_path);
+    lsm_rmdir(tmpdir);
 
     ASSERT_NOT_NULL(r);
-    const CBMDefinition *d = find_def(r, "shifted_split");
+    const LSMDefinition *d = find_def(r, "shifted_split");
     ASSERT_NOT_NULL(d);
     ASSERT_EQ(d->start_line, 3u);
     ASSERT_EQ(d->end_line, 12u);
@@ -4098,20 +4098,20 @@ TEST(extract_c_ifdef_split_brace_after_include_remapped_issue949) {
     ASSERT_FALSE(r->parse_incomplete);
     ASSERT_EQ(r->error_region_count, 0);
     ASSERT_NULL(r->error_ranges);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 /* #961 inverse guard: a clean C file must not gain duplicate or phantom
  * defs from the recovery path (it only engages on raw-parse ERROR regions). */
 TEST(extract_c_clean_file_no_recovery_duplicates_issue961) {
-    CBMFileResult *r = extract("#ifdef _WIN32\n"
+    LSMFileResult *r = extract("#ifdef _WIN32\n"
                                "static int w(void) { return 1; }\n"
                                "#else\n"
                                "static int u(void) { return 2; }\n"
                                "#endif\n"
                                "int use(int x) { return x; }\n",
-                               CBM_LANG_C, "t", "clean.c");
+                               LSM_LANG_C, "t", "clean.c");
     ASSERT_NOT_NULL(r);
     int use_count = 0;
     for (int i = 0; i < r->defs.count; i++) {
@@ -4119,7 +4119,7 @@ TEST(extract_c_clean_file_no_recovery_duplicates_issue961) {
             use_count++;
     }
     ASSERT_EQ(use_count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4140,12 +4140,12 @@ TEST(walk_defs_no_truncation_over_4096_issue668) {
     for (int i = 0; i < N; i++) {
         off += (size_t)snprintf(src + off, cap - off, "def f%d(): pass\n", i);
     }
-    CBMFileResult *r = extract(src, CBM_LANG_PYTHON, "t", "big.py");
+    LSMFileResult *r = extract(src, LSM_LANG_PYTHON, "t", "big.py");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int nfuncs = count_defs_with_label(r, "Function");
     ASSERT(nfuncs >= N); /* all N present — not truncated at the old 4096 cap */
-    cbm_free_result(r);
+    lsm_free_result(r);
     free(src);
     PASS();
 }
@@ -4156,17 +4156,17 @@ TEST(walk_defs_no_truncation_over_4096_issue668) {
 
 /* Rust: inline #[test]/#[tokio::test] functions must be marked is_test so the
  * store.c `is_test != 1` filter excludes them from graph context. Detection is
- * otherwise file-path-based (cbm_is_test_file), so test fns in a regular .rs
+ * otherwise file-path-based (lsm_is_test_file), so test fns in a regular .rs
  * file leak. (#855) */
 TEST(extract_rust_test_attr_marks_is_test_issue855) {
-    CBMFileResult *r = extract("pub fn real_fn() {}\n"
+    LSMFileResult *r = extract("pub fn real_fn() {}\n"
                                "\n"
                                "#[test]\n"
                                "fn sync_test() {}\n"
                                "\n"
                                "#[tokio::test]\n"
                                "async fn async_test() {}\n",
-                               CBM_LANG_RUST, "t", "src/lib.rs");
+                               LSM_LANG_RUST, "t", "src/lib.rs");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -4189,7 +4189,7 @@ TEST(extract_rust_test_attr_marks_is_test_issue855) {
     ASSERT(sync == 1 && "#[test] fn is_test");
     ASSERT(asyn == 1 && "#[tokio::test] fn is_test");
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4204,7 +4204,7 @@ TEST(extract_c_test_dir_marks_is_test_issue1294) {
 
     /* Regression: a test_*-named file directly under tests/ must remain a
      * test (this already worked before the fix). */
-    CBMFileResult *r1 = extract(src, CBM_LANG_C, "t", "tests/test_pipeline.c");
+    LSMFileResult *r1 = extract(src, LSM_LANG_C, "t", "tests/test_pipeline.c");
     ASSERT_NOT_NULL(r1);
     ASSERT_FALSE(r1->has_error);
     ASSERT(has_def(r1, "Function", "helper"));
@@ -4216,11 +4216,11 @@ TEST(extract_c_test_dir_marks_is_test_issue1294) {
         }
     }
     ASSERT(reg == 1 && "test_*.c directly under tests/ is a test (regression)");
-    cbm_free_result(r1);
+    lsm_free_result(r1);
 
     /* Positive: a file under tests/ that matches none of the test_/_test
      * naming conventions must now ALSO be a test. */
-    CBMFileResult *r2 = extract(src, CBM_LANG_C, "t", "tests/helpers/fixtures.c");
+    LSMFileResult *r2 = extract(src, LSM_LANG_C, "t", "tests/helpers/fixtures.c");
     ASSERT_NOT_NULL(r2);
     ASSERT_FALSE(r2->has_error);
     ASSERT(has_def(r2, "Function", "helper"));
@@ -4232,12 +4232,12 @@ TEST(extract_c_test_dir_marks_is_test_issue1294) {
         }
     }
     ASSERT(nonconv == 1 && "non-test_-named file under tests/ is now a test");
-    cbm_free_result(r2);
+    lsm_free_result(r2);
 
     /* Negative: a file with no test/ directory or test_/_test naming in its
      * path must never be flagged — this fix must not widen detection beyond
      * the tests/ (and sibling) directory tree. */
-    CBMFileResult *r3 = extract(src, CBM_LANG_C, "t", "src/pipeline/helper.c");
+    LSMFileResult *r3 = extract(src, LSM_LANG_C, "t", "src/pipeline/helper.c");
     ASSERT_NOT_NULL(r3);
     ASSERT_FALSE(r3->has_error);
     ASSERT(has_def(r3, "Function", "helper"));
@@ -4249,7 +4249,7 @@ TEST(extract_c_test_dir_marks_is_test_issue1294) {
         }
     }
     ASSERT(outside == 0 && "file outside tests/ is never a test");
-    cbm_free_result(r3);
+    lsm_free_result(r3);
 
     PASS();
 }
@@ -4267,7 +4267,7 @@ TEST(extract_python_method_test_dir_marks_is_test_issue1294) {
     /* Python's LSP layer injects synthetic builtin stub Methods (str.upper,
      * dict.get, ...) into defs.items alongside real ones (py_builtins.c), so
      * matching must key on name, not just label="Method". */
-    CBMFileResult *r1 = extract(src, CBM_LANG_PYTHON, "t", "tests/helpers/base.py");
+    LSMFileResult *r1 = extract(src, LSM_LANG_PYTHON, "t", "tests/helpers/base.py");
     ASSERT_NOT_NULL(r1);
     ASSERT_FALSE(r1->has_error);
     ASSERT(has_def(r1, "Method", "helper"));
@@ -4279,9 +4279,9 @@ TEST(extract_python_method_test_dir_marks_is_test_issue1294) {
         }
     }
     ASSERT(in_tests == 1 && "method on a class under tests/helpers/ is a test");
-    cbm_free_result(r1);
+    lsm_free_result(r1);
 
-    CBMFileResult *r2 = extract(src, CBM_LANG_PYTHON, "t", "app/models/base.py");
+    LSMFileResult *r2 = extract(src, LSM_LANG_PYTHON, "t", "app/models/base.py");
     ASSERT_NOT_NULL(r2);
     ASSERT_FALSE(r2->has_error);
     ASSERT(has_def(r2, "Method", "helper"));
@@ -4293,7 +4293,7 @@ TEST(extract_python_method_test_dir_marks_is_test_issue1294) {
         }
     }
     ASSERT(outside_tests == 0 && "method on a class outside tests/ is never a test");
-    cbm_free_result(r2);
+    lsm_free_result(r2);
 
     PASS();
 }
@@ -4330,7 +4330,7 @@ TEST(docstring_utf8_truncation_boundary_issue1017) {
     char src[800];
     snprintf(src, sizeof(src), "package main\n\n%s\nfunc Compute() {}\n", comment);
 
-    CBMFileResult *r = extract(src, CBM_LANG_GO, "test", "main.go");
+    LSMFileResult *r = extract(src, LSM_LANG_GO, "test", "main.go");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Compute"));
@@ -4369,7 +4369,7 @@ TEST(docstring_utf8_truncation_boundary_issue1017) {
         i += (size_t)seq_len;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4414,16 +4414,16 @@ static long extract_wide_flat_ms(int n, int *out_defs) {
     }
     struct timespec a;
     struct timespec b;
-    cbm_clock_gettime(CLOCK_MONOTONIC, &a);
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)off, CBM_LANG_JAVASCRIPT, "proj", "wide.js", 0, NULL, NULL);
-    cbm_clock_gettime(CLOCK_MONOTONIC, &b);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &a);
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)off, LSM_LANG_JAVASCRIPT, "proj", "wide.js", 0, NULL, NULL);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &b);
     free(src);
     if (!r) {
         return -1;
     }
     *out_defs = r->defs.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     return (b.tv_sec - a.tv_sec) * 1000L + (b.tv_nsec - a.tv_nsec) / 1000000L;
 }
 
@@ -4498,7 +4498,7 @@ TEST(extract_wide_flat_file_is_linear) {
     PASS();
 }
 
-#if defined(CBM_CALL_REFERENCE_LOOKUP_TEST_API) && CBM_CALL_REFERENCE_LOOKUP_TEST_API
+#if defined(LSM_CALL_REFERENCE_LOOKUP_TEST_API) && LSM_CALL_REFERENCE_LOOKUP_TEST_API
 /* A flat block of value-reference statements exercises occurrence-role
  * classification for every identifier. The old parent/child field lookup
  * restarts at the block's first child for each statement, so 8x more source
@@ -4525,8 +4525,8 @@ static uint64_t extract_wide_reference_field_work(int statement_count, int *out_
     memcpy(source + offset, suffix, sizeof(suffix));
     offset += sizeof(suffix) - 1U;
 
-    cbm_usage_field_lookup_test_reset();
-    CBMFileResult *result = cbm_extract_file(source, (int)offset, CBM_LANG_JAVASCRIPT, "proj",
+    lsm_usage_field_lookup_test_reset();
+    LSMFileResult *result = lsm_extract_file(source, (int)offset, LSM_LANG_JAVASCRIPT, "proj",
                                              "wide-references.js", 0, NULL, NULL);
     free(source);
     if (!result) {
@@ -4539,9 +4539,9 @@ static uint64_t extract_wide_reference_field_work(int statement_count, int *out_
             usages++;
         }
     }
-    uint64_t work = cbm_usage_field_lookup_test_work();
-    *out_slow_parent_fallbacks = cbm_usage_slow_parent_fallback_test_count();
-    cbm_free_result(result);
+    uint64_t work = lsm_usage_field_lookup_test_work();
+    *out_slow_parent_fallbacks = lsm_usage_slow_parent_fallback_test_count();
+    lsm_free_result(result);
     *out_usages = usages;
     return work;
 }
@@ -4584,14 +4584,14 @@ TEST(extract_wide_flat_reference_fields_are_linear) {
  * =================================================================== */
 
 TEST(objectscript_udl_method_return_type) {
-    CBMFileResult *r = extract("Class MyApp.Factory Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Factory Extends %RegisteredObject\n"
                                "{\n"
                                "Method GetAdapter() As EnsLib.SQL.OutboundAdapter\n"
                                "{\n"
                                "    Quit ##class(EnsLib.SQL.OutboundAdapter).%New()\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Factory.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Factory.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     bool found_rt = false;
@@ -4603,19 +4603,19 @@ TEST(objectscript_udl_method_return_type) {
         }
     }
     ASSERT(found_rt);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_scalar_return_type_not_resolved) {
-    CBMFileResult *r = extract("Class MyApp.Counter Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Counter Extends %RegisteredObject\n"
                                "{\n"
                                "Method GetName() As %String\n"
                                "{\n"
                                "    Quit \"hello\"\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Counter.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Counter.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     for (int i = 0; i < r->defs.count; i++) {
@@ -4624,7 +4624,7 @@ TEST(objectscript_udl_scalar_return_type_not_resolved) {
             ASSERT(strstr(r->defs.items[i].return_type, "%String") != NULL);
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -4633,17 +4633,17 @@ TEST(objectscript_udl_scalar_return_type_not_resolved) {
  * =================================================================== */
 
 TEST(objectscript_udl_class) {
-    CBMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n{\n}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
+    LSMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n{\n}\n",
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "MyApp.Patient"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_methods_after_goto_label) {
-    CBMFileResult *r = extract("Class Graph.KG.Test Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class Graph.KG.Test Extends %RegisteredObject\n"
                                "{\n"
                                "ClassMethod First() As %String\n"
                                "{\n"
@@ -4660,19 +4660,19 @@ TEST(objectscript_udl_methods_after_goto_label) {
                                "    Quit \"z\"\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Test.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Test.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "Graph.KG.Test"));
     ASSERT(has_def(r, "Method", "First"));
     ASSERT(has_def(r, "Method", "Second"));
     ASSERT(has_def(r, "Method", "Third"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_methods) {
-    CBMFileResult *r = extract("Class MyApp.Utils Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Utils Extends %RegisteredObject\n"
                                "{\n"
                                "ClassMethod Format(pVal As %String) As %String\n"
                                "{\n"
@@ -4683,21 +4683,21 @@ TEST(objectscript_udl_methods) {
                                "    Quit ..%Save()\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Utils.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Utils.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "MyApp.Utils"));
     ASSERT(has_def(r, "Method", "Format"));
     ASSERT(has_def(r, "Method", "Save"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_base_classes) {
-    CBMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
                                "{\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "MyApp.Patient"));
@@ -4711,15 +4711,15 @@ TEST(objectscript_udl_base_classes) {
         }
     }
     ASSERT_TRUE(found);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_multiple_bases) {
-    CBMFileResult *r = extract("Class MyApp.Dual Extends (MyApp.Base, %RegisteredObject)\n"
+    LSMFileResult *r = extract("Class MyApp.Dual Extends (MyApp.Base, %RegisteredObject)\n"
                                "{\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Dual.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Dual.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     int found = 0;
@@ -4732,28 +4732,28 @@ TEST(objectscript_udl_multiple_bases) {
         }
     }
     ASSERT_TRUE(found);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_properties) {
-    CBMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
                                "{\n"
                                "Property Name As %String;\n"
                                "Property DOB As %Date;\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "MyApp.Patient"));
     ASSERT(has_def(r, "Variable", "Name"));
     ASSERT(has_def(r, "Variable", "DOB"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_routine_tags) {
-    CBMFileResult *r = extract("UTILS\n"
+    LSMFileResult *r = extract("UTILS\n"
                                "    Quit\n"
                                "\n"
                                "Format(value,fmt)\n"
@@ -4763,78 +4763,78 @@ TEST(objectscript_routine_tags) {
                                "Log(msg)\n"
                                "    Write msg,!\n"
                                "    Quit\n",
-                               CBM_LANG_OBJECTSCRIPT_ROUTINE, "t", "Utils.mac");
+                               LSM_LANG_OBJECTSCRIPT_ROUTINE, "t", "Utils.mac");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Function", "Format"));
     ASSERT(has_def(r, "Function", "Log"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_query_member) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("Class MyApp.Repo Extends %Persistent\n"
                 "{\n"
                 "Query FindAll(name As %String) As %SQLQuery { SELECT * FROM MyApp_Repo }\n"
                 "}\n",
-                CBM_LANG_OBJECTSCRIPT_UDL, "t", "Repo.cls");
+                LSM_LANG_OBJECTSCRIPT_UDL, "t", "Repo.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Class", "MyApp.Repo"));
     ASSERT(has_def(r, "Method", "FindAll"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_index_member) {
-    CBMFileResult *r = extract("Class MyApp.Repo Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Repo Extends %Persistent\n"
                                "{\n"
                                "Property Name As %String;\n"
                                "Index NameIdx On Name;\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Repo.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Repo.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Index", "NameIdx"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_xdata_member) {
-    CBMFileResult *r = extract("Class MyApp.Service Extends %CSP.REST\n"
+    LSMFileResult *r = extract("Class MyApp.Service Extends %CSP.REST\n"
                                "{\n"
                                "XData UrlMap { <Routes/> }\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "XData", "UrlMap"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_trigger_member) {
-    CBMFileResult *r = extract("Class MyApp.Log Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Log Extends %Persistent\n"
                                "{\n"
                                "Trigger AfterInsert [ Event = INSERT ] { }\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Log.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Log.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Trigger", "AfterInsert"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_trigger_body_quit) {
-    CBMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Patient Extends %Persistent\n"
                                "{\n"
                                "Trigger OnDeleteSQL [ Event = DELETE, Time = AFTER ] {\n"
                                "    Quit\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Patient.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Trigger", "OnDeleteSQL"));
@@ -4847,12 +4847,12 @@ TEST(objectscript_udl_trigger_body_quit) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_trigger_body_tokens) {
-    CBMFileResult *r = extract("Class MyApp.Order Extends %Persistent\n"
+    LSMFileResult *r = extract("Class MyApp.Order Extends %Persistent\n"
                                "{\n"
                                "Trigger AfterInsert [ Event = INSERT, Time = AFTER ] {\n"
                                "    Set id = ..%Id()\n"
@@ -4860,7 +4860,7 @@ TEST(objectscript_udl_trigger_body_tokens) {
                                "    Quit\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Order.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Order.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Trigger", "AfterInsert"));
@@ -4876,12 +4876,12 @@ TEST(objectscript_udl_trigger_body_tokens) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_self_call_relative_dot_method) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("Class HS.Flash.UpdateManager Extends Ens.BusinessProcess\n"
                 "{\n"
                 "Method MakeMRNUpToDate(pRequest As HS.Message.FlashQueueUpdate) As %Status\n"
@@ -4894,17 +4894,17 @@ TEST(objectscript_udl_self_call_relative_dot_method) {
                 "    Quit $$$OK\n"
                 "}\n"
                 "}\n",
-                CBM_LANG_OBJECTSCRIPT_UDL, "t", "UpdateManager.cls");
+                LSM_LANG_OBJECTSCRIPT_UDL, "t", "UpdateManager.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "Method", "MakeMRNUpToDate"));
     ASSERT(has_call(r, "HS.Flash.UpdateManager.processStreamlet"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_calls_typed_new) {
-    CBMFileResult *r = extract("Class MyApp.Caller Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Caller Extends %RegisteredObject\n"
                                "{\n"
                                "Method Run() As %Status\n"
                                "{\n"
@@ -4913,16 +4913,16 @@ TEST(objectscript_udl_calls_typed_new) {
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "EnsLib.SQL.OutboundAdapter.ExecuteQuery"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_ensemble_production_def_parses_items) {
-    CBMFileResult *r =
+    LSMFileResult *r =
         extract("Class Sample.Production Extends Ens.Production\n"
                 "{\n"
                 "XData ProductionDefinition\n"
@@ -4935,16 +4935,16 @@ TEST(objectscript_udl_ensemble_production_def_parses_items) {
                 "</Production>\n"
                 "}\n"
                 "}\n",
-                CBM_LANG_OBJECTSCRIPT_UDL, "t", "Production.cls");
+                LSM_LANG_OBJECTSCRIPT_UDL, "t", "Production.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "XData", "ProductionDefinition"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_ensemble_production_def_hs_settings) {
-    CBMFileResult *r = extract(
+    LSMFileResult *r = extract(
         "Class HS.Flash.Production Extends Ens.Production\n"
         "{\n"
         "XData ProductionDefinition\n"
@@ -4958,32 +4958,32 @@ TEST(objectscript_udl_ensemble_production_def_hs_settings) {
         "</Production>\n"
         "}\n"
         "}\n",
-        CBM_LANG_OBJECTSCRIPT_UDL, "t", "HSProduction.cls");
+        LSM_LANG_OBJECTSCRIPT_UDL, "t", "HSProduction.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_def(r, "XData", "ProductionDefinition"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_ensemble_production_def_absent_no_error) {
-    CBMFileResult *r = extract("Class Sample.NonProduction Extends %Persistent\n"
+    LSMFileResult *r = extract("Class Sample.NonProduction Extends %Persistent\n"
                                "{\n"
                                "Method DoSomething() As %Status\n"
                                "{\n"
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "NonProduction.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "NonProduction.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(!has_def(r, "XData", "ProductionDefinition"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_calls_typed_param) {
-    CBMFileResult *r = extract("Class MyApp.Handler Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Handler Extends %RegisteredObject\n"
                                "{\n"
                                "Method Process(req As Ens.Request) As %Status\n"
                                "{\n"
@@ -4991,16 +4991,16 @@ TEST(objectscript_udl_calls_typed_param) {
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Handler.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Handler.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "Ens.Request.Send"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_udl_calls_typed_property) {
-    CBMFileResult *r = extract("Class MyApp.Service Extends Ens.BusinessService\n"
+    LSMFileResult *r = extract("Class MyApp.Service Extends Ens.BusinessService\n"
                                "{\n"
                                "Property Adapter As EnsLib.SQL.InboundAdapter;\n"
                                "Method OnProcessInput() As %Status\n"
@@ -5009,11 +5009,11 @@ TEST(objectscript_udl_calls_typed_property) {
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "EnsLib.SQL.InboundAdapter.ExecuteQuery"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5022,9 +5022,9 @@ TEST(objectscript_udl_calls_typed_property) {
  * =================================================================== */
 
 TEST(objectscript_macro_expand_system) {
-    CBMMacroTable mt;
-    cbm_macro_table_init_system(&mt);
-    CBMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
+    LSMMacroTable mt;
+    lsm_macro_table_init_system(&mt);
+    LSMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
                                            "{\n"
                                            "Method Run(sc As %Status) As %Status\n"
                                            "{\n"
@@ -5032,11 +5032,11 @@ TEST(objectscript_macro_expand_system) {
                                            "    Quit $$$OK\n"
                                            "}\n"
                                            "}\n",
-                                           CBM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
+                                           LSM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "%SYSTEM.Status.IsError"));
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5044,7 +5044,7 @@ TEST(objectscript_macro_expand_system) {
  * Group H3: ObjectScript DATA_FLOWS argument extraction
  * ═══════════════════════════════════════════════════════════════════ */
 
-static int find_call_args(const CBMFileResult *r, const char *callee, const char **out_arg0,
+static int find_call_args(const LSMFileResult *r, const char *callee, const char **out_arg0,
                           const char **out_arg1) {
     if (out_arg0)
         *out_arg0 = NULL;
@@ -5063,7 +5063,7 @@ static int find_call_args(const CBMFileResult *r, const char *callee, const char
 }
 
 TEST(objectscript_data_flows_class_method_args) {
-    CBMFileResult *r = extract("Class MyApp.Caller Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Caller Extends %RegisteredObject\n"
                                "{\n"
                                "Method Run() As %Status\n"
                                "{\n"
@@ -5072,7 +5072,7 @@ TEST(objectscript_data_flows_class_method_args) {
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "MyApp.Utils.Transform"));
@@ -5082,19 +5082,19 @@ TEST(objectscript_data_flows_class_method_args) {
     ASSERT(argc == 2);
     ASSERT_NOT_NULL(arg0);
     ASSERT(strstr(arg0, "sql") != NULL);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(objectscript_macro_expand_local) {
-    CBMMacroTable mt;
-    cbm_macro_table_init_system(&mt);
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMMacroTable mt;
+    lsm_macro_table_init_system(&mt);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     const char *inc_content = "ROUTINE MyApp.Include [Type=INC]\n"
                               "#define MyCheck(%sc) ##class(MyApp.Utils).Validate(%sc)\n";
-    cbm_parse_inc_file(&mt, &arena, inc_content);
-    CBMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
+    lsm_parse_inc_file(&mt, &arena, inc_content);
+    LSMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
                                            "{\n"
                                            "Method Run(sc As %Status) As %Status\n"
                                            "{\n"
@@ -5102,24 +5102,24 @@ TEST(objectscript_macro_expand_local) {
                                            "    Quit $$$OK\n"
                                            "}\n"
                                            "}\n",
-                                           CBM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
+                                           LSM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "MyApp.Utils.Validate"));
-    cbm_free_result(r);
-    cbm_arena_destroy(&arena);
+    lsm_free_result(r);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
 TEST(objectscript_macro_constant_no_extra_call) {
-    CBMMacroTable mt;
-    cbm_macro_table_init_system(&mt);
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMMacroTable mt;
+    lsm_macro_table_init_system(&mt);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     const char *inc_content = "ROUTINE MyApp.Include [Type=INC]\n"
                               "#define MyConst 42\n";
-    cbm_parse_inc_file(&mt, &arena, inc_content);
-    CBMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
+    lsm_parse_inc_file(&mt, &arena, inc_content);
+    LSMFileResult *r = extract_with_macros("Class MyApp.Caller Extends %RegisteredObject\n"
                                            "{\n"
                                            "Method Run() As %Integer\n"
                                            "{\n"
@@ -5127,17 +5127,17 @@ TEST(objectscript_macro_constant_no_extra_call) {
                                            "    Quit x\n"
                                            "}\n"
                                            "}\n",
-                                           CBM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
+                                           LSM_LANG_OBJECTSCRIPT_UDL, "t", "Caller.cls", &mt);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(!has_call(r, "$$$MyConst"));
-    cbm_free_result(r);
-    cbm_arena_destroy(&arena);
+    lsm_free_result(r);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
 TEST(objectscript_data_flows_instance_method_args) {
-    CBMFileResult *r = extract("Class MyApp.Service Extends %RegisteredObject\n"
+    LSMFileResult *r = extract("Class MyApp.Service Extends %RegisteredObject\n"
                                "{\n"
                                "Method Run() As %Status\n"
                                "{\n"
@@ -5146,7 +5146,7 @@ TEST(objectscript_data_flows_instance_method_args) {
                                "    Quit $$$OK\n"
                                "}\n"
                                "}\n",
-                               CBM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
+                               LSM_LANG_OBJECTSCRIPT_UDL, "t", "Service.cls");
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "EnsLib.SQL.OutboundAdapter.ExecuteQuery"));
@@ -5154,7 +5154,7 @@ TEST(objectscript_data_flows_instance_method_args) {
     int argc = find_call_args(r, "EnsLib.SQL.OutboundAdapter.ExecuteQuery", &arg0, NULL);
     ASSERT(argc == 1);
     ASSERT_NOT_NULL(arg0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -5177,10 +5177,10 @@ TEST(objectscript_data_flows_instance_method_args) {
     "</Export>\n"
 
 TEST(iris_export_xml_simple_class) {
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     int count = 0;
-    char **udl = cbm_iris_export_to_udl(&arena, SIMPLE_EXPORT, (int)strlen(SIMPLE_EXPORT), &count);
+    char **udl = lsm_iris_export_to_udl(&arena, SIMPLE_EXPORT, (int)strlen(SIMPLE_EXPORT), &count);
     ASSERT_NOT_NULL(udl);
     ASSERT(count == 1);
     ASSERT_NOT_NULL(udl[0]);
@@ -5188,7 +5188,7 @@ TEST(iris_export_xml_simple_class) {
     ASSERT(strstr(udl[0], "%RegisteredObject") != NULL);
     ASSERT(strstr(udl[0], "Hello") != NULL);
     ASSERT(strstr(udl[0], "Quit \"hello\"") != NULL);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -5208,18 +5208,18 @@ TEST(iris_export_xml_simple_class) {
     "</Export>\n"
 
 TEST(iris_export_xml_classmethod) {
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     int count = 0;
     char **udl =
-        cbm_iris_export_to_udl(&arena, CLASSMETHOD_EXPORT, (int)strlen(CLASSMETHOD_EXPORT), &count);
+        lsm_iris_export_to_udl(&arena, CLASSMETHOD_EXPORT, (int)strlen(CLASSMETHOD_EXPORT), &count);
     ASSERT_NOT_NULL(udl);
     ASSERT(count == 1);
     ASSERT(strstr(udl[0], "ClassMethod") != NULL);
     ASSERT(strstr(udl[0], "pArg") != NULL);
     ASSERT(strstr(udl[0], "pFlag") != NULL);
     ASSERT(strstr(udl[0], "%Status") != NULL);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -5242,17 +5242,17 @@ TEST(iris_export_xml_classmethod) {
     "</Export>\n"
 
 TEST(iris_export_xml_property_parameter_index) {
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     int count = 0;
-    char **udl = cbm_iris_export_to_udl(&arena, MEMBER_EXPORT, (int)strlen(MEMBER_EXPORT), &count);
+    char **udl = lsm_iris_export_to_udl(&arena, MEMBER_EXPORT, (int)strlen(MEMBER_EXPORT), &count);
     ASSERT_NOT_NULL(udl);
     ASSERT(count == 1);
     ASSERT(strstr(udl[0], "Property Name") != NULL);
     ASSERT(strstr(udl[0], "%String") != NULL);
     ASSERT(strstr(udl[0], "Parameter VERSION") != NULL);
     ASSERT(strstr(udl[0], "Index NameIdx") != NULL);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -5274,19 +5274,19 @@ TEST(iris_export_xml_property_parameter_index) {
     "</Export>\n"
 
 TEST(iris_export_xml_calls_extracted) {
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     int count = 0;
-    char **udl = cbm_iris_export_to_udl(&arena, CALLS_EXPORT, (int)strlen(CALLS_EXPORT), &count);
+    char **udl = lsm_iris_export_to_udl(&arena, CALLS_EXPORT, (int)strlen(CALLS_EXPORT), &count);
     ASSERT_NOT_NULL(udl);
     ASSERT(count == 1);
-    CBMFileResult *r = cbm_extract_file(udl[0], (int)strlen(udl[0]), CBM_LANG_OBJECTSCRIPT_UDL, "t",
+    LSMFileResult *r = lsm_extract_file(udl[0], (int)strlen(udl[0]), LSM_LANG_OBJECTSCRIPT_UDL, "t",
                                         "Caller.cls", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
     ASSERT(has_call(r, "Target.Worker.Execute"));
-    cbm_free_result(r);
-    cbm_arena_destroy(&arena);
+    lsm_free_result(r);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -5302,25 +5302,25 @@ TEST(iris_export_xml_calls_extracted) {
     "</Export>\n"
 
 TEST(iris_export_xml_multi_class) {
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
     int count = 0;
-    char **udl = cbm_iris_export_to_udl(&arena, MULTI_EXPORT, (int)strlen(MULTI_EXPORT), &count);
+    char **udl = lsm_iris_export_to_udl(&arena, MULTI_EXPORT, (int)strlen(MULTI_EXPORT), &count);
     ASSERT_NOT_NULL(udl);
     ASSERT(count == 2);
     ASSERT(strstr(udl[0], "Test.First") != NULL || strstr(udl[1], "Test.First") != NULL);
     ASSERT(strstr(udl[0], "Test.Second") != NULL || strstr(udl[1], "Test.Second") != NULL);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
 SUITE(extraction) {
     /* Initialize extraction library */
-    cbm_init();
+    lsm_init();
 
     /* Wide-flat-file linearity (ms-typescript hang) */
     RUN_TEST(extract_wide_flat_file_is_linear);
-#if defined(CBM_CALL_REFERENCE_LOOKUP_TEST_API) && CBM_CALL_REFERENCE_LOOKUP_TEST_API
+#if defined(LSM_CALL_REFERENCE_LOOKUP_TEST_API) && LSM_CALL_REFERENCE_LOOKUP_TEST_API
     RUN_TEST(extract_wide_flat_reference_fields_are_linear);
 #endif
 
@@ -5536,7 +5536,7 @@ SUITE(extraction) {
     RUN_TEST(wolfram_import);
     RUN_TEST(wolfram_nested_def);
 
-    /* cbm_test.go ports */
+    /* lsm_test.go ports */
     RUN_TEST(python_docstring);
     RUN_TEST(go_function_extraction);
     RUN_TEST(js_arrow_function);
@@ -5638,5 +5638,5 @@ SUITE(extraction) {
     RUN_TEST(docstring_utf8_truncation_boundary_issue1017);
     RUN_TEST(extract_ts_decorators_survive_interleaved_comment);
 
-    cbm_shutdown();
+    lsm_shutdown();
 }

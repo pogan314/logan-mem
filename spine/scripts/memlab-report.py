@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Analyse #581 memory-lab output: attribute growth to allocation sites.
 
-Reads the JSONL the profiler appends (CBM_MEM_PROFILE_OUT) and the mem.census
+Reads the JSONL the profiler appends (LSM_MEM_PROFILE_OUT) and the mem.census
 lines from a daemon log, and prints:
 
   * retention per request, as a linear fit rather than first-vs-last, so noise
@@ -74,7 +74,7 @@ def parse_census(path):
 def report(path, census_path, top):
     summaries, series = load_profile(path)
     if not summaries and not series:
-        print(f"{path}: no profiler records — was CBM_MEM_PROFILE=1 set?")
+        print(f"{path}: no profiler records — was LSM_MEM_PROFILE=1 set?")
         return
     last = summaries[-1] if summaries else {}
     print(f"=== {path} ===")

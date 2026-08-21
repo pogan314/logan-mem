@@ -2,10 +2,10 @@
 //
 // Issue: #581 -- "Memory leak: process grows to 50+ GB virtual memory over
 //               hours/days, crashes Windows"
-//   https://github.com/DeusData/codebase-memory-mcp/issues/581
+//   https://github.com/DeusData/logan-spine-mcp/issues/581
 //
 // OBSERVED BEHAVIOUR:
-//   codebase-memory-mcp in stdio MCP server mode grows from ~12 MB working
+//   logan-spine-mcp in stdio MCP server mode grows from ~12 MB working
 //   set to 50-107 GB virtual memory over 12-48 hours while the agent issues
 //   repeated queries (search_graph, query_graph, get_architecture, etc.).
 //   The reporter confirmed auto_index=false, so indexing is NOT the growth
@@ -23,7 +23,7 @@
 //      (mcp.c:869).  Over thousands of operations the WAL grows without
 //      bound, with each page mapped via mmap into virtual address space.
 //
-//   2. mimalloc page retention: cbm_mem_collect() is called after
+//   2. mimalloc page retention: lsm_mem_collect() is called after
 //      index_repository (mcp.c:2866, 4616) and after delete_project
 //      (mcp.c:1860), but NEVER after query operations.  mimalloc retains
 //      freed arena pages in its internal free-lists so they show up as
@@ -50,7 +50,7 @@
 //
 // IMPORTANT CAVEATS / FLAKINESS NOTES:
 //
-//   (a) RSS MEASUREMENT: we use cbm_mem_rss() (src/foundation/mem.c) which
+//   (a) RSS MEASUREMENT: we use lsm_mem_rss() (src/foundation/mem.c) which
 //       calls mi_process_info() for current RSS, or falls back to
 //       /proc/self/statm (Linux), mach_task_basic_info.resident_size (macOS),
 //       or GetProcessMemoryInfo.WorkingSetSize (Windows).  This is CURRENT
@@ -73,22 +73,22 @@
 //       threshold can be increased to 4x or the warmup moved later; this is
 //       documented as a known-fragile point.
 //
-//   (d) LINUX-ONLY ALTERNATIVE: if cbm_mem_rss() returns 0 (e.g. MI_OVERRIDE=0
+//   (d) LINUX-ONLY ALTERNATIVE: if lsm_mem_rss() returns 0 (e.g. MI_OVERRIDE=0
 //       without the OS fallback compiled), the test falls back to reading
-//       /proc/self/statm directly below.  On macOS and Windows cbm_mem_rss()
+//       /proc/self/statm directly below.  On macOS and Windows lsm_mem_rss()
 //       is expected to return non-zero.  If all RSS readings are zero the test
 //       is declared inconclusive and PASSES to avoid false failures (the
 //       growth assertion requires reliable RSS readings).
 //
 // FIX LOCATION (not implemented here -- this test must stay RED until fixed):
 //   Two complementary fixes are needed:
-//   1. src/mcp/mcp.c, cbm_mcp_server_run event loop (or after each tool call
-//      in cbm_mcp_handle_tool): periodically call
+//   1. src/mcp/mcp.c, lsm_mcp_server_run event loop (or after each tool call
+//      in lsm_mcp_handle_tool): periodically call
 //        sqlite3_wal_checkpoint_v2(..., SQLITE_CHECKPOINT_TRUNCATE, ...)
-//      and cbm_mem_collect() after query bursts (e.g. every N=50 calls or
-//      after exceeding a RSS threshold via cbm_mem_over_budget()).
-//   2. src/mcp/mcp.c, cbm_mcp_server_evict_idle: on idle eviction, call
-//      cbm_mem_collect() so mimalloc returns pages to the OS, matching the
+//      and lsm_mem_collect() after query bursts (e.g. every N=50 calls or
+//      after exceeding a RSS threshold via lsm_mem_over_budget()).
+//   2. src/mcp/mcp.c, lsm_mcp_server_evict_idle: on idle eviction, call
+//      lsm_mem_collect() so mimalloc returns pages to the OS, matching the
 //      same pattern used after index_repository.
 //
 //   Without both fixes the WAL and mimalloc page pools grow monotonically
@@ -115,10 +115,10 @@
 // of >1 MB per query over 140 post-warmup iterations.
 #define LEAK_FACTOR  3.0
 
-// Fallback current-RSS reader for Linux, used if cbm_mem_rss() returns 0
+// Fallback current-RSS reader for Linux, used if lsm_mem_rss() returns 0
 // (MI_OVERRIDE=0 with no OS fallback compiled in).  Returns 0 if unavailable.
 static size_t rss_bytes(void) {
-    size_t v = cbm_mem_rss();
+    size_t v = lsm_mem_rss();
     if (v > 0) {
         return v;
     }
@@ -200,7 +200,7 @@ static char *build_search_args(const char *project) {
 //   The ASSERT below fires -> RED.
 //
 // GREEN after fix:
-//   cbm_mem_collect() and/or TRUNCATE checkpoint called periodically by the
+//   lsm_mem_collect() and/or TRUNCATE checkpoint called periodically by the
 //   MCP event loop (or after tool calls) return pages to OS.  End RSS stays
 //   near warmup RSS (jitter only) -> assertion passes -> GREEN.
 //
@@ -214,7 +214,7 @@ static char *build_search_args(const char *project) {
 TEST(repro_issue581_query_rss_stable) {
     RFile files[] = {{"module.py", FIXTURE_PY}};
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     ASSERT_NOT_NULL(store);
 
     // Project name from the harness.
@@ -228,7 +228,7 @@ TEST(repro_issue581_query_rss_stable) {
     size_t rss_end = 0;
 
     for (int i = 0; i < ITER_TOTAL; i++) {
-        char *resp = cbm_mcp_handle_tool(lp.srv, "search_graph", args);
+        char *resp = lsm_mcp_handle_tool(lp.srv, "search_graph", args);
         // The response must be freed on every call -- verifying the MCP layer
         // does not itself accumulate the result (it doesn't; the leak is lower).
         if (resp) {
@@ -266,7 +266,7 @@ TEST(repro_issue581_query_rss_stable) {
     //       thousands of ops against a LARGE graph, measuring the SQLite WAL
     //       file size and mimalloc committed pages DIRECTLY (not process-RSS
     //       jitter) so the monotonic growth is actually observable; AND
-    //   (b) the fix — periodic SQLITE_CHECKPOINT_TRUNCATE + cbm_mem_collect() in
+    //   (b) the fix — periodic SQLITE_CHECKPOINT_TRUNCATE + lsm_mem_collect() in
     //       the MCP query loop / idle eviction (see the header + #581).
     //
     // Until both land this is an honest "not fixed / not provable here" RED, not

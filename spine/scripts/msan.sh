@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # msan.sh — MemorySanitizer lane (stage 2: full coverage incl. the C++ paths).
 #
-# Runs inside the cbm-msan image (test-infrastructure/Dockerfile.msan), which
+# Runs inside the lsm-msan image (test-infrastructure/Dockerfile.msan), which
 # provides MSan-instrumented libc++/libc++abi/libunwind and zlib in /opt/msan.
 # Vendored C deps compile in-tree and are instrumented by the build itself.
 #
@@ -47,7 +47,7 @@ else
 fi
 MSAN_SAN="-fsanitize=memory $MSAN_ORIGIN_FLAG -fno-omit-frame-pointer -isystem $MSAN_PREFIX/include"
 # Scoped to the zstd object ONLY (see the ZSTD_EXTRA_CFLAGS note in
-# Makefile.cbm): zstd's MSan block needs stdint.h that its amalgamation lost,
+# Makefile.lsm): zstd's MSan block needs stdint.h that its amalgamation lost,
 # but force-including it globally freezes glibc feature-test macros before
 # sqlite3.c can set _GNU_SOURCE, breaking that compile instead.
 #
@@ -61,9 +61,9 @@ ZSTD_EXTRA="-D_GNU_SOURCE -include stdint.h"
 # populated under different stdlib/sanitizer flags silently mixes objects
 # (observed: a stage-1 probe's libstdc++ objects surviving into the libc++
 # lane and producing an unattributable report). Correctness over speed here.
-make -f Makefile.cbm clean-c BUILD_DIR=build/msan >/dev/null 2>&1 || true
+make -f Makefile.lsm clean-c BUILD_DIR=build/msan >/dev/null 2>&1 || true
 
-make -j"$(nproc)" -f Makefile.cbm build/msan/test-runner \
+make -j"$(nproc)" -f Makefile.lsm build/msan/test-runner \
     CC=clang CXX=clang++ BUILD_DIR=build/msan \
     SANITIZE="$MSAN_SAN" \
     ZSTD_EXTRA_CFLAGS="$ZSTD_EXTRA" \
@@ -74,9 +74,9 @@ export MSAN_OPTIONS="${MSAN_OPTIONS:-halt_on_error=1:print_stats=0}"
 # Origin tracking inflates every frame; the grammar-corpus suites drive the
 # deepest parser recursion in the tree. Raise what can be raised (main-thread
 # stack via RLIMIT_STACK, worker stacks via the sanitized-build-only knob in
-# cbm_thread_create) — see the exclusion note below for what this does NOT fix.
+# lsm_thread_create) — see the exclusion note below for what this does NOT fix.
 ulimit -s 262144 2>/dev/null || true
-export CBM_THREAD_STACK_MB="${CBM_THREAD_STACK_MB:-256}"
+export LSM_THREAD_STACK_MB="${LSM_THREAD_STACK_MB:-256}"
 export LD_LIBRARY_PATH="$MSAN_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 echo "=== MSan lane: $(clang --version | head -1) ==="
@@ -121,9 +121,9 @@ echo "=== MSan lane: $(clang --version | head -1) ==="
 # WHAT WAS TRIED for (A) — each disproven by measurement, do not repeat:
 #  1. RLIMIT_STACK 8 -> 64 -> 256 MiB, and `ulimit -s unlimited`. No effect;
 #     the crashing thread is not the main thread.
-#  2. CBM_THREAD_STACK_MB at 256 MiB and at 1024 MiB (the cap). The knob is
-#     verified compiled in (CBM_SANITIZED_BUILD is defined for this lane) and
-#     the floor is applied in cbm_thread_create for both the default and
+#  2. LSM_THREAD_STACK_MB at 256 MiB and at 1024 MiB (the cap). The knob is
+#     verified compiled in (LSM_SANITIZED_BUILD is defined for this lane) and
+#     the floor is applied in lsm_thread_create for both the default and
 #     explicit-size paths. The fault address did not move by a single byte
 #     between 256 MiB and 1024 MiB -- a 4x stack increase changing nothing is
 #     what rules out "the stack is merely too small".
@@ -133,7 +133,7 @@ echo "=== MSan lane: $(clang --version | head -1) ==="
 #  4. One suite per process (the sharding below). It removed the cumulative
 #     thread-ordinal effect an earlier note suspected, and thousands of tests
 #     now run before the wall, but the deep suites still abort.
-#  5. CBM_WORKERS=1, to push the recursion onto the main thread where the
+#  5. LSM_WORKERS=1, to push the recursion onto the main thread where the
 #     rlimit does apply. Still a worker thread, still overflows.
 #
 # WHAT THIS POINTS AT (the follow-up, not a guess to act on blindly): the

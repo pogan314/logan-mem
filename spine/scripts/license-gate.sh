@@ -45,7 +45,7 @@ MISS=0
 has_license_dir() {
     ls "$1" 2>/dev/null | grep -qiE '^(LICENSE|LICENCE|COPYING|UNLICENSE|NOTICE)'
 }
-for root in vendored internal/cbm/vendored; do
+for root in vendored internal/lsm/vendored; do
     find "$root" -type f \
         \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \
         -o -name '*.S' -o -name '*.bin' -o -name '*.txt' \) \
@@ -87,7 +87,7 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
 # Inputs: all vendored license/notice texts + all first-party sources.
-find vendored internal/cbm/vendored -type f \
+find vendored internal/lsm/vendored -type f \
     \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' -o -iname 'UNLICENSE*' \) \
     > "$STAGE/files.txt"
 find src pkg scripts -type f \

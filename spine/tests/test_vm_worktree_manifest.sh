@@ -7,8 +7,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/cbm-vm-manifest-test.XXXXXX")"
-manifest="$(mktemp "${TMPDIR:-/tmp}/cbm-vm-manifest-output.XXXXXX")"
+FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/lsm-vm-manifest-test.XXXXXX")"
+manifest="$(mktemp "${TMPDIR:-/tmp}/lsm-vm-manifest-output.XXXXXX")"
 trap 'rm -rf -- "$FIXTURE"; rm -f -- "$manifest"' EXIT
 
 git -C "$FIXTURE" init -q
@@ -22,7 +22,7 @@ printf 'untracked\n' >"$FIXTURE/new.txt"
 
 # shellcheck source=test-infrastructure/vm/ssh-common.sh
 source "$ROOT/test-infrastructure/vm/ssh-common.sh"
-cbm_vm_write_untracked_manifest "$FIXTURE" "$manifest"
+lsm_vm_write_untracked_manifest "$FIXTURE" "$manifest"
 
 saw_untracked=false
 while IFS= read -r -d '' relative; do
@@ -70,12 +70,12 @@ if ! grep -Fq "cd '\$VM_REPO' && git apply" <<<"$sync_block" ||
     echo "FAIL: Windows VM sync patch and manifest must target the selected checkout" >&2
     exit 1
 fi
-if ! grep -Fq 'CBM_CI_RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' "$driver"; then
+if ! grep -Fq 'LSM_CI_RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' "$driver"; then
     echo "FAIL: Windows VM run ids must be validated before remote path interpolation" >&2
     exit 1
 fi
 preflight_block="$(sed -n '/^vm_preflight() {$/,/^}$/p' "$driver")"
-if grep -Fq 'C:\\cbm\\scripts\\ci' <<<"$preflight_block" ||
+if grep -Fq 'C:\\lsm\\scripts\\ci' <<<"$preflight_block" ||
    [ "$(grep -c 'VM_REPO_WIN' <<<"$preflight_block")" -lt 2 ]; then
     echo "FAIL: Windows VM preflight must use the selected per-run checkout" >&2
     exit 1
@@ -89,7 +89,7 @@ for entrypoint in "$driver" "$provisioner"; do
         echo "FAIL: Windows VM driver must default to the current local branch: $entrypoint" >&2
         exit 1
     fi
-    if ! grep -Fq 'cbm_vm_require_safe_branch "$BRANCH"' "$entrypoint"; then
+    if ! grep -Fq 'lsm_vm_require_safe_branch "$BRANCH"' "$entrypoint"; then
         echo "FAIL: Windows VM driver must validate branch text before remote use: $entrypoint" >&2
         exit 1
     fi
@@ -98,12 +98,12 @@ for entrypoint in "$driver" "$provisioner"; do
         exit 1
     fi
 done
-if ! grep -Fq 'cbm_vm_sync_windows_clock()' \
+if ! grep -Fq 'lsm_vm_sync_windows_clock()' \
     "$ROOT/test-infrastructure/vm/ssh-common.sh"; then
     echo "FAIL: Windows VM drivers need a shared, verified host-to-guest clock sync" >&2
     exit 1
 fi
-clock_helper=$(sed -n '/^cbm_vm_sync_windows_clock() {$/,/^}$/p' \
+clock_helper=$(sed -n '/^lsm_vm_sync_windows_clock() {$/,/^}$/p' \
     "$ROOT/test-infrastructure/vm/ssh-common.sh")
 clock_retry_line=$(printf '%s\n' "$clock_helper" | grep -nF 'for attempt in 1 2 3; do' |
     cut -d: -f1)
@@ -115,12 +115,12 @@ if [ -z "$clock_retry_line" ] || [ -z "$clock_capture_line" ] ||
     exit 1
 fi
 for entrypoint in "$driver" "$provisioner"; do
-    if ! grep -Fq 'cbm_vm_sync_windows_clock "${SSH[@]}"' "$entrypoint"; then
+    if ! grep -Fq 'lsm_vm_sync_windows_clock "${SSH[@]}"' "$entrypoint"; then
         echo "FAIL: Windows VM entry point must repair suspended-guest clock drift: $entrypoint" >&2
         exit 1
     fi
 done
-if ! grep -Fq 'cbm_vm_run_powershell()' \
+if ! grep -Fq 'lsm_vm_run_powershell()' \
     "$ROOT/test-infrastructure/vm/ssh-common.sh" ||
     [ "$(grep -c 'vm_powershell ' "$provisioner")" -lt 3 ]; then
     echo "FAIL: Windows provisioning must transport PowerShell as UTF-16LE encoded commands" >&2
@@ -144,12 +144,12 @@ if ! grep -Fq 'scripts/build.sh --with-ui CC=clang CXX=clang++ SANITIZE= BUILD_D
     <<<"$guards_block" ||
     ! grep -Fq 'powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\test-windows.ps1' \
     <<<"$guards_block" ||
-    ! grep -Fq -- '-GuardsOnly -Binary build\\guards\\codebase-memory-mcp.exe' <<<"$guards_block"; then
+    ! grep -Fq -- '-GuardsOnly -Binary build\\guards\\logan-spine-mcp.exe' <<<"$guards_block"; then
     echo "FAIL: Windows VM guards must delegate to the maintained native-Windows driver" >&2
     exit 1
 fi
 if ! grep -Fq 'cd /d ${VM_REPO_WIN}' <<<"$guards_block" ||
-   grep -Fq 'cd /d C:\\cbm' <<<"$guards_block"; then
+   grep -Fq 'cd /d C:\\lsm' <<<"$guards_block"; then
     echo "FAIL: Windows VM guards must run against the selected per-run checkout" >&2
     exit 1
 fi
@@ -169,7 +169,7 @@ if grep -Fq -- '-e build' "$driver" "$provisioner"; then
     echo "FAIL: Windows VM synchronization must invalidate stale build outputs" >&2
     exit 1
 fi
-if ! grep -Fq 'CBM_VM_BRANCH' "$ROOT/test-infrastructure/vm/README.md"; then
+if ! grep -Fq 'LSM_VM_BRANCH' "$ROOT/test-infrastructure/vm/README.md"; then
     echo "FAIL: Windows VM branch override is undocumented" >&2
     exit 1
 fi

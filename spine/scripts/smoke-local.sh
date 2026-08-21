@@ -5,7 +5,7 @@ set -euo pipefail
 # plain `scripts/smoke-test.sh <binary>` skips without an artifact fixture.
 #
 # Usage: scripts/smoke-local.sh <binary> [ui]
-#   <binary>  product binary to smoke (e.g. build/c/codebase-memory-mcp)
+#   <binary>  product binary to smoke (e.g. build/c/logan-spine-mcp)
 #   ui        optional: mirror the -ui variant asset naming
 
 usage() {
@@ -20,7 +20,7 @@ update E2E) inside a disposable HOME/XDG/TMPDIR sandbox with every agent-config
 destination override neutralized.
 
 Arguments:
-  <binary>     Product binary to smoke (e.g. build/c/codebase-memory-mcp).
+  <binary>     Product binary to smoke (e.g. build/c/logan-spine-mcp).
 
 Environment:
   SMOKE_REQUIRE_UI=1   Phase 15's "no embedded assets" SKIP becomes a FAILURE.
@@ -29,7 +29,7 @@ Environment:
                        fast PR lane, which builds without the frontend.
 
 Environment:
-  CBM_SMOKE_ARTIFACT_DIR   Release mode: an EXTRACTED release artifact
+  LSM_SMOKE_ARTIFACT_DIR   Release mode: an EXTRACTED release artifact
                directory. Sidecars (LICENSE, install.sh, THIRD_PARTY_NOTICES.md)
                are validated and served from THERE instead of regenerated, so
                the release venue smokes exactly the bytes it publishes; an
@@ -37,7 +37,7 @@ Environment:
                come from this checkout (local/PR mode).
 
 Callers: pr.yml pr-smoke (ubuntu/macos) · _smoke.yml smoke-unix +
-smoke-linux-portable (with CBM_SMOKE_ARTIFACT_DIR) · compose smoke services.
+smoke-linux-portable (with LSM_SMOKE_ARTIFACT_DIR) · compose smoke services.
 Windows uses the sibling test-infrastructure/vm/vm-smoke.sh.
 EOF
 }
@@ -68,7 +68,7 @@ REQUIRE_UI="${SMOKE_REQUIRE_UI:-0}"
 # Unset (the local + PR default): synthesize the release sidecars from this
 # checkout. Set: take them from an EXTRACTED release artifact, so the release
 # venue serves the files it is about to publish rather than regenerated copies.
-ARTIFACT_DIR="${CBM_SMOKE_ARTIFACT_DIR:-}"
+ARTIFACT_DIR="${LSM_SMOKE_ARTIFACT_DIR:-}"
 if [ -n "$ARTIFACT_DIR" ]; then
     ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd)"
     for required in LICENSE install.sh THIRD_PARTY_NOTICES.md; do
@@ -99,7 +99,7 @@ x86_64)
 *) echo "smoke-local: unsupported host arch $(uname -m)" >&2; exit 2 ;;
 esac
 
-WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/cbm-smoke-server-XXXXXX")
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lsm-smoke-server-XXXXXX")
 FIXTURE_DIR="$WORK_DIR/artifacts"
 SMOKE_TEMP_DIR="$WORK_DIR/temp"
 SMOKE_HOME="$WORK_DIR/home"
@@ -120,7 +120,7 @@ trap cleanup EXIT
 
 mkdir -p "$FIXTURE_DIR" "$SMOKE_TEMP_DIR" "$SMOKE_HOME" "$SMOKE_XDG_CONFIG" \
     "$SMOKE_APPDATA" "$SMOKE_LOCALAPPDATA"
-cp "$BINARY" "$FIXTURE_DIR/codebase-memory-mcp"
+cp "$BINARY" "$FIXTURE_DIR/logan-spine-mcp"
 if [ -n "$ARTIFACT_DIR" ]; then
     cp "$ARTIFACT_DIR/LICENSE" \
         "$ARTIFACT_DIR/install.sh" "$ARTIFACT_DIR/THIRD_PARTY_NOTICES.md" "$FIXTURE_DIR/"
@@ -132,15 +132,15 @@ fi
 # Member set and ORDER mirror scripts/package-release.sh (the Windows
 # single-binary contract locks that order); a fixture with a different inventory
 # would smoke a release layout we never ship.
-EXPECTED_ARTIFACT="codebase-memory-mcp-${OS}-${ARCH}.tar.gz"
+EXPECTED_ARTIFACT="logan-spine-mcp-${OS}-${ARCH}.tar.gz"
 tar -czf "$FIXTURE_DIR/$EXPECTED_ARTIFACT" -C "$FIXTURE_DIR" \
-    codebase-memory-mcp LICENSE install.sh THIRD_PARTY_NOTICES.md
+    logan-spine-mcp LICENSE install.sh THIRD_PARTY_NOTICES.md
 
 # Linux install/update resolves the portable release asset even when this local
 # smoke started from the dynamic production binary.
 if [ "$OS" = "linux" ]; then
     cp "$FIXTURE_DIR/$EXPECTED_ARTIFACT" \
-        "$FIXTURE_DIR/codebase-memory-mcp-${OS}-${ARCH}-portable.tar.gz"
+        "$FIXTURE_DIR/logan-spine-mcp-${OS}-${ARCH}-portable.tar.gz"
 fi
 (cd "$FIXTURE_DIR" && { sha256sum *.tar.gz > checksums.txt 2>/dev/null ||
     shasum -a 256 *.tar.gz > checksums.txt; })
@@ -197,11 +197,11 @@ env \
     -u VIBE_HOME \
     -u GLAB_CONFIG_DIR \
     -u KIMI_CODE_HOME \
-    -u CBM_CONTINUE_CONFIG_PATH \
-    -u CBM_TRAE_CONFIG_PATH \
-    -u CBM_ROO_CONFIG_PATH \
-    -u CBM_CODY_CONFIG_PATH \
-    -u CBM_TEST_WINDOWS_USER_PATH_RUN_ID \
+    -u LSM_CONTINUE_CONFIG_PATH \
+    -u LSM_TRAE_CONFIG_PATH \
+    -u LSM_ROO_CONFIG_PATH \
+    -u LSM_CODY_CONFIG_PATH \
+    -u LSM_TEST_WINDOWS_USER_PATH_RUN_ID \
     HOME="$SMOKE_HOME" \
     USERPROFILE="$SMOKE_HOME" \
     XDG_CONFIG_HOME="$SMOKE_XDG_CONFIG" \
@@ -211,7 +211,7 @@ env \
     TEMP="$SMOKE_TEMP_DIR" \
     TMP="$SMOKE_TEMP_DIR" \
     SHELL="/bin/sh" \
-    CBM_CACHE_DIR="$WORK_DIR/cache" \
+    LSM_CACHE_DIR="$WORK_DIR/cache" \
     SMOKE_TEMP_ROOT="$SMOKE_TEMP_DIR" \
     SMOKE_DOWNLOAD_URL="http://127.0.0.1:$PORT" \
     SMOKE_UPDATE_FIXTURE_DIR="$FIXTURE_DIR" \

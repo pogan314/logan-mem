@@ -1,8 +1,8 @@
 /*
  * config_json_like.h — Structure-preserving JSON/JSONC/JSON5 config edits.
  */
-#ifndef CBM_CONFIG_JSON_LIKE_H
-#define CBM_CONFIG_JSON_LIKE_H
+#ifndef LSM_CONFIG_JSON_LIKE_H
+#define LSM_CONFIG_JSON_LIKE_H
 
 #include <stddef.h>
 
@@ -20,71 +20,71 @@ extern "C" {
  * Insert or replace entry_key inside the object at object_path.
  * entry_json must contain exactly one strict JSON value.
  * Returns 0 on success and -1 on invalid input or an I/O error. */
-int cbm_json_like_upsert_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_upsert_entry(const char *file_path, const char *const *object_path,
                                size_t path_len, const char *entry_key, const char *entry_json);
 
 /* Safely read one regular, single-link document. Returns 0 with malloc-owned
  * content, 1 when missing, and -1 for unsafe filesystem state or I/O failure. */
-int cbm_json_like_read_document(const char *file_path, char **content_out, size_t *length_out);
+int lsm_json_like_read_document(const char *file_path, char **content_out, size_t *length_out);
 
 /* Read one uniquely named value from object_path without mutating the file.
  * On success, value_json_out receives a malloc-owned, NUL-terminated exact
  * JSON/JSONC/JSON5 source slice and value_length_out its byte length. Returns
  * 1 when the file, path, or entry is missing and -1 for ambiguity, malformed
  * input, unsafe filesystem state, or I/O failure. */
-int cbm_json_like_get_raw_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_get_raw_entry(const char *file_path, const char *const *object_path,
                                 size_t path_len, const char *entry_key, char **value_json_out,
                                 size_t *value_length_out);
 
 /* Exact object-entry schema matching on a caller-owned document snapshot.
  * Every object member must match one field exactly once; unknown and duplicate
- * members produce CBM_JSON_LIKE_OBJECT_MISMATCH. STRING fields may require an
+ * members produce LSM_JSON_LIKE_OBJECT_MISMATCH. STRING fields may require an
  * exact decoded value or capture their decoded value for caller validation.
  *
  * This API intentionally accepts document bytes rather than a path so callers
  * can validate the same snapshot supplied to an *_if_unchanged mutation. */
 typedef enum {
-    CBM_JSON_LIKE_VALUE_STRING,
-    CBM_JSON_LIKE_VALUE_EMPTY_ARRAY,
-    CBM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY,
-} cbm_json_like_value_shape_t;
+    LSM_JSON_LIKE_VALUE_STRING,
+    LSM_JSON_LIKE_VALUE_EMPTY_ARRAY,
+    LSM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY,
+} lsm_json_like_value_shape_t;
 
 enum {
-    CBM_JSON_LIKE_FIELD_REQUIRED = 1U << 0U,
-    CBM_JSON_LIKE_FIELD_CAPTURE_STRING = 1U << 1U,
+    LSM_JSON_LIKE_FIELD_REQUIRED = 1U << 0U,
+    LSM_JSON_LIKE_FIELD_CAPTURE_STRING = 1U << 1U,
 };
 
 typedef struct {
     const char *key;
-    cbm_json_like_value_shape_t shape;
+    lsm_json_like_value_shape_t shape;
     const char *expected_string;
     unsigned flags;
-} cbm_json_like_object_field_t;
+} lsm_json_like_object_field_t;
 
 enum {
-    CBM_JSON_LIKE_OBJECT_MATCH = 0,
-    CBM_JSON_LIKE_OBJECT_MISSING = 1,
-    CBM_JSON_LIKE_OBJECT_MISMATCH = 2,
+    LSM_JSON_LIKE_OBJECT_MATCH = 0,
+    LSM_JSON_LIKE_OBJECT_MISSING = 1,
+    LSM_JSON_LIKE_OBJECT_MISMATCH = 2,
     /* Every field we own is present and matches, but the entry carries
      * ADDITIONAL keys we do not write. The entry is recognisably ours; it has
      * simply been annotated by the client or the user. Callers must NOT rewrite
      * such an entry — the editor replaces an entry wholesale, so rewriting
      * would silently drop those keys. Treat it as already-satisfied instead. */
-    CBM_JSON_LIKE_OBJECT_MATCH_WITH_EXTRAS = 3,
+    LSM_JSON_LIKE_OBJECT_MATCH_WITH_EXTRAS = 3,
 };
 
 /* captured_string_out receives malloc-owned decoded content only on MATCH.
- * Returns one of CBM_JSON_LIKE_OBJECT_* or -1 for malformed input. */
-int cbm_json_like_match_object_entry(const char *document, size_t document_length,
+ * Returns one of LSM_JSON_LIKE_OBJECT_* or -1 for malformed input. */
+int lsm_json_like_match_object_entry(const char *document, size_t document_length,
                                      const char *const *object_path, size_t path_len,
                                      const char *entry_key,
-                                     const cbm_json_like_object_field_t *fields, size_t field_count,
+                                     const lsm_json_like_object_field_t *fields, size_t field_count,
                                      char **captured_string_out);
 
 /* Conditional variants used when a caller must semantically inspect an exact
  * snapshot before writing. expected_content == NULL means the file was
  * missing. A changed document is rejected without mutation. */
-int cbm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *const *object_path,
+int lsm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *entry_key,
                                             const char *entry_json, const char *expected_content,
                                             size_t expected_length);
@@ -95,7 +95,7 @@ int cbm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *c
  * annotated entry (#1630): replacing the whole entry would drop the client's
  * keys. raw_value must be a single complete JSON value; the field must exist
  * exactly once. Same expected-content contract as the _if_unchanged editors. */
-int cbm_json_like_replace_field_raw_if_unchanged(const char *file_path,
+int lsm_json_like_replace_field_raw_if_unchanged(const char *file_path,
                                                  const char *const *object_path, size_t path_len,
                                                  const char *entry_key, const char *field_key,
                                                  const char *raw_value,
@@ -104,22 +104,22 @@ int cbm_json_like_replace_field_raw_if_unchanged(const char *file_path,
 
 /* Remove entry_key from the object at object_path. A missing path or entry is
  * a successful no-op. Returns 0 on success and -1 on invalid input or I/O. */
-int cbm_json_like_remove_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_entry(const char *file_path, const char *const *object_path,
                                size_t path_len, const char *entry_key);
-int cbm_json_like_remove_entry_if_unchanged(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_entry_if_unchanged(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *entry_key,
                                             const char *expected_content, size_t expected_length);
 
 /* Add string_value once to the array named array_key in the object at
  * object_path. Missing objects and the array are created. The raw string is
  * JSON-escaped; a pre-existing exact string is a no-op. */
-int cbm_json_like_add_unique_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_add_unique_string_at_path(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *array_key,
                                             const char *string_value);
 
 /* Remove the exact string_value from the array at object_path/array_key.
  * Missing files, paths, arrays, and strings are successful no-ops. */
-int cbm_json_like_remove_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_string_at_path(const char *file_path, const char *const *object_path,
                                         size_t path_len, const char *array_key,
                                         const char *string_value);
 
@@ -127,28 +127,28 @@ int cbm_json_like_remove_string_at_path(const char *file_path, const char *const
  * a malloc-owned decoded UTF-8 string. Returns 0 when found, 1 when the file,
  * path, or key is missing, and -1 for invalid input, ambiguity, a non-string
  * value, unsafe filesystem state, or I/O failure. */
-int cbm_json_like_get_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_get_string_at_path(const char *file_path, const char *const *object_path,
                                      size_t path_len, const char *string_key, char **value_out);
 
-/* Top-level convenience wrapper for cbm_json_like_add_unique_string_at_path. */
-int cbm_json_like_add_unique_string(const char *file_path, const char *array_key,
+/* Top-level convenience wrapper for lsm_json_like_add_unique_string_at_path. */
+int lsm_json_like_add_unique_string(const char *file_path, const char *array_key,
                                     const char *string_value);
 
-/* Top-level convenience wrapper for cbm_json_like_remove_string_at_path. */
-int cbm_json_like_remove_string(const char *file_path, const char *array_key,
+/* Top-level convenience wrapper for lsm_json_like_remove_string_at_path. */
+int lsm_json_like_remove_string(const char *file_path, const char *array_key,
                                 const char *string_value);
 
-#ifdef CBM_JSON_LIKE_ENABLE_TEST_API
+#ifdef LSM_JSON_LIKE_ENABLE_TEST_API
 /* Deterministic concurrency seam for the standalone editor tests. The hook is
  * invoked after the replacement has been synced but before the stale-snapshot
  * check. Production callers must not enable this API. */
-typedef void (*cbm_json_like_precommit_test_hook_t)(const char *file_path, void *context);
-void cbm_json_like_set_precommit_hook_for_testing(cbm_json_like_precommit_test_hook_t hook,
+typedef void (*lsm_json_like_precommit_test_hook_t)(const char *file_path, void *context);
+void lsm_json_like_set_precommit_hook_for_testing(lsm_json_like_precommit_test_hook_t hook,
                                                   void *context);
 /* Invoked after the first stale-snapshot check. The editor performs a final
  * destination and temporary-file identity check after the hook and
  * immediately before publication. */
-void cbm_json_like_set_prepublish_hook_for_testing(cbm_json_like_precommit_test_hook_t hook,
+void lsm_json_like_set_prepublish_hook_for_testing(lsm_json_like_precommit_test_hook_t hook,
                                                    void *context);
 #endif
 
@@ -156,4 +156,4 @@ void cbm_json_like_set_prepublish_hook_for_testing(cbm_json_like_precommit_test_
 }
 #endif
 
-#endif /* CBM_CONFIG_JSON_LIKE_H */
+#endif /* LSM_CONFIG_JSON_LIKE_H */

@@ -42,11 +42,11 @@
 #define JL_MAX_FILE_BYTES (16U * 1024U * 1024U)
 
 static atomic_uint jl_temp_sequence = ATOMIC_VAR_INIT(0);
-#ifdef CBM_JSON_LIKE_ENABLE_TEST_API
-static CBM_TLS cbm_json_like_precommit_test_hook_t jl_precommit_test_hook = NULL;
-static CBM_TLS void *jl_precommit_test_context = NULL;
-static CBM_TLS cbm_json_like_precommit_test_hook_t jl_prepublish_test_hook = NULL;
-static CBM_TLS void *jl_prepublish_test_context = NULL;
+#ifdef LSM_JSON_LIKE_ENABLE_TEST_API
+static LSM_TLS lsm_json_like_precommit_test_hook_t jl_precommit_test_hook = NULL;
+static LSM_TLS void *jl_precommit_test_context = NULL;
+static LSM_TLS lsm_json_like_precommit_test_hook_t jl_prepublish_test_hook = NULL;
+static LSM_TLS void *jl_prepublish_test_context = NULL;
 #endif
 
 typedef struct {
@@ -1383,7 +1383,7 @@ static int jl_read_file(const char *path, char **content_out, size_t *length_out
     *missing_out = false;
     memset(snapshot_out, 0, sizeof(*snapshot_out));
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_path) {
         return -1;
     }
@@ -1463,7 +1463,7 @@ static int jl_read_file(const char *path, char **content_out, size_t *length_out
     int read_failed = ferror(file);
     struct stat after_state;
     jl_file_snapshot_t after;
-    int after_result = fstat(cbm_fileno(file), &after_state) == 0
+    int after_result = fstat(lsm_fileno(file), &after_state) == 0
                            ? jl_snapshot_from_stat(&after_state, &after)
                            : -1;
     int close_failed = fclose(file);
@@ -1490,12 +1490,12 @@ static char *jl_parent_directory(const char *path) {
     }
 #endif
     if (!separator) {
-        return cbm_strdup(".");
+        return lsm_strdup(".");
     }
     if (separator == path) {
-        return cbm_strdup("/");
+        return lsm_strdup("/");
     }
-    return cbm_strndup(path, (size_t)(separator - path));
+    return lsm_strndup(path, (size_t)(separator - path));
 }
 
 static int jl_ensure_parent(const char *path) {
@@ -1503,7 +1503,7 @@ static int jl_ensure_parent(const char *path) {
     if (!parent) {
         return -1;
     }
-    int result = strcmp(parent, ".") == 0 || cbm_mkdir_p(parent, 0755) ? 0 : -1;
+    int result = strcmp(parent, ".") == 0 || lsm_mkdir_p(parent, 0755) ? 0 : -1;
     free(parent);
     return result;
 }
@@ -1561,8 +1561,8 @@ static int jl_sync_parent_directory(const char *path) {
 
 static int jl_replace_atomic(const char *temp_path, const char *path, bool destination_exists) {
 #ifdef _WIN32
-    wchar_t *wide_temp = cbm_utf8_to_wide(temp_path);
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_temp = lsm_utf8_to_wide(temp_path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_temp || !wide_path) {
         free(wide_temp);
         free(wide_path);
@@ -1581,7 +1581,7 @@ static int jl_replace_atomic(const char *temp_path, const char *path, bool desti
         if (link(temp_path, path) != 0) {
             return -1;
         }
-        if (cbm_unlink(temp_path) != 0) {
+        if (lsm_unlink(temp_path) != 0) {
             return -1;
         }
         return jl_sync_parent_directory(path);
@@ -1613,7 +1613,7 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
     FILE *file = NULL;
     for (unsigned attempt = 0; attempt < 64U; attempt++) {
         unsigned sequence = atomic_fetch_add_explicit(&jl_temp_sequence, 1U, memory_order_relaxed);
-        int written = snprintf(temp_path, temp_capacity, "%s.cbm.tmp.%ld.%u", path,
+        int written = snprintf(temp_path, temp_capacity, "%s.lsm.tmp.%ld.%u", path,
                                (long)JL_PROCESS_ID(), sequence);
         if (written < 0 || (size_t)written >= temp_capacity) {
             free(temp_path);
@@ -1621,7 +1621,7 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
         }
         errno = 0;
 #ifdef _WIN32
-        file = cbm_fopen(temp_path, "wbx");
+        file = lsm_fopen(temp_path, "wbx");
 #else
 #ifndef O_NOFOLLOW
         free(temp_path);
@@ -1637,7 +1637,7 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
             if (!file) {
                 int saved_error = errno;
                 close(descriptor);
-                (void)cbm_unlink(temp_path);
+                (void)lsm_unlink(temp_path);
                 errno = saved_error;
             }
         }
@@ -1665,22 +1665,22 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
     }
 #ifndef _WIN32
     if (!failed && expected_snapshot->exists &&
-        fchown(cbm_fileno(file), expected_snapshot->owner, expected_snapshot->group) != 0) {
+        fchown(lsm_fileno(file), expected_snapshot->owner, expected_snapshot->group) != 0) {
         failed = true;
     }
     mode_t mode = expected_snapshot->exists ? expected_snapshot->mode & 0777U : 0600U;
-    if (!failed && fchmod(cbm_fileno(file), mode) != 0) {
+    if (!failed && fchmod(lsm_fileno(file), mode) != 0) {
         failed = true;
     }
 #endif
-    if (!failed && JL_SYNC(cbm_fileno(file)) != 0) {
+    if (!failed && JL_SYNC(lsm_fileno(file)) != 0) {
         failed = true;
     }
     if (fclose(file) != 0) {
         failed = true;
     }
     if (failed) {
-        cbm_unlink(temp_path);
+        lsm_unlink(temp_path);
         free(temp_path);
         return -1;
     }
@@ -1692,22 +1692,22 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
         temp_missing || temp_length != length ||
         (length != 0U && memcmp(temp_content, content, length) != 0)) {
         free(temp_content);
-        cbm_unlink(temp_path);
+        lsm_unlink(temp_path);
         free(temp_path);
         return -1;
     }
     free(temp_content);
-#ifdef CBM_JSON_LIKE_ENABLE_TEST_API
+#ifdef LSM_JSON_LIKE_ENABLE_TEST_API
     if (jl_precommit_test_hook) {
         jl_precommit_test_hook(path, jl_precommit_test_context);
     }
 #endif
     if (jl_snapshot_matches_path(path, expected_content, expected_length, expected_snapshot) != 0) {
-        cbm_unlink(temp_path);
+        lsm_unlink(temp_path);
         free(temp_path);
         return -1;
     }
-#ifdef CBM_JSON_LIKE_ENABLE_TEST_API
+#ifdef LSM_JSON_LIKE_ENABLE_TEST_API
     if (jl_prepublish_test_hook) {
         jl_prepublish_test_hook(path, jl_prepublish_test_context);
     }
@@ -1715,7 +1715,7 @@ static int jl_write_atomic(const char *path, const char *content, size_t length,
     if (jl_snapshot_matches_path(path, expected_content, expected_length, expected_snapshot) != 0 ||
         jl_snapshot_matches_path(temp_path, content, length, &temp_snapshot) != 0 ||
         jl_replace_atomic(temp_path, path, expected_snapshot->exists) != 0) {
-        cbm_unlink(temp_path);
+        lsm_unlink(temp_path);
         free(temp_path);
         return -1;
     }
@@ -1978,21 +1978,21 @@ static int jl_write_document(const char *path, const char *content, size_t lengt
                            expected_snapshot);
 }
 
-#ifdef CBM_JSON_LIKE_ENABLE_TEST_API
-void cbm_json_like_set_precommit_hook_for_testing(cbm_json_like_precommit_test_hook_t hook,
+#ifdef LSM_JSON_LIKE_ENABLE_TEST_API
+void lsm_json_like_set_precommit_hook_for_testing(lsm_json_like_precommit_test_hook_t hook,
                                                   void *context) {
     jl_precommit_test_hook = hook;
     jl_precommit_test_context = context;
 }
 
-void cbm_json_like_set_prepublish_hook_for_testing(cbm_json_like_precommit_test_hook_t hook,
+void lsm_json_like_set_prepublish_hook_for_testing(lsm_json_like_precommit_test_hook_t hook,
                                                    void *context) {
     jl_prepublish_test_hook = hook;
     jl_prepublish_test_context = context;
 }
 #endif
 
-int cbm_json_like_read_document(const char *file_path, char **content_out, size_t *length_out) {
+int lsm_json_like_read_document(const char *file_path, char **content_out, size_t *length_out) {
     if (!file_path || !content_out || !length_out) {
         return -1;
     }
@@ -2004,7 +2004,7 @@ int cbm_json_like_read_document(const char *file_path, char **content_out, size_
     return missing ? 1 : 0;
 }
 
-int cbm_json_like_get_raw_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_get_raw_entry(const char *file_path, const char *const *object_path,
                                 size_t path_len, const char *entry_key, char **value_json_out,
                                 size_t *value_length_out) {
     if (!value_json_out || !value_length_out) {
@@ -2199,13 +2199,13 @@ static int jl_upsert_entry(const char *file_path, const char *const *object_path
     return result;
 }
 
-int cbm_json_like_upsert_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_upsert_entry(const char *file_path, const char *const *object_path,
                                size_t path_len, const char *entry_key, const char *entry_json) {
     return jl_upsert_entry(file_path, object_path, path_len, entry_key, entry_json, false, NULL,
                            0U);
 }
 
-int cbm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *const *object_path,
+int lsm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *entry_key,
                                             const char *entry_json, const char *expected_content,
                                             size_t expected_length) {
@@ -2213,7 +2213,7 @@ int cbm_json_like_upsert_entry_if_unchanged(const char *file_path, const char *c
                            expected_content, expected_length);
 }
 
-int cbm_json_like_replace_field_raw_if_unchanged(const char *file_path,
+int lsm_json_like_replace_field_raw_if_unchanged(const char *file_path,
                                                  const char *const *object_path, size_t path_len,
                                                  const char *entry_key, const char *field_key,
                                                  const char *raw_value,
@@ -2394,19 +2394,19 @@ static int jl_remove_entry(const char *file_path, const char *const *object_path
     return result;
 }
 
-int cbm_json_like_remove_entry(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_entry(const char *file_path, const char *const *object_path,
                                size_t path_len, const char *entry_key) {
     return jl_remove_entry(file_path, object_path, path_len, entry_key, false, NULL, 0U);
 }
 
-int cbm_json_like_remove_entry_if_unchanged(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_entry_if_unchanged(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *entry_key,
                                             const char *expected_content, size_t expected_length) {
     return jl_remove_entry(file_path, object_path, path_len, entry_key, true, expected_content,
                            expected_length);
 }
 
-int cbm_json_like_add_unique_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_add_unique_string_at_path(const char *file_path, const char *const *object_path,
                                             size_t path_len, const char *array_key,
                                             const char *string_value) {
     if (jl_validate_arguments(file_path, object_path, path_len, array_key) != 0 ||
@@ -2524,7 +2524,7 @@ int cbm_json_like_add_unique_string_at_path(const char *file_path, const char *c
     return result;
 }
 
-int cbm_json_like_remove_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_remove_string_at_path(const char *file_path, const char *const *object_path,
                                         size_t path_len, const char *array_key,
                                         const char *string_value) {
     if (jl_validate_arguments(file_path, object_path, path_len, array_key) != 0 ||
@@ -2751,15 +2751,15 @@ static int jl_decode_string_value(const char *text, size_t start, size_t end, ch
 }
 
 static int jl_decode_field_string(const char *text, size_t start, size_t end,
-                                  cbm_json_like_value_shape_t shape, char **value_out) {
+                                  lsm_json_like_value_shape_t shape, char **value_out) {
     *value_out = NULL;
-    if (shape == CBM_JSON_LIKE_VALUE_STRING) {
+    if (shape == LSM_JSON_LIKE_VALUE_STRING) {
         if (start >= end || (text[start] != '"' && text[start] != '\'')) {
             return 1;
         }
         return jl_decode_string_value(text, start, end, value_out) == 0 ? 0 : 1;
     }
-    if (shape != CBM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY || start >= end || text[start] != '[') {
+    if (shape != LSM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY || start >= end || text[start] != '[') {
         return 1;
     }
 
@@ -2787,9 +2787,9 @@ static int jl_decode_field_string(const char *text, size_t start, size_t end,
 }
 
 static bool jl_field_shape_matches(const char *text, const jl_member_t *member,
-                                   cbm_json_like_value_shape_t shape, char **decoded_out) {
+                                   lsm_json_like_value_shape_t shape, char **decoded_out) {
     *decoded_out = NULL;
-    if (shape == CBM_JSON_LIKE_VALUE_EMPTY_ARRAY) {
+    if (shape == LSM_JSON_LIKE_VALUE_EMPTY_ARRAY) {
         if (member->value_start >= member->value_end || text[member->value_start] != '[') {
             return false;
         }
@@ -2806,10 +2806,10 @@ static bool jl_field_shape_matches(const char *text, const jl_member_t *member,
                                   decoded_out) == 0;
 }
 
-int cbm_json_like_match_object_entry(const char *document, size_t document_length,
+int lsm_json_like_match_object_entry(const char *document, size_t document_length,
                                      const char *const *object_path, size_t path_len,
                                      const char *entry_key,
-                                     const cbm_json_like_object_field_t *fields, size_t field_count,
+                                     const lsm_json_like_object_field_t *fields, size_t field_count,
                                      char **captured_string_out) {
     if (!captured_string_out) {
         return -1;
@@ -2827,14 +2827,14 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
     size_t capture_count = 0U;
     for (size_t i = 0U; i < field_count; ++i) {
         if (!fields[i].key || fields[i].key[0] == '\0' ||
-            fields[i].shape > CBM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY ||
+            fields[i].shape > LSM_JSON_LIKE_VALUE_SINGLE_STRING_ARRAY ||
             (fields[i].flags &
-             ~(CBM_JSON_LIKE_FIELD_REQUIRED | CBM_JSON_LIKE_FIELD_CAPTURE_STRING)) != 0U ||
-            ((fields[i].flags & CBM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U &&
-             fields[i].shape == CBM_JSON_LIKE_VALUE_EMPTY_ARRAY)) {
+             ~(LSM_JSON_LIKE_FIELD_REQUIRED | LSM_JSON_LIKE_FIELD_CAPTURE_STRING)) != 0U ||
+            ((fields[i].flags & LSM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U &&
+             fields[i].shape == LSM_JSON_LIKE_VALUE_EMPTY_ARRAY)) {
             return -1;
         }
-        capture_count += (fields[i].flags & CBM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U ? 1U : 0U;
+        capture_count += (fields[i].flags & LSM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U ? 1U : 0U;
         for (size_t j = 0U; j < i; ++j) {
             if (strcmp(fields[i].key, fields[j].key) == 0) {
                 return -1;
@@ -2845,7 +2845,7 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
         return -1;
     }
     if (document_length == 0U) {
-        return CBM_JSON_LIKE_OBJECT_MISSING;
+        return LSM_JSON_LIKE_OBJECT_MISSING;
     }
 
     size_t object_start = 0U;
@@ -2858,10 +2858,10 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
             return -1;
         }
         if (parent.match_count == 0U) {
-            return CBM_JSON_LIKE_OBJECT_MISSING;
+            return LSM_JSON_LIKE_OBJECT_MISSING;
         }
         if (parent.match_count != 1U || document[parent.match.value_start] != '{') {
-            return CBM_JSON_LIKE_OBJECT_MISMATCH;
+            return LSM_JSON_LIKE_OBJECT_MISMATCH;
         }
         object_start = parent.match.value_start;
     }
@@ -2871,10 +2871,10 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
         return -1;
     }
     if (entry_parent.match_count == 0U) {
-        return CBM_JSON_LIKE_OBJECT_MISSING;
+        return LSM_JSON_LIKE_OBJECT_MISSING;
     }
     if (entry_parent.match_count != 1U || document[entry_parent.match.value_start] != '{') {
-        return CBM_JSON_LIKE_OBJECT_MISMATCH;
+        return LSM_JSON_LIKE_OBJECT_MISMATCH;
     }
 
     size_t entry_start = entry_parent.match.value_start;
@@ -2889,9 +2889,9 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
         }
         member_count = entry.member_count;
         if (entry.match_count > 1U ||
-            (entry.match_count == 0U && (fields[i].flags & CBM_JSON_LIKE_FIELD_REQUIRED) != 0U)) {
+            (entry.match_count == 0U && (fields[i].flags & LSM_JSON_LIKE_FIELD_REQUIRED) != 0U)) {
             free(captured);
-            return CBM_JSON_LIKE_OBJECT_MISMATCH;
+            return LSM_JSON_LIKE_OBJECT_MISMATCH;
         }
         if (entry.match_count == 0U) {
             continue;
@@ -2900,15 +2900,15 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
         char *decoded = NULL;
         if (!jl_field_shape_matches(document, &entry.match, fields[i].shape, &decoded)) {
             free(captured);
-            return CBM_JSON_LIKE_OBJECT_MISMATCH;
+            return LSM_JSON_LIKE_OBJECT_MISMATCH;
         }
         if (fields[i].expected_string &&
             (!decoded || strcmp(decoded, fields[i].expected_string) != 0)) {
             free(decoded);
             free(captured);
-            return CBM_JSON_LIKE_OBJECT_MISMATCH;
+            return LSM_JSON_LIKE_OBJECT_MISMATCH;
         }
-        if ((fields[i].flags & CBM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U) {
+        if ((fields[i].flags & LSM_JSON_LIKE_FIELD_CAPTURE_STRING) != 0U) {
             captured = decoded;
         } else {
             free(decoded);
@@ -2916,7 +2916,7 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
     }
     if (!captured) {
         free(captured);
-        return CBM_JSON_LIKE_OBJECT_MISMATCH;
+        return LSM_JSON_LIKE_OBJECT_MISMATCH;
     }
     if (member_count != found_count) {
         /* Extra keys beyond the ones we own. Every field we DO own matched, so
@@ -2934,13 +2934,13 @@ int cbm_json_like_match_object_entry(const char *document, size_t document_lengt
          * handling: a caller may not rewrite this entry, since the editor
          * replaces an entry wholesale and would drop the extra keys. */
         *captured_string_out = captured;
-        return CBM_JSON_LIKE_OBJECT_MATCH_WITH_EXTRAS;
+        return LSM_JSON_LIKE_OBJECT_MATCH_WITH_EXTRAS;
     }
     *captured_string_out = captured;
-    return CBM_JSON_LIKE_OBJECT_MATCH;
+    return LSM_JSON_LIKE_OBJECT_MATCH;
 }
 
-int cbm_json_like_get_string_at_path(const char *file_path, const char *const *object_path,
+int lsm_json_like_get_string_at_path(const char *file_path, const char *const *object_path,
                                      size_t path_len, const char *string_key, char **value_out) {
     if (!value_out) {
         return -1;
@@ -3006,15 +3006,15 @@ int cbm_json_like_get_string_at_path(const char *file_path, const char *const *o
     return result;
 }
 
-int cbm_json_like_add_unique_string(const char *file_path, const char *array_key,
+int lsm_json_like_add_unique_string(const char *file_path, const char *array_key,
                                     const char *string_value) {
     const char *root_path[] = {NULL};
-    return cbm_json_like_add_unique_string_at_path(file_path, root_path, 0U, array_key,
+    return lsm_json_like_add_unique_string_at_path(file_path, root_path, 0U, array_key,
                                                    string_value);
 }
 
-int cbm_json_like_remove_string(const char *file_path, const char *array_key,
+int lsm_json_like_remove_string(const char *file_path, const char *array_key,
                                 const char *string_value) {
     const char *root_path[] = {NULL};
-    return cbm_json_like_remove_string_at_path(file_path, root_path, 0U, array_key, string_value);
+    return lsm_json_like_remove_string_at_path(file_path, root_path, 0U, array_key, string_value);
 }

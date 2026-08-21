@@ -33,8 +33,8 @@ enum { GH_RING = 4, GH_RING_MASK = 3, GH_INIT_CAP = 16, GH_MIN_COMMITS = 3, GH_M
 #include <string.h>
 
 static const char *itoa_log(int val) {
-    static CBM_TLS char bufs[GH_RING][CBM_SZ_32];
-    static CBM_TLS int idx = 0;
+    static LSM_TLS char bufs[GH_RING][LSM_SZ_32];
+    static LSM_TLS int idx = 0;
     int i = idx;
     idx = (idx + SKIP_ONE) & GH_RING_MASK;
     snprintf(bufs[i], sizeof(bufs[i]), "%d", val);
@@ -46,7 +46,7 @@ static bool ends_with(const char *s, size_t slen, const char *suffix) {
     return slen >= sflen && strcmp(s + slen - sflen, suffix) == 0;
 }
 
-bool cbm_is_trackable_file(const char *path) {
+bool lsm_is_trackable_file(const char *path) {
     if (!path) {
         return false;
     }
@@ -111,11 +111,11 @@ static int parse_git_log(const char *repo_path, commit_t **out, int *out_count) 
     *out = NULL;
     *out_count = 0;
 
-    if (!cbm_validate_shell_path_arg(repo_path)) {
-        return CBM_NOT_FOUND;
+    if (!lsm_validate_shell_path_arg(repo_path)) {
+        return LSM_NOT_FOUND;
     }
 
-    char cmd[CBM_SZ_1K];
+    char cmd[LSM_SZ_1K];
 #ifdef _WIN32
     /* cmd.exe does not recognize single quotes, and '/dev/null' is a POSIX path. */
     const char *null_dev = "NUL";
@@ -123,24 +123,24 @@ static int parse_git_log(const char *repo_path, commit_t **out, int *out_count) 
     const char *null_dev = "/dev/null";
 #endif
     /* git -C "<path>" works on both cmd.exe and POSIX shells. Double quotes are
-     * safe here because cbm_validate_shell_arg (above) rejects ", $, `, \ and the
+     * safe here because lsm_validate_shell_arg (above) rejects ", $, `, \ and the
      * other shell metacharacters that would otherwise be active inside them. */
     snprintf(cmd, sizeof(cmd),
              "git -C \"%s\" log --name-only --pretty=format:COMMIT:%%H:%%ct "
              "--since=\"1 year ago\" --max-count=10000 2>%s",
              repo_path, null_dev);
 
-    FILE *fp = cbm_popen(cmd, "r");
+    FILE *fp = lsm_popen(cmd, "r");
     if (!fp) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
-    int cap = CBM_SZ_64;
+    int cap = LSM_SZ_64;
     commit_t *commits = malloc(cap * sizeof(commit_t));
     int count = 0;
     commit_t current = {0};
 
-    char line[CBM_SZ_1K];
+    char line[LSM_SZ_1K];
     while (fgets(line, sizeof(line), fp)) {
         size_t len = strlen(line);
         while (len > 0 && (line[len - SKIP_ONE] == '\n' || line[len - SKIP_ONE] == '\r')) {
@@ -168,7 +168,7 @@ static int parse_git_log(const char *repo_path, commit_t **out, int *out_count) 
             continue;
         }
 
-        if (cbm_is_trackable_file(line)) {
+        if (lsm_is_trackable_file(line)) {
             commit_add_file(&current, line);
         }
     }
@@ -182,7 +182,7 @@ static int parse_git_log(const char *repo_path, commit_t **out, int *out_count) 
         commit_free(&current);
     }
 
-    cbm_pclose(fp);
+    lsm_pclose(fp);
     *out = commits;
     *out_count = count;
     return 0;
@@ -199,9 +199,9 @@ static void free_counter(const char *key, void *val, void *ud) {
 
 /* Context for collect_coupling_result callback. */
 typedef struct {
-    CBMHashTable *file_counts;
-    CBMHashTable *pair_timestamps; /* pair_key → long long*: max commit ts */
-    cbm_change_coupling_t *out;
+    LSMHashTable *file_counts;
+    LSMHashTable *pair_timestamps; /* pair_key → long long*: max commit ts */
+    lsm_change_coupling_t *out;
     int out_count;
     int max_out;
 } collect_coupling_ctx_t;
@@ -223,15 +223,15 @@ static void collect_coupling_cb(const char *pair_key, void *val, void *ud) {
     size_t la = sep - pair_key;
     const char *file_b = sep + SKIP_ONE;
 
-    char file_a_buf[CBM_SZ_512];
+    char file_a_buf[LSM_SZ_512];
     if (la >= sizeof(file_a_buf)) {
         return;
     }
     memcpy(file_a_buf, pair_key, la);
     file_a_buf[la] = '\0';
 
-    int *count_a = cbm_ht_get(cctx->file_counts, file_a_buf);
-    int *count_b = cbm_ht_get(cctx->file_counts, file_b);
+    int *count_a = lsm_ht_get(cctx->file_counts, file_a_buf);
+    int *count_b = lsm_ht_get(cctx->file_counts, file_b);
     if (!count_a || !count_b) {
         return;
     }
@@ -246,23 +246,23 @@ static void collect_coupling_cb(const char *pair_key, void *val, void *ud) {
         return;
     }
 
-    cbm_change_coupling_t *cc = &cctx->out[cctx->out_count++];
+    lsm_change_coupling_t *cc = &cctx->out[cctx->out_count++];
     snprintf(cc->file_a, sizeof(cc->file_a), "%s", file_a_buf);
     snprintf(cc->file_b, sizeof(cc->file_b), "%s", file_b);
     cc->co_change_count = co_count;
     cc->coupling_score = score;
-    long long *ts = cbm_ht_get(cctx->pair_timestamps, pair_key);
+    long long *ts = lsm_ht_get(cctx->pair_timestamps, pair_key);
     cc->last_co_change = ts ? *ts : 0;
 }
 
-int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_count,
-                                cbm_change_coupling_t *out, int max_out) {
-    CBMHashTable *file_counts = cbm_ht_create(CBM_SZ_1K);
-    CBMHashTable *pair_counts = cbm_ht_create(CBM_SZ_2K);
+int lsm_compute_change_coupling(const lsm_commit_files_t *commits, int commit_count,
+                                lsm_change_coupling_t *out, int max_out) {
+    LSMHashTable *file_counts = lsm_ht_create(LSM_SZ_1K);
+    LSMHashTable *pair_counts = lsm_ht_create(LSM_SZ_2K);
     /* Parallel table mapping pair_key → max commit timestamp seen for that
      * pair, so the resulting edge can carry last_co_change. The pair_counts
      * table consumes its key on insert; pair_timestamps gets its own copy. */
-    CBMHashTable *pair_timestamps = cbm_ht_create(CBM_SZ_2K);
+    LSMHashTable *pair_timestamps = lsm_ht_create(LSM_SZ_2K);
 
     for (int c = 0; c < commit_count; c++) {
         if (commits[c].count > GH_MAX_FILES) {
@@ -270,13 +270,13 @@ int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_co
         }
 
         for (int i = 0; i < commits[c].count; i++) {
-            int *val = cbm_ht_get(file_counts, commits[c].files[i]);
+            int *val = lsm_ht_get(file_counts, commits[c].files[i]);
             if (val) {
                 (*val)++;
             } else {
                 int *nv = malloc(sizeof(int));
                 *nv = SKIP_ONE;
-                cbm_ht_set(file_counts, strdup(commits[c].files[i]), nv);
+                lsm_ht_set(file_counts, strdup(commits[c].files[i]), nv);
             }
         }
 
@@ -297,10 +297,10 @@ int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_co
                 pk[la] = '\x01';
                 memcpy(pk + la + SKIP_ONE, b, lb + SKIP_ONE);
 
-                int *val = cbm_ht_get(pair_counts, pk);
+                int *val = lsm_ht_get(pair_counts, pk);
                 if (val) {
                     (*val)++;
-                    long long *ts = cbm_ht_get(pair_timestamps, pk);
+                    long long *ts = lsm_ht_get(pair_timestamps, pk);
                     if (ts && commits[c].timestamp > *ts) {
                         *ts = commits[c].timestamp;
                     }
@@ -312,10 +312,10 @@ int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_co
                      * needs its own copy. */
                     char *pk2 = malloc(pk_len);
                     memcpy(pk2, pk, pk_len);
-                    cbm_ht_set(pair_counts, pk, nv);
+                    lsm_ht_set(pair_counts, pk, nv);
                     long long *nts = malloc(sizeof(long long));
                     *nts = commits[c].timestamp;
-                    cbm_ht_set(pair_timestamps, pk2, nts);
+                    lsm_ht_set(pair_timestamps, pk2, nts);
                 }
             }
         }
@@ -328,14 +328,14 @@ int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_co
         .out_count = 0,
         .max_out = max_out,
     };
-    cbm_ht_foreach(pair_counts, collect_coupling_cb, &cctx);
+    lsm_ht_foreach(pair_counts, collect_coupling_cb, &cctx);
 
-    cbm_ht_foreach(pair_counts, free_counter, NULL);
-    cbm_ht_free(pair_counts);
-    cbm_ht_foreach(pair_timestamps, free_counter, NULL);
-    cbm_ht_free(pair_timestamps);
-    cbm_ht_foreach(file_counts, free_counter, NULL);
-    cbm_ht_free(file_counts);
+    lsm_ht_foreach(pair_counts, free_counter, NULL);
+    lsm_ht_free(pair_counts);
+    lsm_ht_foreach(pair_timestamps, free_counter, NULL);
+    lsm_ht_free(pair_timestamps);
+    lsm_ht_foreach(file_counts, free_counter, NULL);
+    lsm_ht_free(file_counts);
 
     return cctx.out_count;
 }
@@ -348,7 +348,7 @@ int cbm_compute_change_coupling(const cbm_commit_files_t *commits, int commit_co
 
 /* Compute change couplings without touching the graph buffer.
  * Can run on a separate thread while other passes use the gbuf. */
-int cbm_pipeline_githistory_compute(const char *repo_path, cbm_githistory_result_t *result) {
+int lsm_pipeline_githistory_compute(const char *repo_path, lsm_githistory_result_t *result) {
     result->couplings = NULL;
     result->count = 0;
     result->commit_count = 0;
@@ -366,7 +366,7 @@ int cbm_pipeline_githistory_compute(const char *repo_path, cbm_githistory_result
     result->commit_count = commit_count;
 
     /* Convert to testable format */
-    cbm_commit_files_t *cf = calloc((size_t)commit_count, sizeof(cbm_commit_files_t));
+    lsm_commit_files_t *cf = calloc((size_t)commit_count, sizeof(lsm_commit_files_t));
     if (!cf) {
         for (int c = 0; c < commit_count; c++) {
             commit_free(&commits[c]);
@@ -380,26 +380,26 @@ int cbm_pipeline_githistory_compute(const char *repo_path, cbm_githistory_result
         cf[c].timestamp = commits[c].timestamp;
     }
 
-    cbm_change_coupling_t *couplings = malloc(MAX_COUPLINGS * sizeof(cbm_change_coupling_t));
-    int coupling_count = cbm_compute_change_coupling(cf, commit_count, couplings, MAX_COUPLINGS);
+    lsm_change_coupling_t *couplings = malloc(MAX_COUPLINGS * sizeof(lsm_change_coupling_t));
+    int coupling_count = lsm_compute_change_coupling(cf, commit_count, couplings, MAX_COUPLINGS);
 
     /* Per-file temporal aggregation: change_count + last_modified.
      * Single hash-table pass over the same commit set used for coupling so
      * we don't re-scan history. NULL on OOM is fine — the caller still
      * gets the couplings. */
-    cbm_file_temporal_t *ft_arr =
-        calloc(MAX_FILE_TEMPORAL, sizeof(cbm_file_temporal_t)); /* defined reads
+    lsm_file_temporal_t *ft_arr =
+        calloc(MAX_FILE_TEMPORAL, sizeof(lsm_file_temporal_t)); /* defined reads
         even under the analyzer's cross-iteration view of the index map */
     if (ft_arr) {
         int ft_count = 0;
-        CBMHashTable *file_idx = cbm_ht_create(CBM_SZ_1K);
+        LSMHashTable *file_idx = lsm_ht_create(LSM_SZ_1K);
         for (int c = 0; c < commit_count; c++) {
             if (cf[c].count > GH_MAX_FILES) {
                 continue;
             }
             for (int f = 0; f < cf[c].count; f++) {
                 const char *fp = cf[c].files[f];
-                int *idx = cbm_ht_get(file_idx, fp);
+                int *idx = lsm_ht_get(file_idx, fp);
                 if (idx) {
                     ft_arr[*idx].change_count++;
                     if (cf[c].timestamp > ft_arr[*idx].last_modified) {
@@ -422,12 +422,12 @@ int cbm_pipeline_githistory_compute(const char *repo_path, cbm_githistory_result
                     ft_arr[new_idx].change_count = 1;
                     ft_arr[new_idx].last_modified = cf[c].timestamp;
                     *nidx = new_idx;
-                    cbm_ht_set(file_idx, key, nidx);
+                    lsm_ht_set(file_idx, key, nidx);
                 }
             }
         }
-        cbm_ht_foreach(file_idx, free_counter, NULL);
-        cbm_ht_free(file_idx);
+        lsm_ht_foreach(file_idx, free_counter, NULL);
+        lsm_ht_free(file_idx);
         result->file_temporal = ft_arr;
         result->file_temporal_count = ft_count;
     }
@@ -444,17 +444,17 @@ int cbm_pipeline_githistory_compute(const char *repo_path, cbm_githistory_result
 }
 
 /* Apply pre-computed couplings to the graph buffer (must be on main thread). */
-int cbm_pipeline_githistory_apply(cbm_pipeline_ctx_t *ctx, const cbm_githistory_result_t *result) {
+int lsm_pipeline_githistory_apply(lsm_pipeline_ctx_t *ctx, const lsm_githistory_result_t *result) {
     int edge_count = 0;
 
     for (int i = 0; i < result->count; i++) {
-        const cbm_change_coupling_t *cc = &result->couplings[i];
+        const lsm_change_coupling_t *cc = &result->couplings[i];
 
-        char *qn_a = cbm_pipeline_fqn_compute(ctx->project_name, cc->file_a, "__file__");
-        char *qn_b = cbm_pipeline_fqn_compute(ctx->project_name, cc->file_b, "__file__");
+        char *qn_a = lsm_pipeline_fqn_compute(ctx->project_name, cc->file_a, "__file__");
+        char *qn_b = lsm_pipeline_fqn_compute(ctx->project_name, cc->file_b, "__file__");
 
-        const cbm_gbuf_node_t *node_a = cbm_gbuf_find_by_qn(ctx->gbuf, qn_a);
-        const cbm_gbuf_node_t *node_b = cbm_gbuf_find_by_qn(ctx->gbuf, qn_b);
+        const lsm_gbuf_node_t *node_a = lsm_gbuf_find_by_qn(ctx->gbuf, qn_a);
+        const lsm_gbuf_node_t *node_b = lsm_gbuf_find_by_qn(ctx->gbuf, qn_b);
 
         free(qn_a);
         free(qn_b);
@@ -463,12 +463,12 @@ int cbm_pipeline_githistory_apply(cbm_pipeline_ctx_t *ctx, const cbm_githistory_
             continue;
         }
 
-        char props[CBM_SZ_128];
+        char props[LSM_SZ_128];
         snprintf(props, sizeof(props),
                  "{\"co_changes\":%d,\"coupling_score\":%.2f,\"last_co_change\":%lld}",
                  cc->co_change_count, cc->coupling_score, cc->last_co_change);
 
-        cbm_gbuf_insert_edge(ctx->gbuf, node_a->id, node_b->id, "FILE_CHANGES_WITH", props);
+        lsm_gbuf_insert_edge(ctx->gbuf, node_a->id, node_b->id, "FILE_CHANGES_WITH", props);
         edge_count++;
     }
 
@@ -477,9 +477,9 @@ int cbm_pipeline_githistory_apply(cbm_pipeline_ctx_t *ctx, const cbm_githistory_
      * extension is re-derived and JSON-escaped to keep the props blob
      * well-formed even for paths with quotes or backslashes. */
     for (int i = 0; i < result->file_temporal_count; i++) {
-        const cbm_file_temporal_t *ft = &result->file_temporal[i];
-        char *qn = cbm_pipeline_fqn_compute(ctx->project_name, ft->file_path, "__file__");
-        const cbm_gbuf_node_t *node = cbm_gbuf_find_by_qn(ctx->gbuf, qn);
+        const lsm_file_temporal_t *ft = &result->file_temporal[i];
+        char *qn = lsm_pipeline_fqn_compute(ctx->project_name, ft->file_path, "__file__");
+        const lsm_gbuf_node_t *node = lsm_gbuf_find_by_qn(ctx->gbuf, qn);
         free(qn);
         if (!node) {
             continue;
@@ -488,15 +488,15 @@ int cbm_pipeline_githistory_apply(cbm_pipeline_ctx_t *ctx, const cbm_githistory_
         const char *base = strrchr(ft->file_path, '/');
         base = base ? base + SKIP_ONE : ft->file_path;
         const char *ext = strrchr(base, '.');
-        char ext_escaped[CBM_SZ_64];
-        cbm_json_escape(ext_escaped, (int)sizeof(ext_escaped), ext ? ext : "");
+        char ext_escaped[LSM_SZ_64];
+        lsm_json_escape(ext_escaped, (int)sizeof(ext_escaped), ext ? ext : "");
 
-        char props[CBM_SZ_256];
+        char props[LSM_SZ_256];
         snprintf(props, sizeof(props),
                  "{\"extension\":\"%s\",\"last_modified\":%lld,\"change_count\":%d}", ext_escaped,
                  ft->last_modified, ft->change_count);
 
-        cbm_gbuf_upsert_node(ctx->gbuf, node->label, node->name, node->qualified_name,
+        lsm_gbuf_upsert_node(ctx->gbuf, node->label, node->name, node->qualified_name,
                              node->file_path, node->start_line, node->end_line, props);
     }
 
@@ -505,21 +505,21 @@ int cbm_pipeline_githistory_apply(cbm_pipeline_ctx_t *ctx, const cbm_githistory_
 
 /* ── Main pass (original serial interface) ───────────────────────── */
 
-int cbm_pipeline_pass_githistory(cbm_pipeline_ctx_t *ctx) {
-    cbm_log_info("pass.start", "pass", "githistory");
+int lsm_pipeline_pass_githistory(lsm_pipeline_ctx_t *ctx) {
+    lsm_log_info("pass.start", "pass", "githistory");
 
-    cbm_githistory_result_t result = {0};
-    cbm_pipeline_githistory_compute(ctx->repo_path, &result);
+    lsm_githistory_result_t result = {0};
+    lsm_pipeline_githistory_compute(ctx->repo_path, &result);
 
     int edge_count = 0;
     if (result.count > 0 || result.file_temporal_count > 0) {
-        edge_count = cbm_pipeline_githistory_apply(ctx, &result);
+        edge_count = lsm_pipeline_githistory_apply(ctx, &result);
     }
 
     free(result.couplings);
     free(result.file_temporal);
 
-    cbm_log_info("pass.done", "pass", "githistory", "commits", itoa_log(result.commit_count),
+    lsm_log_info("pass.done", "pass", "githistory", "commits", itoa_log(result.commit_count),
                  "edges", itoa_log(edge_count));
     return 0;
 }

@@ -19,7 +19,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -40,7 +40,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } GP_Proj;
 
 typedef struct {
@@ -54,29 +54,29 @@ static void gp_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *gp_open_indexed(GP_Proj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *gp_open_indexed(GP_Proj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *gp_index_files(GP_Proj *lp, const GP_File *files, int nfiles) {
+static lsm_store_t *gp_index_files(GP_Proj *lp, const GP_File *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_gpc_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_gpc_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     gp_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -84,7 +84,7 @@ static cbm_store_t *gp_index_files(GP_Proj *lp, const GP_File *files, int nfiles
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -95,14 +95,14 @@ static cbm_store_t *gp_index_files(GP_Proj *lp, const GP_File *files, int nfiles
     return gp_open_indexed(lp);
 }
 
-static cbm_store_t *gp_index(GP_Proj *lp, const char *filename, const char *content) {
+static lsm_store_t *gp_index(GP_Proj *lp, const char *filename, const char *content) {
     GP_File f = {filename, content};
     return gp_index_files(lp, &f, 1);
 }
 
-static void gp_cleanup(GP_Proj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void gp_cleanup(GP_Proj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project); lp->project = NULL;
     th_rmtree(lp->tmpdir);
     unlink(lp->dbpath);
@@ -113,17 +113,17 @@ static void gp_cleanup(GP_Proj *lp, cbm_store_t *store) {
 }
 
 /* Count graph nodes by label. Returns -1 on query error. */
-static int gp_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int gp_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Count type-like nodes (Class/Struct/Interface/Enum/Trait/Type). */
-static int gp_type_like(cbm_store_t *store, const char *project) {
+static int gp_type_like(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class", "Struct", "Interface", "Enum", "Trait", "Type", NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -133,41 +133,41 @@ static int gp_type_like(cbm_store_t *store, const char *project) {
     return total;
 }
 
-/* Extraction-level: count imports via cbm_extract_file (bypasses graph). */
-static int gp_extract_imports(const char *src, CBMLanguage lang, const char *path) {
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
+/* Extraction-level: count imports via lsm_extract_file (bypasses graph). */
+static int gp_extract_imports(const char *src, LSMLanguage lang, const char *path) {
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
     if (!r) return -1;
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     return n;
 }
 
 /* Extraction-level: count defs with given label. */
-static int gp_extract_label(const char *src, CBMLanguage lang, const char *path,
+static int gp_extract_label(const char *src, LSMLanguage lang, const char *path,
                              const char *label) {
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
     if (!r) return -1;
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
         if (strcmp(r->defs.items[i].label, label) == 0) n++;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return n;
 }
 
 /* Extraction-level: check any def has at least one non-NULL base_class. */
-static int gp_extract_has_base_class(const char *src, CBMLanguage lang, const char *path) {
-    CBMFileResult *r =
-        cbm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
+static int gp_extract_has_base_class(const char *src, LSMLanguage lang, const char *path) {
+    LSMFileResult *r =
+        lsm_extract_file(src, (int)strlen(src), lang, "gpc", path, 0, NULL, NULL);
     if (!r) return 0;
     int found = 0;
     for (int i = 0; i < r->defs.count && !found; i++) {
         const char **bc = r->defs.items[i].base_classes;
         if (bc && bc[0]) found = 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return found;
 }
 
@@ -178,7 +178,7 @@ static int gp_extract_has_base_class(const char *src, CBMLanguage lang, const ch
 /* Scheme: two (define ...) forms → two Function nodes in the graph. */
 TEST(scheme_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "a.scm",
+    lsm_store_t *store = gp_index(&lp, "a.scm",
         "(define (compute x)\n"
         "  (* x x))\n"
         "\n"
@@ -200,7 +200,7 @@ TEST(scheme_import_not_extracted) {
         "(import (srfi srfi-1))\n"
         "\n"
         "(define (run) (display \"hi\"))\n",
-        CBM_LANG_SCHEME, "a.scm");
+        LSM_LANG_SCHEME, "a.scm");
     ASSERT_TRUE(n >= 1); /* CURRENTLY FAILS: scheme has no import_types; n == 0 */
     PASS();
 }
@@ -213,7 +213,7 @@ TEST(scheme_require_not_extracted) {
         "(require 'json)\n"
         "\n"
         "(define (run) (display 1))\n",
-        CBM_LANG_SCHEME, "a.scm");
+        LSM_LANG_SCHEME, "a.scm");
     ASSERT_TRUE(n >= 1); /* CURRENTLY FAILS: n == 0 */
     PASS();
 }
@@ -221,7 +221,7 @@ TEST(scheme_require_not_extracted) {
 /* Scheme: Module node always emitted as the file wrapper. */
 TEST(scheme_module_node) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "calc.scm",
+    lsm_store_t *store = gp_index(&lp, "calc.scm",
         "(define (add a b) (+ a b))\n");
     int mods = store ? gp_count_label(store, lp.project, "Module") : -1;
     gp_cleanup(&lp, store);
@@ -236,7 +236,7 @@ TEST(scheme_module_node) {
 /* Slang: plain functions become Function nodes. */
 TEST(slang_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "a.slang",
+    lsm_store_t *store = gp_index(&lp, "a.slang",
         "float helper(float x)\n"
         "{\n"
         "    return x * 2.0;\n"
@@ -263,7 +263,7 @@ TEST(slang_struct_node) {
         "struct Material {\n"
         "    float4 color;\n"
         "};\n",
-        CBM_LANG_SLANG, "types.slang", "Class");
+        LSM_LANG_SLANG, "types.slang", "Class");
     /* green if class_specifier is covered — red if struct maps to an uncovered node kind */
     ASSERT_TRUE(cls >= 1); /* EXPECTED GREEN: slang_class_types includes class_specifier */
     PASS();
@@ -286,7 +286,7 @@ TEST(slang_shader_entry_point) {
         "{\n"
         "    return float4(1.0, 0.0, 0.0, 1.0);\n"
         "}\n",
-        CBM_LANG_SLANG, "shader.slang", "Function");
+        LSM_LANG_SLANG, "shader.slang", "Function");
     ASSERT_TRUE(fns >= 2); /* green: annotated functions are still function_definitions */
     PASS();
 }
@@ -298,10 +298,10 @@ TEST(slang_include_import) {
         "#include \"common.slang\"\n"
         "\n"
         "float run(float x) { return x; }\n",
-        CBM_LANG_SLANG, "main.slang");
-    /* REAL BUG (class 2): SLANG absent from cbm_extract_imports() dispatch switch
+        LSM_LANG_SLANG, "main.slang");
+    /* REAL BUG (class 2): SLANG absent from lsm_extract_imports() dispatch switch
      * in extract_imports.c — slang_import_types is configured but never consumed;
-     * imports always 0. Fix: add CBM_LANG_SLANG case to the dispatch. */
+     * imports always 0. Fix: add LSM_LANG_SLANG case to the dispatch. */
     ASSERT_TRUE(n >= 2);
     PASS();
 }
@@ -313,7 +313,7 @@ TEST(slang_include_import) {
 /* Solidity: contract → Class node (solidity_class_types = contract_declaration). */
 TEST(solidity_contract_node) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "token.sol",
+    lsm_store_t *store = gp_index(&lp, "token.sol",
         "// SPDX-License-Identifier: MIT\n"
         "pragma solidity ^0.8.0;\n"
         "\n"
@@ -340,7 +340,7 @@ TEST(solidity_interface_node) {
         "    function totalSupply() external view returns (uint256);\n"
         "    function transfer(address to, uint256 amount) external returns (bool);\n"
         "}\n",
-        CBM_LANG_SOLIDITY, "IERC20.sol", "Interface");
+        LSM_LANG_SOLIDITY, "IERC20.sol", "Interface");
     /* green: interface_declaration in solidity_class_types maps to Interface label */
     ASSERT_TRUE(cls >= 1);
     PASS();
@@ -349,7 +349,7 @@ TEST(solidity_interface_node) {
 /* Solidity: contract methods → Method nodes inside the contract Class. */
 TEST(solidity_method_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "vault.sol",
+    lsm_store_t *store = gp_index(&lp, "vault.sol",
         "// SPDX-License-Identifier: MIT\n"
         "pragma solidity ^0.8.0;\n"
         "\n"
@@ -382,8 +382,8 @@ TEST(solidity_import_extracted) {
         "\n"
         "contract MyToken {\n"
         "}\n",
-        CBM_LANG_SOLIDITY, "a.sol");
-    /* REAL BUG (class 2): SOLIDITY absent from cbm_extract_imports() dispatch in
+        LSM_LANG_SOLIDITY, "a.sol");
+    /* REAL BUG (class 2): SOLIDITY absent from lsm_extract_imports() dispatch in
      * extract_imports.c — solidity_import_types configured but never consumed. */
     ASSERT_TRUE(n >= 2);
     PASS();
@@ -404,7 +404,7 @@ TEST(solidity_contract_inheritance) {
         "contract Child is Base {\n"
         "    function childFunc() public {}\n"
         "}\n",
-        CBM_LANG_SOLIDITY, "inherit.sol");
+        LSM_LANG_SOLIDITY, "inherit.sol");
     /* UNCERTAIN/RED: extract_base_classes looks for "inheritance_specifier" in
      * the fallback list; if tree-sitter-solidity uses a different field name
      * (e.g. "heritage") the base_classes array will be empty → INHERITS edge lost. */
@@ -419,7 +419,7 @@ TEST(solidity_contract_inheritance) {
 /* Squirrel: top-level functions become Function nodes. */
 TEST(squirrel_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "util.nut",
+    lsm_store_t *store = gp_index(&lp, "util.nut",
         "function greet(name) {\n"
         "    return \"Hello, \" + name\n"
         "}\n"
@@ -442,7 +442,7 @@ TEST(squirrel_class_node) {
         "    constructor(n) { name = n }\n"
         "    function speak() { return name + \" speaks\" }\n"
         "}\n",
-        CBM_LANG_SQUIRREL, "animal.nut", "Class");
+        LSM_LANG_SQUIRREL, "animal.nut", "Class");
     /* REAL BUG (NEW-16, node-extraction incompleteness): squirrel_class_types lists
      * "class_declaration" and the vendored squirrel grammar emits that exact node,
      * yet extract_defs produces 0 Class nodes. Squirrel class defs are not reaching
@@ -458,7 +458,7 @@ TEST(squirrel_class_methods) {
         "    function add(a, b) { return a + b }\n"
         "    function sub(a, b) { return a - b }\n"
         "}\n",
-        CBM_LANG_SQUIRREL, "calc.nut", "Method");
+        LSM_LANG_SQUIRREL, "calc.nut", "Method");
     /* REAL BUG (NEW-16): consequence of squirrel class defs not extracted — with no
      * Class node, in-body functions never get parent_class set, so 0 Method nodes. */
     ASSERT_TRUE(methods >= 2);
@@ -477,7 +477,7 @@ TEST(squirrel_class_inheritance) {
         "class Dog extends Animal {\n"
         "    function speak() { return \"Woof\" }\n"
         "}\n",
-        CBM_LANG_SQUIRREL, "dog.nut");
+        LSM_LANG_SQUIRREL, "dog.nut");
     /* UNCERTAIN/RED: Squirrel `extends` field name in tree-sitter-squirrel may
      * differ from the field names searched by extract_base_classes; no explicit
      * Squirrel branch exists → base_classes likely empty → INHERITS edge lost. */
@@ -492,7 +492,7 @@ TEST(squirrel_class_inheritance) {
 /* Starlark: def statements → Function nodes. */
 TEST(starlark_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "rules.bzl",
+    lsm_store_t *store = gp_index(&lp, "rules.bzl",
         "def cc_library_rule(name, srcs, deps = []):\n"
         "    native.cc_library(\n"
         "        name = name,\n"
@@ -520,7 +520,7 @@ TEST(starlark_load_not_extracted) {
         "\n"
         "def my_target(name):\n"
         "    cc_library(name = name)\n",
-        CBM_LANG_STARLARK, "BUILD.bzl");
+        LSM_LANG_STARLARK, "BUILD.bzl");
     ASSERT_TRUE(n >= 2); /* CURRENTLY FAILS: with_clause ≠ load_statement → n == 0 */
     PASS();
 }
@@ -528,14 +528,14 @@ TEST(starlark_load_not_extracted) {
 /* Starlark: .star extension also routes to Starlark grammar. */
 TEST(starlark_star_extension_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "macros.star",
+    lsm_store_t *store = gp_index(&lp, "macros.star",
         "def format_label(name, pkg = None):\n"
         "    if pkg:\n"
         "        return \"//{}/:{}\".format(pkg, name)\n"
         "    return \":{}\".format(name)\n");
     int fns = store ? gp_count_label(store, lp.project, "Function") : -1;
     gp_cleanup(&lp, store);
-    ASSERT_TRUE(fns >= 1); /* green: .star → CBM_LANG_STARLARK → Function node */
+    ASSERT_TRUE(fns >= 1); /* green: .star → LSM_LANG_STARLARK → Function node */
     PASS();
 }
 
@@ -546,7 +546,7 @@ TEST(starlark_star_extension_function_nodes) {
 /* Sway: fn items → Function nodes. */
 TEST(sway_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "contract.sw",
+    lsm_store_t *store = gp_index(&lp, "contract.sw",
         "fn compute(x: u64) -> u64 {\n"
         "    x * x\n"
         "}\n"
@@ -573,7 +573,7 @@ TEST(sway_struct_node) {
         "    width: u64,\n"
         "    height: u64,\n"
         "}\n",
-        CBM_LANG_SWAY, "geom.sw", "Struct");
+        LSM_LANG_SWAY, "geom.sw", "Struct");
     /* REAL BUG (NEW-16): sway_class_types lists "struct_item" and the vendored sway
      * grammar emits that node, yet 0 Struct nodes are produced — Sway type defs are
      * not reaching extract_class_def. */
@@ -588,8 +588,8 @@ TEST(sway_use_import_extracted) {
         "use fuel_std::token::transfer;\n"
         "\n"
         "fn run() {}\n",
-        CBM_LANG_SWAY, "a.sw");
-    /* REAL BUG (class 2): SWAY absent from cbm_extract_imports() dispatch in
+        LSM_LANG_SWAY, "a.sw");
+    /* REAL BUG (class 2): SWAY absent from lsm_extract_imports() dispatch in
      * extract_imports.c — sway_import_types configured but never consumed. */
     ASSERT_TRUE(n >= 2);
     PASS();
@@ -602,7 +602,7 @@ TEST(sway_abi_node) {
         "    fn total_supply() -> u64;\n"
         "    fn balance_of(addr: b256) -> u64;\n"
         "}\n",
-        CBM_LANG_SWAY, "abi.sw", "Interface");
+        LSM_LANG_SWAY, "abi.sw", "Interface");
     /* REAL BUG (NEW-16): abi_item is in sway_class_types and the grammar emits it,
      * but 0 Interface nodes result (Sway type defs not extracted). Note also
      * class_label_for_kind has no "abi_item" case, so even if extracted it would
@@ -620,7 +620,7 @@ TEST(sway_impl_node) {
         "    fn new() -> Self { Counter { value: 0 } }\n"
         "    fn increment(ref mut self) { self.value += 1; }\n"
         "}\n",
-        CBM_LANG_SWAY, "counter.sw", "Class");
+        LSM_LANG_SWAY, "counter.sw", "Class");
     /* green: impl_item in sway_class_types → Class label */
     ASSERT_TRUE(types >= 1);
     PASS();
@@ -633,7 +633,7 @@ TEST(sway_impl_node) {
 /* Tcl: proc declarations → Function nodes. */
 TEST(tcl_proc_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "utils.tcl",
+    lsm_store_t *store = gp_index(&lp, "utils.tcl",
         "proc greet {name} {\n"
         "    return \"Hello, $name\"\n"
         "}\n"
@@ -658,7 +658,7 @@ TEST(tcl_namespace_node) {
         "    proc add {a b} { expr {$a + $b} }\n"
         "    proc mul {a b} { expr {$a * $b} }\n"
         "}\n",
-        CBM_LANG_TCL, "math.tcl", "Class");
+        LSM_LANG_TCL, "math.tcl", "Class");
     /* REAL BUG (NEW-16): tcl_class_types lists "namespace" and the grammar emits a
      * "namespace" node, yet 0 Class nodes are produced — Tcl namespace defs are not
      * reaching extract_class_def. */
@@ -677,7 +677,7 @@ TEST(tcl_source_not_extracted) {
         "package require http\n"
         "\n"
         "proc run {} { puts \"running\" }\n",
-        CBM_LANG_TCL, "main.tcl");
+        LSM_LANG_TCL, "main.tcl");
     ASSERT_TRUE(n >= 2); /* CURRENTLY FAILS: n == 0 */
     PASS();
 }
@@ -689,7 +689,7 @@ TEST(tcl_source_not_extracted) {
 /* Teal: local function declarations → Function nodes. */
 TEST(teal_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "math.tl",
+    lsm_store_t *store = gp_index(&lp, "math.tl",
         "local function add(a: number, b: number): number\n"
         "   return a + b\n"
         "end\n"
@@ -720,7 +720,7 @@ TEST(teal_record_node) {
         "   g: number\n"
         "   b: number\n"
         "end\n",
-        CBM_LANG_TEAL, "types.tl", "Class");
+        LSM_LANG_TEAL, "types.tl", "Class");
     /* green: record_declaration in teal_class_types → Class label */
     ASSERT_TRUE(types >= 2);
     PASS();
@@ -738,7 +738,7 @@ TEST(teal_require_not_extracted) {
         "local function run()\n"
         "   return json.encode({x = 1})\n"
         "end\n",
-        CBM_LANG_TEAL, "main.tl");
+        LSM_LANG_TEAL, "main.tl");
     ASSERT_TRUE(n >= 2); /* CURRENTLY FAILS: n == 0 */
     PASS();
 }
@@ -749,7 +749,7 @@ TEST(teal_interface_node) {
         "local interface Drawable\n"
         "   draw: function(self: Drawable)\n"
         "end\n",
-        CBM_LANG_TEAL, "drawable.tl", "Interface");
+        LSM_LANG_TEAL, "drawable.tl", "Interface");
     /* green: interface_declaration in teal_class_types → Interface label */
     ASSERT_TRUE(ifaces >= 1);
     PASS();
@@ -762,7 +762,7 @@ TEST(teal_interface_node) {
 /* VimScript: function! declarations → Function nodes. */
 TEST(vimscript_function_bang_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "plugin.vim",
+    lsm_store_t *store = gp_index(&lp, "plugin.vim",
         "function! FormatBuffer() abort\n"
         "  %s/\\s\\+$//e\n"
         "endfunction\n"
@@ -793,7 +793,7 @@ TEST(vimscript_function_no_bang) {
         "function MyPlugin#Enable()\n"
         "  call MyPlugin#Init()\n"
         "endfunction\n",
-        CBM_LANG_VIMSCRIPT, "myplugin.vim", "Function");
+        LSM_LANG_VIMSCRIPT, "myplugin.vim", "Function");
     /* green: non-bang function declarations also extracted */
     ASSERT_TRUE(fns >= 2);
     PASS();
@@ -805,7 +805,7 @@ TEST(vimscript_autoload_function) {
         "function! airline#statusline#update()\n"
         "  let s:parts = []\n"
         "endfunction\n",
-        CBM_LANG_VIMSCRIPT, "statusline.vim", "Function");
+        LSM_LANG_VIMSCRIPT, "statusline.vim", "Function");
     ASSERT_TRUE(fns >= 1); /* green: autoload-namespaced function → Function node */
     PASS();
 }
@@ -817,7 +817,7 @@ TEST(vimscript_autoload_function) {
 /* WGSL: plain fn items → Function nodes. */
 TEST(wgsl_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "compute.wgsl",
+    lsm_store_t *store = gp_index(&lp, "compute.wgsl",
         "fn dot2(v: vec2<f32>) -> f32 {\n"
         "  return v.x * v.x + v.y * v.y;\n"
         "}\n"
@@ -856,7 +856,7 @@ TEST(wgsl_entry_point_functions) {
         "\n"
         "@compute @workgroup_size(64)\n"
         "fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {}\n",
-        CBM_LANG_WGSL, "pipeline.wgsl", "Function");
+        LSM_LANG_WGSL, "pipeline.wgsl", "Function");
     ASSERT_TRUE(fns >= 3); /* green: all three entry points are function_declarations */
     PASS();
 }
@@ -873,7 +873,7 @@ TEST(wgsl_struct_node) {
         "  position: vec3<f32>,\n"
         "  intensity: f32,\n"
         "}\n",
-        CBM_LANG_WGSL, "uniforms.wgsl", "Struct");
+        LSM_LANG_WGSL, "uniforms.wgsl", "Struct");
     /* REAL BUG (NEW-16): wgsl_class_types lists "struct_declaration" and the vendored
      * wgsl grammar emits that node, yet 0 Struct nodes result — WGSL struct defs are
      * not reaching extract_class_def. */
@@ -888,8 +888,8 @@ TEST(wgsl_enable_directive_extracted) {
         "enable dual_source_blending;\n"
         "\n"
         "fn run() -> f16 { return f16(1.0); }\n",
-        CBM_LANG_WGSL, "ext.wgsl");
-    /* REAL BUG (class 2): WGSL absent from cbm_extract_imports() dispatch in
+        LSM_LANG_WGSL, "ext.wgsl");
+    /* REAL BUG (class 2): WGSL absent from lsm_extract_imports() dispatch in
      * extract_imports.c — wgsl_import_types ("enable_directive") never consumed. */
     ASSERT_TRUE(n >= 2);
     PASS();
@@ -902,7 +902,7 @@ TEST(wgsl_enable_directive_extracted) {
 /* Zsh: function declarations → Function nodes. */
 TEST(zsh_function_nodes) {
     GP_Proj lp;
-    cbm_store_t *store = gp_index(&lp, "deploy.zsh",
+    lsm_store_t *store = gp_index(&lp, "deploy.zsh",
         "function check_deps {\n"
         "  command -v docker || return 1\n"
         "  command -v kubectl || return 1\n"
@@ -932,7 +932,7 @@ TEST(zsh_function_shorthand) {
         "teardown() {\n"
         "  echo \"tearing down\"\n"
         "}\n",
-        CBM_LANG_ZSH, "test_hooks.zsh", "Function");
+        LSM_LANG_ZSH, "test_hooks.zsh", "Function");
     /* green: both POSIX-style `name()` and `function name` forms should be extracted */
     ASSERT_TRUE(fns >= 2);
     PASS();
@@ -951,7 +951,7 @@ TEST(zsh_source_not_extracted) {
         "function run {\n"
         "  echo \"running\"\n"
         "}\n",
-        CBM_LANG_ZSH, "main.zsh");
+        LSM_LANG_ZSH, "main.zsh");
     ASSERT_TRUE(n >= 2); /* CURRENTLY FAILS: n == 0 */
     PASS();
 }

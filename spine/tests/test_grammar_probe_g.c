@@ -39,7 +39,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -60,7 +60,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } GpgProj;
 
 typedef struct {
@@ -75,33 +75,33 @@ static void gpg_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *gpg_open_indexed(GpgProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *gpg_open_indexed(GpgProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project)
         return NULL;
     const char *home = getenv("HOME");
     if (!home)
         home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv)
         return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp)
         free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *gpg_index_files(GpgProj *lp, const GpgFile *files, int nfiles) {
+static lsm_store_t *gpg_index_files(GpgProj *lp, const GpgFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_gpg_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir))
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_gpg_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir))
         return NULL;
     gpg_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
@@ -110,7 +110,7 @@ static cbm_store_t *gpg_index_files(GpgProj *lp, const GpgFile *files, int nfile
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -122,11 +122,11 @@ static cbm_store_t *gpg_index_files(GpgProj *lp, const GpgFile *files, int nfile
     return gpg_open_indexed(lp);
 }
 
-static void gpg_cleanup(GpgProj *lp, cbm_store_t *store) {
+static void gpg_cleanup(GpgProj *lp, lsm_store_t *store) {
     if (store)
-        cbm_store_close(store);
+        lsm_store_close(store);
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -142,12 +142,12 @@ static void gpg_cleanup(GpgProj *lp, cbm_store_t *store) {
 
 /* ── Node-count helpers ─────────────────────────────────────────── */
 
-static int gpg_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int gpg_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
@@ -164,17 +164,17 @@ typedef struct {
 
 static GpgMetrics gpg_metrics_files(const GpgFile *files, int nfiles) {
     GpgProj lp;
-    cbm_store_t *store = gpg_index_files(&lp, files, nfiles);
+    lsm_store_t *store = gpg_index_files(&lp, files, nfiles);
     GpgMetrics m = {0};
     if (store) {
         m.ok = 1;
-        m.total_nodes = cbm_store_count_nodes(store, lp.project);
+        m.total_nodes = lsm_store_count_nodes(store, lp.project);
         m.modules = gpg_count_label(store, lp.project, "Module");
         m.classes = gpg_count_label(store, lp.project, "Class");
         m.variables = gpg_count_label(store, lp.project, "Variable");
         m.sections = gpg_count_label(store, lp.project, "Section");
-        m.imports = cbm_store_count_edges_by_type(store, lp.project, "IMPORTS");
-        m.depends = cbm_store_count_edges_by_type(store, lp.project, "DEPENDS_ON");
+        m.imports = lsm_store_count_edges_by_type(store, lp.project, "IMPORTS");
+        m.depends = lsm_store_count_edges_by_type(store, lp.project, "DEPENDS_ON");
     }
     gpg_cleanup(&lp, store);
     return m;
@@ -451,7 +451,7 @@ TEST(probe_json_variable_nodes) {
 /* JSON: three top-level keys → ≥ 2 Variable nodes (floor from histogram). */
 TEST(probe_json_more_variables) {
     /* Fixture fix: "package.json" is in discover.c IGNORED_JSON_FILES, so
-     * detect_file_language() returns CBM_LANG_COUNT and the file is never
+     * detect_file_language() returns LSM_LANG_COUNT and the file is never
      * indexed (0 nodes).  Use a generic .json filename so the JSON grammar
      * actually runs (grammar_labels json=Variable:2). */
     GpgMetrics m = gpg_metrics("data.json", "{\n"
@@ -570,7 +570,7 @@ TEST(probe_ini_section_and_key) {
     PASS();
 }
 
-/* INI: .conf extension also maps to CBM_LANG_INI; must produce same structure. */
+/* INI: .conf extension also maps to LSM_LANG_INI; must produce same structure. */
 TEST(probe_ini_conf_extension) {
     GpgMetrics m = gpg_metrics("server.conf", "[server]\n"
                                               "listen = 0.0.0.0\n");
@@ -694,8 +694,8 @@ TEST(probe_dotenv_module_only) {
     /* REAL BUG (NEW class — file-index routing gap): the DotEnv grammar +
      * histogram (grammar_labels dotenv=Module:1) exist and work via DIRECT
      * extraction, but ".env" has no FILENAME_TABLE / EXT_TABLE entry in
-     * language.c, so file-based index_repository's cbm_language_for_filename
-     * returns CBM_LANG_COUNT and the file is never indexed → 0 Module nodes.
+     * language.c, so file-based index_repository's lsm_language_for_filename
+     * returns LSM_LANG_COUNT and the file is never indexed → 0 Module nodes.
      * Routing/registration gap, distinct from extraction classes 2/16.  RED. */
     ASSERT_TRUE(m.modules == 1); /* REAL BUG — .env not routed by file index */
     ASSERT_TRUE(m.variables == 0);
@@ -709,7 +709,7 @@ TEST(probe_dotenv_local_suffix) {
     ASSERT_TRUE(m.ok);
     /* REAL BUG (NEW class — file-index routing gap): ".env.local" has no
      * FILENAME_TABLE/EXT_TABLE entry, so file-based index_repository never
-     * routes it to CBM_LANG_DOTENV → 0 Module nodes.  Same routing gap as
+     * routes it to LSM_LANG_DOTENV → 0 Module nodes.  Same routing gap as
      * probe_dotenv_module_only.  RED. */
     ASSERT_TRUE(m.modules >= 1); /* REAL BUG — .env.local not routed by file index */
     PASS();
@@ -720,7 +720,7 @@ TEST(probe_dotenv_local_suffix) {
  *
  * gitignore golden histogram: Module:1 (pure-data).
  * Pattern files — no structural graph nodes.
- * Extension: cbm_path_ext(".gitignore") → "gitignore" (strips the leading dot).
+ * Extension: lsm_path_ext(".gitignore") → "gitignore" (strips the leading dot).
  * ══════════════════════════════════════════════════════════════════ */
 
 /* gitignore: pattern file → only Module node. */
@@ -732,13 +732,13 @@ TEST(probe_gitignore_module_only) {
                                              ".DS_Store\n");
     ASSERT_TRUE(m.ok);
     /* CONTRACT (corrected): unlike .gitattributes, ".gitignore" is intentionally
-     * NOT indexed as a source file — the cbm_discover walker consumes it as
+     * NOT indexed as a source file — the lsm_discover walker consumes it as
      * ignore-rule input (see test_discover.c discover_with_gitignore /
-     * discover_gitignore_dir_excluded_issue234 / discover_cbmignore_stacks,
+     * discover_gitignore_dir_excluded_issue234 / discover_lsmignore_stacks,
      * which assert .gitignore is excluded from the discovered file set). The
      * gitignore grammar exists for DIRECT extraction only; via the file walker
      * the ignore-control role wins by design, so it yields 0 nodes. Routing it
-     * to CBM_LANG_GITIGNORE would regress those three established tests. */
+     * to LSM_LANG_GITIGNORE would regress those three established tests. */
     ASSERT_TRUE(m.modules == 0); /* .gitignore consumed as ignore-rules, not indexed (by design) */
     ASSERT_TRUE(m.variables == 0);
     PASS();
@@ -781,7 +781,7 @@ TEST(probe_properties_module_only) {
                                                  "log.level=INFO\n");
     ASSERT_TRUE(m.ok);
     /* GREEN: .properties produces a Module node plus one Variable per `key=value`
-     * property line (extract_defs.c CBM_LANG_PROPERTIES → push_var_def). The
+     * property line (extract_defs.c LSM_LANG_PROPERTIES → push_var_def). The
      * fixture has 3 property lines (server.host, server.port, log.level). */
     ASSERT_TRUE(m.modules == 1);
     ASSERT_TRUE(m.variables == 3);
@@ -878,7 +878,7 @@ TEST(probe_po_module_only) {
  * GROUP 23 — Regex (.re)
  *
  * Regex golden histogram: Module:1 (pure-data).
- * Extension: ".re" maps to CBM_LANG_REGEX in grammar_cases.
+ * Extension: ".re" maps to LSM_LANG_REGEX in grammar_cases.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Regex: pattern file → only Module node. */
@@ -955,7 +955,7 @@ TEST(probe_bibtex_module_only) {
  *
  * FORM golden histogram: Module:1, Variable:1
  * The FORM language (symbolic algebra) produces a Variable node for
- * one definition.  Extension: .frm (CBM_LANG_FORM in EXT_TABLE).
+ * one definition.  Extension: .frm (LSM_LANG_FORM in EXT_TABLE).
  * ══════════════════════════════════════════════════════════════════ */
 
 /* FORM: file with a variable declaration → at least 1 Variable node. */

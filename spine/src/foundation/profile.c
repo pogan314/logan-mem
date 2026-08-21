@@ -18,27 +18,27 @@ enum {
 };
 #define PROF_US_PER_SEC_D 1000000.0
 
-bool cbm_profile_active = false;
+bool lsm_profile_active = false;
 
-void cbm_profile_init(void) {
-    const char *env = getenv("CBM_PROFILE");
+void lsm_profile_init(void) {
+    const char *env = getenv("LSM_PROFILE");
     if (env && env[0] != '\0' && env[0] != '0') {
-        cbm_profile_active = true;
+        lsm_profile_active = true;
     }
 }
 
-void cbm_profile_enable(void) {
-    cbm_profile_active = true;
+void lsm_profile_enable(void) {
+    lsm_profile_active = true;
 }
 
-void cbm_profile_now(struct timespec *ts) {
-    cbm_clock_gettime(CLOCK_MONOTONIC, ts);
+void lsm_profile_now(struct timespec *ts) {
+    lsm_clock_gettime(CLOCK_MONOTONIC, ts);
 }
 
-void cbm_profile_log_elapsed(const char *phase, const char *sub, const struct timespec *start,
+void lsm_profile_log_elapsed(const char *phase, const char *sub, const struct timespec *start,
                              long items) {
     struct timespec now;
-    cbm_clock_gettime(CLOCK_MONOTONIC, &now);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &now);
 
     long us = ((long)(now.tv_sec - start->tv_sec) * PROF_US_PER_SEC) +
               ((now.tv_nsec - start->tv_nsec) / PROF_NS_PER_US);
@@ -55,14 +55,14 @@ void cbm_profile_log_elapsed(const char *phase, const char *sub, const struct ti
         char rate_buf[PROF_BUF_LEN];
         snprintf(items_buf, sizeof(items_buf), "%ld", items);
         snprintf(rate_buf, sizeof(rate_buf), "%ld", rate);
-        cbm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf, "items",
+        lsm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf, "items",
                      items_buf, "rate_per_s", rate_buf);
     } else if (items > 0) {
         snprintf(items_buf, sizeof(items_buf), "%ld", items);
-        cbm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf, "items",
+        lsm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf, "items",
                      items_buf);
     } else {
-        cbm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf);
+        lsm_log_info("prof", "phase", phase, "sub", sub, "ms", ms_buf, "us", us_buf);
     }
 }
 
@@ -80,35 +80,35 @@ enum {
 
 static long scale_elapsed_us(const struct timespec *start) {
     struct timespec now;
-    cbm_clock_gettime(CLOCK_MONOTONIC, &now);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &now);
     return ((long)(now.tv_sec - start->tv_sec) * PROF_US_PER_SEC) +
            ((now.tv_nsec - start->tv_nsec) / PROF_NS_PER_US);
 }
 
-void cbm_scale_begin(cbm_scale_probe_t *probe, const char *phase, long total) {
+void lsm_scale_begin(lsm_scale_probe_t *probe, const char *phase, long total) {
     if (!probe) {
         return;
     }
     probe->phase = phase;
     probe->total = total;
     atomic_init(&probe->next_cp, 0);
-    for (int i = 0; i < CBM_SCALE_CHECKPOINTS; i++) {
+    for (int i = 0; i < LSM_SCALE_CHECKPOINTS; i++) {
         probe->cp_us[i] = 0;
         probe->cp_items[i] = 0;
     }
-    cbm_clock_gettime(CLOCK_MONOTONIC, &probe->start);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &probe->start);
 }
 
-void cbm_scale_tick(cbm_scale_probe_t *probe, long done) {
+void lsm_scale_tick(lsm_scale_probe_t *probe, long done) {
     if (!probe || probe->total < SCALE_MIN_ITEMS) {
         return;
     }
     int cp = atomic_load_explicit(&probe->next_cp, memory_order_relaxed);
-    if (cp >= CBM_SCALE_CHECKPOINTS) {
+    if (cp >= LSM_SCALE_CHECKPOINTS) {
         return;
     }
     /* cp 0..3 -> total/8, total/4, total/2, total */
-    long threshold = probe->total >> (CBM_SCALE_CHECKPOINTS - 1 - cp);
+    long threshold = probe->total >> (LSM_SCALE_CHECKPOINTS - 1 - cp);
     if (done < threshold) {
         return;
     }
@@ -122,7 +122,7 @@ void cbm_scale_tick(cbm_scale_probe_t *probe, long done) {
     probe->cp_items[cp] = done;
 }
 
-double cbm_scale_fit_k(long first_n, long first_us, long last_n, long last_us) {
+double lsm_scale_fit_k(long first_n, long first_us, long last_n, long last_us) {
     if (first_n <= 0 || first_us <= 0 || last_us <= 0 || last_n <= first_n) {
         return -1.0;
     }
@@ -130,7 +130,7 @@ double cbm_scale_fit_k(long first_n, long first_us, long last_n, long last_us) {
     return log((double)last_us / (double)first_us) / log((double)last_n / (double)first_n);
 }
 
-void cbm_scale_end(cbm_scale_probe_t *probe) {
+void lsm_scale_end(lsm_scale_probe_t *probe) {
     if (!probe || probe->total < SCALE_MIN_ITEMS) {
         return;
     }
@@ -146,7 +146,7 @@ void cbm_scale_end(cbm_scale_probe_t *probe) {
         return;
     }
 
-    double k = cbm_scale_fit_k(first_n, first_us, last_n, last_us);
+    double k = lsm_scale_fit_k(first_n, first_us, last_n, last_us);
     if (k < 0.0) {
         return;
     }
@@ -161,16 +161,16 @@ void cbm_scale_end(cbm_scale_probe_t *probe) {
     snprintf(per_buf, sizeof(per_buf), "%ld", us_per_item);
     snprintf(ms_buf, sizeof(ms_buf), "%ld", last_us / PROF_US_PER_MS);
 
-    if (k >= CBM_SCALE_WARN_K) {
+    if (k >= LSM_SCALE_WARN_K) {
         /* Unflagged on purpose: this is the alarm the next accidental O(n^2)
          * should trip in an ordinary user's log. */
-        cbm_log_warn("scaling.superlinear", "phase", probe->phase, "k", k_buf, "items", n_buf,
+        lsm_log_warn("scaling.superlinear", "phase", probe->phase, "k", k_buf, "items", n_buf,
                      "elapsed_ms", ms_buf, "us_per_item", per_buf);
     }
-    if (!cbm_profile_active) {
+    if (!lsm_profile_active) {
         return;
     }
-    char curve[PROF_BUF_LEN * CBM_SCALE_CHECKPOINTS];
+    char curve[PROF_BUF_LEN * LSM_SCALE_CHECKPOINTS];
     int used = 0;
     for (int i = 0; i < recorded && used < (int)sizeof(curve) - 1; i++) {
         int wrote =
@@ -181,6 +181,6 @@ void cbm_scale_end(cbm_scale_probe_t *probe) {
         }
         used += wrote;
     }
-    cbm_log_info("scaling", "phase", probe->phase, "k", k_buf, "items", n_buf, "elapsed_ms", ms_buf,
+    lsm_log_info("scaling", "phase", probe->phase, "k", k_buf, "items", n_buf, "elapsed_ms", ms_buf,
                  "us_per_item", per_buf, "curve_items_ms", curve);
 }

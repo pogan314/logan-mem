@@ -33,7 +33,7 @@
 static char g_tmpdir[256];
 static char g_repodir[512];
 static char g_dbpath[512];
-static cbm_mcp_server_t *g_srv = NULL;
+static lsm_mcp_server_t *g_srv = NULL;
 static char *g_project = NULL;
 
 /* Baseline counts after full index */
@@ -50,7 +50,7 @@ static double g_full_index_ms = 0;
 
 static double now_ms(void) {
     struct timespec ts;
-    cbm_clock_gettime(CLOCK_MONOTONIC, &ts);
+    lsm_clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
 }
 
@@ -62,7 +62,7 @@ static void write_file_at(const char *rel_path, const char *content) {
     char *slash = strrchr(dir, '/');
     if (slash) {
         *slash = '\0';
-        cbm_mkdir(dir);
+        lsm_mkdir(dir);
     }
     FILE *f = fopen(path, "w");
     if (f) {
@@ -81,13 +81,13 @@ static void delete_file_at(const char *rel_path) {
 static int reformat_files(const char *subdir, int max_files) {
     char dir[512];
     snprintf(dir, sizeof(dir), "%s/%s", g_repodir, subdir);
-    cbm_dir_t *d = cbm_opendir(dir);
+    lsm_dir_t *d = lsm_opendir(dir);
     if (!d) {
         return -1;
     }
-    cbm_dirent_t *entry;
+    lsm_dirent_t *entry;
     int count = 0;
-    while ((entry = cbm_readdir(d)) != NULL && count < max_files) {
+    while ((entry = lsm_readdir(d)) != NULL && count < max_files) {
         size_t nlen = strlen(entry->name);
         if (nlen < 4 || strcmp(entry->name + nlen - 3, ".py") != 0) {
             continue;
@@ -100,14 +100,14 @@ static int reformat_files(const char *subdir, int max_files) {
         th_append_file(path, "# reformatted\n");
         count++;
     }
-    cbm_closedir(d);
+    lsm_closedir(d);
     return 0;
 }
 
 static char *index_repo(void) {
     char args[512];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", g_repodir);
-    return cbm_mcp_handle_tool(g_srv, "index_repository", args);
+    return lsm_mcp_handle_tool(g_srv, "index_repository", args);
 }
 
 /* Timed index: returns response, sets *elapsed_ms and *peak_rss_mb */
@@ -115,7 +115,7 @@ static char *index_repo_timed(double *elapsed_ms, size_t *peak_rss_mb) {
     double t0 = now_ms();
     char *resp = index_repo();
     *elapsed_ms = now_ms() - t0;
-    *peak_rss_mb = cbm_mem_peak_rss() / (1024 * 1024);
+    *peak_rss_mb = lsm_mem_peak_rss() / (1024 * 1024);
     return resp;
 }
 
@@ -125,7 +125,7 @@ static char *call_tool(const char *tool, const char *args_fmt, ...) {
     va_start(ap, args_fmt);
     vsnprintf(args, sizeof(args), args_fmt, ap);
     va_end(ap);
-    return cbm_mcp_handle_tool(g_srv, tool, args);
+    return lsm_mcp_handle_tool(g_srv, tool, args);
 }
 
 /* Parse integer from a tool response (handles the nested MCP envelope).
@@ -152,34 +152,34 @@ static int count_in_response(const char *resp, const char *key) {
 
 /* ── Direct store queries (more reliable than MCP for tests) ────── */
 
-static cbm_store_t *open_store(void) {
-    return cbm_store_open_path_existing(g_dbpath);
+static lsm_store_t *open_store(void) {
+    return lsm_store_open_path_existing(g_dbpath);
 }
 
 static int get_node_count(void) {
-    cbm_store_t *s = open_store();
+    lsm_store_t *s = open_store();
     if (!s)
         return -1;
-    int c = cbm_store_count_nodes(s, g_project);
-    cbm_store_close(s);
+    int c = lsm_store_count_nodes(s, g_project);
+    lsm_store_close(s);
     return c;
 }
 
 static int get_edge_count(void) {
-    cbm_store_t *s = open_store();
+    lsm_store_t *s = open_store();
     if (!s)
         return -1;
-    int c = cbm_store_count_edges(s, g_project);
-    cbm_store_close(s);
+    int c = lsm_store_count_edges(s, g_project);
+    lsm_store_close(s);
     return c;
 }
 
 static int get_edge_count_by_type(const char *type) {
-    cbm_store_t *s = open_store();
+    lsm_store_t *s = open_store();
     if (!s)
         return -1;
-    int c = cbm_store_count_edges_by_type(s, g_project, type);
-    cbm_store_close(s);
+    int c = lsm_store_count_edges_by_type(s, g_project, type);
+    lsm_store_close(s);
     return c;
 }
 
@@ -203,8 +203,8 @@ static int count_by_label(const char *label) {
 /* ── Setup / Teardown ─────────────────────────────────────────────── */
 
 static int incremental_setup(void) {
-    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/cbm_incr_XXXXXX");
-    if (!cbm_mkdtemp(g_tmpdir))
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/lsm_incr_XXXXXX");
+    if (!lsm_mkdtemp(g_tmpdir))
         return -1;
 
     snprintf(g_repodir, sizeof(g_repodir), "%s/fastapi", g_tmpdir);
@@ -213,7 +213,7 @@ static int incremental_setup(void) {
      * persistent cache; every run local-clones from there (seconds, offline).
      * The one-time clone is staged and committed with an atomic rename so a
      * torn download can never masquerade as a valid cache. */
-    const char *cache_home = getenv("CBM_TEST_FIXTURE_CACHE");
+    const char *cache_home = getenv("LSM_TEST_FIXTURE_CACHE");
     char cache_root[512];
     if (cache_home && cache_home[0]) {
         snprintf(cache_root, sizeof(cache_root), "%s", cache_home);
@@ -221,13 +221,13 @@ static int incremental_setup(void) {
         const char *home = getenv("HOME");
         if (!home || !home[0])
             home = ".";
-        snprintf(cache_root, sizeof(cache_root), "%s/.cache/cbm-test-fixtures", home);
+        snprintf(cache_root, sizeof(cache_root), "%s/.cache/lsm-test-fixtures", home);
     }
     char cache_repo[640];
     snprintf(cache_repo, sizeof(cache_repo), "%s/fastapi-0.99.1", cache_root);
     char cmd[1600];
-    if (!cbm_is_dir(cache_repo)) {
-        (void)cbm_mkdir_p(cache_root, 0700);
+    if (!lsm_is_dir(cache_repo)) {
+        (void)lsm_mkdir_p(cache_root, 0700);
         char cache_stage[700];
         snprintf(cache_stage, sizeof(cache_stage), "%s.stage", cache_repo);
         th_rmtree(cache_stage);
@@ -238,7 +238,7 @@ static int incremental_setup(void) {
         int fetch_rc = system(cmd);
         if (fetch_rc != 0 || rename(cache_stage, cache_repo) != 0) {
             th_rmtree(cache_stage);
-            if (!cbm_is_dir(cache_repo)) {
+            if (!lsm_is_dir(cache_repo)) {
                 printf("  fixture clone failed (rc=%d) — network offline?\n", fetch_rc);
                 return -1;
             }
@@ -261,32 +261,32 @@ static int incremental_setup(void) {
     snprintf(trim, sizeof(trim), "%s/tests", g_repodir);
     th_rmtree(trim);
 
-    g_project = cbm_project_name_from_path(g_repodir);
+    g_project = lsm_project_name_from_path(g_repodir);
     if (!g_project)
         return -1;
 
-    const char *cache_dir = cbm_resolve_cache_dir();
+    const char *cache_dir = lsm_resolve_cache_dir();
     int dbpath_length =
         cache_dir ? snprintf(g_dbpath, sizeof(g_dbpath), "%s/%s.db", cache_dir, g_project) : -1;
     if (dbpath_length <= 0 || (size_t)dbpath_length >= sizeof(g_dbpath) ||
-        !cbm_mkdir_p(cache_dir, 0700)) {
+        !lsm_mkdir_p(cache_dir, 0700)) {
         return -1;
     }
 
     unlink(g_dbpath);
 
-    g_srv = cbm_mcp_server_new(NULL);
+    g_srv = lsm_mcp_server_new(NULL);
     if (!g_srv)
         return -1;
 
-    g_rss_before_full = cbm_mem_rss();
+    g_rss_before_full = lsm_mem_rss();
 
     return 0;
 }
 
 static void incremental_teardown(void) {
     if (g_srv) {
-        cbm_mcp_server_free(g_srv);
+        lsm_mcp_server_free(g_srv);
         g_srv = NULL;
     }
     if (g_project) {
@@ -365,10 +365,10 @@ TEST(incr_full_index) {
 #endif
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
-#define CBM_TEST_RSS_BUDGET_UNMEASURABLE 1
+#define LSM_TEST_RSS_BUDGET_UNMEASURABLE 1
 #endif
 #endif
-#if defined(CBM_TEST_RSS_BUDGET_UNMEASURABLE)
+#if defined(LSM_TEST_RSS_BUDGET_UNMEASURABLE)
     /* MSan maps shadow (and with origins, a second) mapping for every
      * allocation, inflating RSS by construction: this index measured 3054MB
      * against the 2304MB budget on the x86-64 lane. The budget exists to catch
@@ -933,7 +933,7 @@ static char *call_tool_timed(const char *tool, double *ms, const char *args_fmt,
     vsnprintf(args, sizeof(args), args_fmt, ap);
     va_end(ap);
     double t0 = now_ms();
-    char *resp = cbm_mcp_handle_tool(g_srv, tool, args);
+    char *resp = lsm_mcp_handle_tool(g_srv, tool, args);
     *ms = now_ms() - t0;
     return resp;
 }
@@ -2994,7 +2994,7 @@ TEST(tool_delete_and_verify) {
     /* Create a throwaway project to delete */
     char tmpdir2[256];
     snprintf(tmpdir2, sizeof(tmpdir2), "%s/throwaway", g_tmpdir);
-    cbm_mkdir(tmpdir2);
+    lsm_mkdir(tmpdir2);
     char pypath[512];
     snprintf(pypath, sizeof(pypath), "%s/dummy.py", tmpdir2);
     FILE *f = fopen(pypath, "w");
@@ -3008,7 +3008,7 @@ TEST(tool_delete_and_verify) {
     TOOL_OK(r, ms);
     free(r);
 
-    char *throwaway_project = cbm_project_name_from_path(tmpdir2);
+    char *throwaway_project = lsm_project_name_from_path(tmpdir2);
     ASSERT(throwaway_project != NULL);
 
     /* Verify it exists */

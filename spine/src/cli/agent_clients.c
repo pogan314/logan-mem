@@ -18,80 +18,80 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define AGENT_ENTRY_KEY "codebase-memory-mcp"
+#define AGENT_ENTRY_KEY "logan-spine-mcp"
 #define AGENT_MAX_CONFIG_BYTES (8U * 1024U * 1024U)
 #define AGENT_JSON_MAX_DEPTH 64U
 
-static int agent_install_callback(cbm_agent_client_id_t id, const char *config_path,
+static int agent_install_callback(lsm_agent_client_id_t id, const char *config_path,
                                   const char *binary_path);
-static int agent_remove_callback(cbm_agent_client_id_t id, const char *config_path,
+static int agent_remove_callback(lsm_agent_client_id_t id, const char *config_path,
                                  const char *binary_path);
 
-static const cbm_agent_client_profile_t agent_profiles[CBM_AGENT_CLIENT_COUNT] = {
-    {CBM_AGENT_CLIENT_QODER, "qoder", "Qoder CLI", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_AGENT | CBM_AGENT_CAP_HOOK, "qodercli",
+static const lsm_agent_client_profile_t agent_profiles[LSM_AGENT_CLIENT_COUNT] = {
+    {LSM_AGENT_CLIENT_QODER, "qoder", "Qoder CLI", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_AGENT | LSM_AGENT_CAP_HOOK, "qodercli",
      agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_KIMI, "kimi", "Kimi Code CLI", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_HOOK,
+    {LSM_AGENT_CLIENT_KIMI, "kimi", "Kimi Code CLI", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_HOOK,
      "kimi", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_GITLAB_DUO, "gitlab-duo", "GitLab Duo CLI", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_HOOK, "duo", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_ROVO_DEV, "rovo-dev", "Rovo Dev CLI", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_AGENT,
+    {LSM_AGENT_CLIENT_GITLAB_DUO, "gitlab-duo", "GitLab Duo CLI", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_HOOK, "duo", agent_install_callback, agent_remove_callback},
+    {LSM_AGENT_CLIENT_ROVO_DEV, "rovo-dev", "Rovo Dev CLI", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_AGENT,
      "rovodev", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_AMP, "amp", "Amp", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL, "amp",
+    {LSM_AGENT_CLIENT_AMP, "amp", "Amp", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL, "amp",
      agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_DEVIN, "devin", "Devin CLI / Local", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_HOOK,
+    {LSM_AGENT_CLIENT_DEVIN, "devin", "Devin CLI / Local", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_HOOK,
      "devin", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_TABNINE, "tabnine", "Tabnine", CBM_AGENT_STABLE, CBM_AGENT_CAP_MCP, "tabnine",
+    {LSM_AGENT_CLIENT_TABNINE, "tabnine", "Tabnine", LSM_AGENT_STABLE, LSM_AGENT_CAP_MCP, "tabnine",
      agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_CONTINUE, "continue", "Continue / cn", CBM_AGENT_CONDITIONAL,
-     CBM_AGENT_CAP_MCP, "cn", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_VISUAL_STUDIO, "visual-studio", "Visual Studio", CBM_AGENT_CONDITIONAL,
-     CBM_AGENT_CAP_MCP, "devenv", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_TRAE, "trae", "TRAE", CBM_AGENT_CONDITIONAL, CBM_AGENT_CAP_MCP, NULL,
+    {LSM_AGENT_CLIENT_CONTINUE, "continue", "Continue / cn", LSM_AGENT_CONDITIONAL,
+     LSM_AGENT_CAP_MCP, "cn", agent_install_callback, agent_remove_callback},
+    {LSM_AGENT_CLIENT_VISUAL_STUDIO, "visual-studio", "Visual Studio", LSM_AGENT_CONDITIONAL,
+     LSM_AGENT_CAP_MCP, "devenv", agent_install_callback, agent_remove_callback},
+    {LSM_AGENT_CLIENT_TRAE, "trae", "TRAE", LSM_AGENT_CONDITIONAL, LSM_AGENT_CAP_MCP, NULL,
      agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_ROO_CODE, "roo-code", "Roo Code", CBM_AGENT_CONDITIONAL, CBM_AGENT_CAP_MCP,
+    {LSM_AGENT_CLIENT_ROO_CODE, "roo-code", "Roo Code", LSM_AGENT_CONDITIONAL, LSM_AGENT_CAP_MCP,
      NULL, agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_AMAZON_Q, "amazon-q", "Amazon Q Developer IDE", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP, NULL, agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_CODEBUDDY, "codebuddy", "CodeBuddy Code CLI", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_AGENT,
+    {LSM_AGENT_CLIENT_AMAZON_Q, "amazon-q", "Amazon Q Developer IDE", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP, NULL, agent_install_callback, agent_remove_callback},
+    {LSM_AGENT_CLIENT_CODEBUDDY, "codebuddy", "CodeBuddy Code CLI", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_AGENT,
      "codebuddy", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_IBM_BOB_IDE, "ibm-bob-ide", "IBM Bob IDE", CBM_AGENT_CONDITIONAL,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL, NULL,
+    {LSM_AGENT_CLIENT_IBM_BOB_IDE, "ibm-bob-ide", "IBM Bob IDE", LSM_AGENT_CONDITIONAL,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL, NULL,
      agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_IBM_BOB_SHELL, "ibm-bob-shell", "IBM Bob Shell", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS, "bob", agent_install_callback,
+    {LSM_AGENT_CLIENT_IBM_BOB_SHELL, "ibm-bob-shell", "IBM Bob Shell", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS, "bob", agent_install_callback,
      agent_remove_callback},
-    {CBM_AGENT_CLIENT_POCHI, "pochi", "Pochi", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_MCP | CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL | CBM_AGENT_CAP_AGENT,
+    {LSM_AGENT_CLIENT_POCHI, "pochi", "Pochi", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_MCP | LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL | LSM_AGENT_CAP_AGENT,
      "pochi", agent_install_callback, agent_remove_callback},
-    {CBM_AGENT_CLIENT_PI, "pi", "Pi", CBM_AGENT_STABLE,
-     CBM_AGENT_CAP_INSTRUCTIONS | CBM_AGENT_CAP_SKILL, "pi", NULL, NULL},
-    {CBM_AGENT_CLIENT_SOURCEGRAPH_CODY, "sourcegraph-cody", "Sourcegraph Cody", CBM_AGENT_OPT_IN,
-     CBM_AGENT_CAP_MCP, NULL, agent_install_callback, agent_remove_callback},
+    {LSM_AGENT_CLIENT_PI, "pi", "Pi", LSM_AGENT_STABLE,
+     LSM_AGENT_CAP_INSTRUCTIONS | LSM_AGENT_CAP_SKILL, "pi", NULL, NULL},
+    {LSM_AGENT_CLIENT_SOURCEGRAPH_CODY, "sourcegraph-cody", "Sourcegraph Cody", LSM_AGENT_OPT_IN,
+     LSM_AGENT_CAP_MCP, NULL, agent_install_callback, agent_remove_callback},
 };
 
-size_t cbm_agent_client_count(void) {
-    return CBM_AGENT_CLIENT_COUNT;
+size_t lsm_agent_client_count(void) {
+    return LSM_AGENT_CLIENT_COUNT;
 }
 
-const cbm_agent_client_profile_t *cbm_agent_client_at(size_t index) {
-    return index < CBM_AGENT_CLIENT_COUNT ? &agent_profiles[index] : NULL;
+const lsm_agent_client_profile_t *lsm_agent_client_at(size_t index) {
+    return index < LSM_AGENT_CLIENT_COUNT ? &agent_profiles[index] : NULL;
 }
 
-const cbm_agent_client_profile_t *cbm_agent_client_by_id(cbm_agent_client_id_t id) {
-    return (unsigned)id < CBM_AGENT_CLIENT_COUNT ? &agent_profiles[id] : NULL;
+const lsm_agent_client_profile_t *lsm_agent_client_by_id(lsm_agent_client_id_t id) {
+    return (unsigned)id < LSM_AGENT_CLIENT_COUNT ? &agent_profiles[id] : NULL;
 }
 
-const cbm_agent_client_profile_t *cbm_agent_client_by_stable_id(const char *stable_id) {
+const lsm_agent_client_profile_t *lsm_agent_client_by_stable_id(const char *stable_id) {
     if (!stable_id || stable_id[0] == '\0') {
         return NULL;
     }
-    for (size_t i = 0U; i < CBM_AGENT_CLIENT_COUNT; i++) {
+    for (size_t i = 0U; i < LSM_AGENT_CLIENT_COUNT; i++) {
         if (strcmp(agent_profiles[i].stable_id, stable_id) == 0) {
             return &agent_profiles[i];
         }
@@ -99,12 +99,12 @@ const cbm_agent_client_profile_t *cbm_agent_client_by_stable_id(const char *stab
     return NULL;
 }
 
-static bool agent_path_exists(const cbm_agent_client_resolve_options_t *options, const char *path) {
+static bool agent_path_exists(const lsm_agent_client_resolve_options_t *options, const char *path) {
     return options->path_exists ? options->path_exists(path, options->probe_context)
-                                : cbm_file_exists(path);
+                                : lsm_file_exists(path);
 }
 
-static bool agent_command_exists(const cbm_agent_client_resolve_options_t *options,
+static bool agent_command_exists(const lsm_agent_client_resolve_options_t *options,
                                  const char *command) {
     return command && options->command_exists &&
            options->command_exists(command, options->probe_context);
@@ -328,7 +328,7 @@ static char *agent_trim_copy(const char *start, size_t length) {
  * block scalars, duplicates, or malformed indentation fail closed. */
 static int agent_rovo_override(const char *config_path, const char *home_dir, bool windows,
                                char *path_out, size_t path_out_size) {
-    FILE *file = cbm_fopen(config_path, "rb");
+    FILE *file = lsm_fopen(config_path, "rb");
     if (!file) {
         return 1;
     }
@@ -410,26 +410,26 @@ static int agent_rovo_override(const char *config_path, const char *home_dir, bo
     return result;
 }
 
-int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
-                                  const cbm_agent_client_resolve_options_t *options, char *path_out,
+int lsm_agent_client_resolve_path(lsm_agent_client_id_t id,
+                                  const lsm_agent_client_resolve_options_t *options, char *path_out,
                                   size_t path_out_size) {
-    if (!cbm_agent_client_by_id(id) || !options || !path_out || path_out_size == 0U ||
+    if (!lsm_agent_client_by_id(id) || !options || !path_out || path_out_size == 0U ||
         !options->home_dir || options->home_dir[0] == '\0') {
         return -1;
     }
     const char *config_home =
         options->xdg_config_home && options->xdg_config_home[0] ? options->xdg_config_home : NULL;
     switch (id) {
-    case CBM_AGENT_CLIENT_QODER:
+    case LSM_AGENT_CLIENT_QODER:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".qoder/settings.json");
-    case CBM_AGENT_CLIENT_KIMI:
+    case LSM_AGENT_CLIENT_KIMI:
         return agent_join_path(
             path_out, path_out_size,
             options->kimi_code_home && options->kimi_code_home[0] ? options->kimi_code_home
                                                                   : options->home_dir,
             options->kimi_code_home && options->kimi_code_home[0] ? "mcp.json"
                                                                   : ".kimi-code/mcp.json");
-    case CBM_AGENT_CLIENT_GITLAB_DUO:
+    case LSM_AGENT_CLIENT_GITLAB_DUO:
         if (options->glab_config_dir && options->glab_config_dir[0]) {
             return agent_join_path(path_out, path_out_size, options->glab_config_dir,
                                    "duo/mcp.json");
@@ -442,7 +442,7 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
             return agent_join_path(path_out, path_out_size, config_home, "gitlab/duo/mcp.json");
         }
         return agent_join_path(path_out, path_out_size, options->home_dir, ".gitlab/duo/mcp.json");
-    case CBM_AGENT_CLIENT_ROVO_DEV: {
+    case LSM_AGENT_CLIENT_ROVO_DEV: {
         char config_path[1024];
         if (agent_join_path(config_path, sizeof(config_path), options->home_dir,
                             ".rovodev/config.yml") != 0) {
@@ -473,23 +473,23 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
         int written = snprintf(path_out, path_out_size, "%s", selected);
         return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
     }
-    case CBM_AGENT_CLIENT_AMP:
+    case LSM_AGENT_CLIENT_AMP:
         /* Amp documents literal $HOME/.config locations and does not
          * advertise XDG_CONFIG_HOME support. Keep its bundled skill MCP
          * next to SKILL.md under the documented global skill root. */
         return agent_join_path(path_out, path_out_size, options->home_dir,
-                               ".config/agents/skills/codebase-memory/mcp.json");
-    case CBM_AGENT_CLIENT_DEVIN:
+                               ".config/agents/skills/logan-spine/mcp.json");
+    case LSM_AGENT_CLIENT_DEVIN:
         if (options->is_windows && options->appdata_dir && options->appdata_dir[0]) {
             return agent_join_path(path_out, path_out_size, options->appdata_dir,
                                    "devin/config.json");
         }
         return agent_join_path(path_out, path_out_size, options->home_dir,
                                ".config/devin/config.json");
-    case CBM_AGENT_CLIENT_TABNINE:
+    case LSM_AGENT_CLIENT_TABNINE:
         return agent_join_path(path_out, path_out_size, options->home_dir,
                                ".tabnine/mcp_servers.json");
-    case CBM_AGENT_CLIENT_CONTINUE: {
+    case LSM_AGENT_CLIENT_CONTINUE: {
         const char *explicit_path = options->continue_config_path;
         if (explicit_path && explicit_path[0]) {
             if (!agent_path_exists(options, explicit_path)) {
@@ -509,12 +509,12 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
         int written = snprintf(path_out, path_out_size, "%s", default_path);
         return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
     }
-    case CBM_AGENT_CLIENT_VISUAL_STUDIO:
+    case LSM_AGENT_CLIENT_VISUAL_STUDIO:
         if (!options->is_windows) {
             return 1;
         }
         return agent_join_path(path_out, path_out_size, options->home_dir, ".mcp.json");
-    case CBM_AGENT_CLIENT_TRAE:
+    case LSM_AGENT_CLIENT_TRAE:
         if (!options->trae_config_path || options->trae_config_path[0] == '\0' ||
             !agent_path_exists(options, options->trae_config_path)) {
             return 1;
@@ -523,7 +523,7 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
             int written = snprintf(path_out, path_out_size, "%s", options->trae_config_path);
             return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
         }
-    case CBM_AGENT_CLIENT_ROO_CODE:
+    case LSM_AGENT_CLIENT_ROO_CODE:
         if (!options->roo_config_path || options->roo_config_path[0] == '\0' ||
             !agent_path_exists(options, options->roo_config_path)) {
             return 1;
@@ -532,7 +532,7 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
             int written = snprintf(path_out, path_out_size, "%s", options->roo_config_path);
             return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
         }
-    case CBM_AGENT_CLIENT_AMAZON_Q: {
+    case LSM_AGENT_CLIENT_AMAZON_Q: {
         char recommended_path[1024];
         char overview_path[1024];
         char legacy_mcp_path[1024];
@@ -554,7 +554,7 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
         int written = snprintf(path_out, path_out_size, "%s", selected);
         return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
     }
-    case CBM_AGENT_CLIENT_CODEBUDDY: {
+    case LSM_AGENT_CLIENT_CODEBUDDY: {
         char recommended[1024];
         char deprecated[1024];
         char legacy[1024];
@@ -574,16 +574,16 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
         int written = snprintf(path_out, path_out_size, "%s", selected);
         return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
     }
-    case CBM_AGENT_CLIENT_IBM_BOB_IDE:
+    case LSM_AGENT_CLIENT_IBM_BOB_IDE:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".bob/mcp.json");
-    case CBM_AGENT_CLIENT_IBM_BOB_SHELL:
+    case LSM_AGENT_CLIENT_IBM_BOB_SHELL:
         return agent_join_path(path_out, path_out_size, options->home_dir,
                                ".bob/mcp_settings.json");
-    case CBM_AGENT_CLIENT_POCHI:
+    case LSM_AGENT_CLIENT_POCHI:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".pochi/config.jsonc");
-    case CBM_AGENT_CLIENT_PI:
+    case LSM_AGENT_CLIENT_PI:
         return 1;
-    case CBM_AGENT_CLIENT_SOURCEGRAPH_CODY:
+    case LSM_AGENT_CLIENT_SOURCEGRAPH_CODY:
         if (!options->cody_config_path || options->cody_config_path[0] == '\0' ||
             !agent_path_exists(options, options->cody_config_path)) {
             return 1;
@@ -600,21 +600,21 @@ int cbm_agent_client_resolve_path(cbm_agent_client_id_t id,
 /* Resolve only client-specific installation directories. These markers prove
  * the client is present before its MCP file exists; shared editor/config roots
  * are deliberately excluded. Returns 1 for clients without a safe marker. */
-static int agent_client_marker_path(cbm_agent_client_id_t id,
-                                    const cbm_agent_client_resolve_options_t *options,
+static int agent_client_marker_path(lsm_agent_client_id_t id,
+                                    const lsm_agent_client_resolve_options_t *options,
                                     char *path_out, size_t path_out_size) {
     const char *config_home =
         options->xdg_config_home && options->xdg_config_home[0] ? options->xdg_config_home : NULL;
     switch (id) {
-    case CBM_AGENT_CLIENT_QODER:
+    case LSM_AGENT_CLIENT_QODER:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".qoder");
-    case CBM_AGENT_CLIENT_KIMI:
+    case LSM_AGENT_CLIENT_KIMI:
         if (options->kimi_code_home && options->kimi_code_home[0]) {
             int written = snprintf(path_out, path_out_size, "%s", options->kimi_code_home);
             return written >= 0 && (size_t)written < path_out_size ? 0 : -1;
         }
         return agent_join_path(path_out, path_out_size, options->home_dir, ".kimi-code");
-    case CBM_AGENT_CLIENT_GITLAB_DUO:
+    case LSM_AGENT_CLIENT_GITLAB_DUO:
         if (options->glab_config_dir && options->glab_config_dir[0]) {
             return agent_join_path(path_out, path_out_size, options->glab_config_dir, "duo");
         }
@@ -625,47 +625,47 @@ static int agent_client_marker_path(cbm_agent_client_id_t id,
             return agent_join_path(path_out, path_out_size, config_home, "gitlab/duo");
         }
         return agent_join_path(path_out, path_out_size, options->home_dir, ".gitlab/duo");
-    case CBM_AGENT_CLIENT_ROVO_DEV:
+    case LSM_AGENT_CLIENT_ROVO_DEV:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".rovodev");
-    case CBM_AGENT_CLIENT_AMP:
+    case LSM_AGENT_CLIENT_AMP:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".config/amp");
-    case CBM_AGENT_CLIENT_DEVIN:
+    case LSM_AGENT_CLIENT_DEVIN:
         if (options->is_windows && options->appdata_dir && options->appdata_dir[0]) {
             return agent_join_path(path_out, path_out_size, options->appdata_dir, "devin");
         }
         return agent_join_path(path_out, path_out_size, options->home_dir, ".config/devin");
-    case CBM_AGENT_CLIENT_TABNINE:
+    case LSM_AGENT_CLIENT_TABNINE:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".tabnine");
-    case CBM_AGENT_CLIENT_AMAZON_Q:
+    case LSM_AGENT_CLIENT_AMAZON_Q:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".aws/amazonq");
-    case CBM_AGENT_CLIENT_CODEBUDDY:
+    case LSM_AGENT_CLIENT_CODEBUDDY:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".codebuddy");
-    case CBM_AGENT_CLIENT_IBM_BOB_IDE:
+    case LSM_AGENT_CLIENT_IBM_BOB_IDE:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".bob/mcp.json");
-    case CBM_AGENT_CLIENT_IBM_BOB_SHELL:
+    case LSM_AGENT_CLIENT_IBM_BOB_SHELL:
         return 1;
-    case CBM_AGENT_CLIENT_POCHI:
+    case LSM_AGENT_CLIENT_POCHI:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".pochi");
-    case CBM_AGENT_CLIENT_PI:
+    case LSM_AGENT_CLIENT_PI:
         return agent_join_path(path_out, path_out_size, options->home_dir, ".pi/agent");
     default:
         return 1;
     }
 }
 
-bool cbm_agent_client_detect(cbm_agent_client_id_t id,
-                             const cbm_agent_client_resolve_options_t *options) {
-    const cbm_agent_client_profile_t *profile = cbm_agent_client_by_id(id);
+bool lsm_agent_client_detect(lsm_agent_client_id_t id,
+                             const lsm_agent_client_resolve_options_t *options) {
+    const lsm_agent_client_profile_t *profile = lsm_agent_client_by_id(id);
     if (!profile || !options) {
         return false;
     }
     char path[1024];
-    int resolved = cbm_agent_client_resolve_path(id, options, path, sizeof(path));
-    if (id == CBM_AGENT_CLIENT_CONTINUE || id == CBM_AGENT_CLIENT_TRAE ||
-        id == CBM_AGENT_CLIENT_ROO_CODE || id == CBM_AGENT_CLIENT_SOURCEGRAPH_CODY) {
+    int resolved = lsm_agent_client_resolve_path(id, options, path, sizeof(path));
+    if (id == LSM_AGENT_CLIENT_CONTINUE || id == LSM_AGENT_CLIENT_TRAE ||
+        id == LSM_AGENT_CLIENT_ROO_CODE || id == LSM_AGENT_CLIENT_SOURCEGRAPH_CODY) {
         return resolved == 0 && agent_path_exists(options, path);
     }
-    if (id == CBM_AGENT_CLIENT_VISUAL_STUDIO) {
+    if (id == LSM_AGENT_CLIENT_VISUAL_STUDIO) {
         return options->is_windows && agent_command_exists(options, profile->detection_command);
     }
     char marker_path[1024];
@@ -675,16 +675,16 @@ bool cbm_agent_client_detect(cbm_agent_client_id_t id,
            agent_command_exists(options, profile->detection_command);
 }
 
-bool cbm_agent_client_cleanup_candidate(cbm_agent_client_id_t id,
-                                        const cbm_agent_client_resolve_options_t *options) {
-    if (cbm_agent_client_detect(id, options)) {
+bool lsm_agent_client_cleanup_candidate(lsm_agent_client_id_t id,
+                                        const lsm_agent_client_resolve_options_t *options) {
+    if (lsm_agent_client_detect(id, options)) {
         return true;
     }
-    if (id != CBM_AGENT_CLIENT_VISUAL_STUDIO || !options || !options->is_windows) {
+    if (id != LSM_AGENT_CLIENT_VISUAL_STUDIO || !options || !options->is_windows) {
         return false;
     }
     char path[1024];
-    return cbm_agent_client_resolve_path(id, options, path, sizeof(path)) == 0 &&
+    return lsm_agent_client_resolve_path(id, options, path, sizeof(path)) == 0 &&
            agent_path_exists(options, path);
 }
 
@@ -1058,15 +1058,15 @@ static char *agent_json_escape(const char *value) {
     return escaped;
 }
 
-static char *agent_json_canonical(cbm_agent_client_id_t id, const char *binary_path) {
+static char *agent_json_canonical(lsm_agent_client_id_t id, const char *binary_path) {
     char *escaped = agent_json_escape(binary_path);
     if (!escaped) {
         return NULL;
     }
     const char *extra = "";
-    if (id == CBM_AGENT_CLIENT_GITLAB_DUO || id == CBM_AGENT_CLIENT_VISUAL_STUDIO) {
+    if (id == LSM_AGENT_CLIENT_GITLAB_DUO || id == LSM_AGENT_CLIENT_VISUAL_STUDIO) {
         extra = ", \"type\": \"stdio\"";
-    } else if (id == CBM_AGENT_CLIENT_ROVO_DEV) {
+    } else if (id == LSM_AGENT_CLIENT_ROVO_DEV) {
         extra = ", \"transport\": \"stdio\"";
     }
     size_t needed = strlen(escaped) + strlen(extra) + 64U;
@@ -1137,34 +1137,34 @@ static bool agent_json_owned(const char *document, size_t start, size_t end,
     return equal;
 }
 
-static const char *agent_json_section(cbm_agent_client_id_t id) {
-    if (id == CBM_AGENT_CLIENT_AMP) {
+static const char *agent_json_section(lsm_agent_client_id_t id) {
+    if (id == LSM_AGENT_CLIENT_AMP) {
         return NULL;
     }
-    if (id == CBM_AGENT_CLIENT_VISUAL_STUDIO) {
+    if (id == LSM_AGENT_CLIENT_VISUAL_STUDIO) {
         return "servers";
     }
-    if (id == CBM_AGENT_CLIENT_SOURCEGRAPH_CODY) {
+    if (id == LSM_AGENT_CLIENT_SOURCEGRAPH_CODY) {
         return "cody.mcpServers";
     }
-    if (id == CBM_AGENT_CLIENT_POCHI) {
+    if (id == LSM_AGENT_CLIENT_POCHI) {
         return "mcp";
     }
     return "mcpServers";
 }
 
-static int agent_json_edit(cbm_agent_client_id_t id, const char *config_path,
+static int agent_json_edit(lsm_agent_client_id_t id, const char *config_path,
                            const char *binary_path, bool remove) {
     char *canonical = agent_json_canonical(id, binary_path);
     if (!canonical) {
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     char *document = NULL;
     size_t length = 0U;
-    int read_result = cbm_json_like_read_document(config_path, &document, &length);
+    int read_result = lsm_json_like_read_document(config_path, &document, &length);
     if (read_result < 0) {
         free(canonical);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     size_t entry_start = 0U;
     size_t entry_end = 0U;
@@ -1175,30 +1175,30 @@ static int agent_json_edit(cbm_agent_client_id_t id, const char *config_path,
     if (find_result < 0) {
         free(document);
         free(canonical);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     if (find_result == 0 && !agent_json_owned(document, entry_start, entry_end, canonical)) {
         free(document);
         free(canonical);
-        return CBM_AGENT_EDIT_FOREIGN;
+        return LSM_AGENT_EDIT_FOREIGN;
     }
     if ((remove && find_result == 1) || (!remove && find_result == 0)) {
         free(document);
         free(canonical);
-        return CBM_AGENT_EDIT_OK;
+        return LSM_AGENT_EDIT_OK;
     }
     const char *section = agent_json_section(id);
     const char *path[1] = {section};
     int edit_result =
         remove
-            ? cbm_json_like_remove_entry_if_unchanged(config_path, path, section ? 1U : 0U,
+            ? lsm_json_like_remove_entry_if_unchanged(config_path, path, section ? 1U : 0U,
                                                       AGENT_ENTRY_KEY, document, length)
-            : cbm_json_like_upsert_entry_if_unchanged(config_path, path, section ? 1U : 0U,
+            : lsm_json_like_upsert_entry_if_unchanged(config_path, path, section ? 1U : 0U,
                                                       AGENT_ENTRY_KEY, canonical,
                                                       read_result == 1 ? NULL : document, length);
     free(document);
     free(canonical);
-    return edit_result == 0 ? CBM_AGENT_EDIT_OK : CBM_AGENT_EDIT_ERROR;
+    return edit_result == 0 ? LSM_AGENT_EDIT_OK : LSM_AGENT_EDIT_ERROR;
 }
 
 static size_t agent_next_line(const char *data, size_t length, size_t start, size_t *content_end) {
@@ -1286,14 +1286,14 @@ static char *agent_splice(const char *document, size_t length, size_t start, siz
 static int agent_continue_edit(const char *config_path, const char *binary_path, bool remove) {
     char *document = NULL;
     size_t length = 0U;
-    if (cbm_json_like_read_document(config_path, &document, &length) != 0 || !document) {
+    if (lsm_json_like_read_document(config_path, &document, &length) != 0 || !document) {
         free(document);
-        return CBM_AGENT_EDIT_NOT_APPLICABLE;
+        return LSM_AGENT_EDIT_NOT_APPLICABLE;
     }
     char *quoted = NULL;
-    if (cbm_yaml_encode_double_quoted_scalar(binary_path, &quoted) != 0) {
+    if (lsm_yaml_encode_double_quoted_scalar(binary_path, &quoted) != 0) {
         free(document);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     const char *eol = strstr(document, "\r\n") ? "\r\n" : "\n";
     size_t canonical_size = strlen(quoted) + strlen(eol) * 3U + 96U;
@@ -1301,17 +1301,17 @@ static int agent_continue_edit(const char *config_path, const char *binary_path,
     if (!canonical) {
         free(quoted);
         free(document);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     int canonical_written = snprintf(canonical, canonical_size,
-                                     "  - name: codebase-memory-mcp%s    command: %s%s"
+                                     "  - name: logan-spine-mcp%s    command: %s%s"
                                      "    args: []%s",
                                      eol, quoted, eol, eol);
     free(quoted);
     if (canonical_written < 0 || (size_t)canonical_written >= canonical_size) {
         free(canonical);
         free(document);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
 
     size_t section_start = SIZE_MAX;
@@ -1343,7 +1343,7 @@ static int agent_continue_edit(const char *config_path, const char *binary_path,
     if (sections > 1U || invalid_section) {
         free(canonical);
         free(document);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
 
     size_t item_start = SIZE_MAX;
@@ -1377,7 +1377,7 @@ static int agent_continue_edit(const char *config_path, const char *binary_path,
     if (items > 1U) {
         free(canonical);
         free(document);
-        return CBM_AGENT_EDIT_ERROR;
+        return LSM_AGENT_EDIT_ERROR;
     }
     if (items == 1U) {
         size_t canonical_len = strlen(canonical);
@@ -1385,17 +1385,17 @@ static int agent_continue_edit(const char *config_path, const char *binary_path,
             memcmp(document + item_start, canonical, canonical_len) != 0) {
             free(canonical);
             free(document);
-            return CBM_AGENT_EDIT_FOREIGN;
+            return LSM_AGENT_EDIT_FOREIGN;
         }
         if (!remove) {
             free(canonical);
             free(document);
-            return CBM_AGENT_EDIT_OK;
+            return LSM_AGENT_EDIT_OK;
         }
     } else if (remove) {
         free(canonical);
         free(document);
-        return CBM_AGENT_EDIT_OK;
+        return LSM_AGENT_EDIT_OK;
     }
 
     char *updated = NULL;
@@ -1421,76 +1421,76 @@ static int agent_continue_edit(const char *config_path, const char *binary_path,
             free(append);
         }
     }
-    int result = updated && cbm_text_write_owned_document_if_unchanged(config_path, updated,
+    int result = updated && lsm_text_write_owned_document_if_unchanged(config_path, updated,
                                                                        document, length) == 0
-                     ? CBM_AGENT_EDIT_OK
-                     : CBM_AGENT_EDIT_ERROR;
+                     ? LSM_AGENT_EDIT_OK
+                     : LSM_AGENT_EDIT_ERROR;
     free(updated);
     free(canonical);
     free(document);
     return result;
 }
 
-static bool agent_json_client(cbm_agent_client_id_t id) {
+static bool agent_json_client(lsm_agent_client_id_t id) {
     switch (id) {
-    case CBM_AGENT_CLIENT_QODER:
-    case CBM_AGENT_CLIENT_KIMI:
-    case CBM_AGENT_CLIENT_GITLAB_DUO:
-    case CBM_AGENT_CLIENT_ROVO_DEV:
-    case CBM_AGENT_CLIENT_AMP:
-    case CBM_AGENT_CLIENT_DEVIN:
-    case CBM_AGENT_CLIENT_TABNINE:
-    case CBM_AGENT_CLIENT_VISUAL_STUDIO:
-    case CBM_AGENT_CLIENT_TRAE:
-    case CBM_AGENT_CLIENT_ROO_CODE:
-    case CBM_AGENT_CLIENT_AMAZON_Q:
-    case CBM_AGENT_CLIENT_CODEBUDDY:
-    case CBM_AGENT_CLIENT_IBM_BOB_IDE:
-    case CBM_AGENT_CLIENT_IBM_BOB_SHELL:
-    case CBM_AGENT_CLIENT_POCHI:
-    case CBM_AGENT_CLIENT_SOURCEGRAPH_CODY:
+    case LSM_AGENT_CLIENT_QODER:
+    case LSM_AGENT_CLIENT_KIMI:
+    case LSM_AGENT_CLIENT_GITLAB_DUO:
+    case LSM_AGENT_CLIENT_ROVO_DEV:
+    case LSM_AGENT_CLIENT_AMP:
+    case LSM_AGENT_CLIENT_DEVIN:
+    case LSM_AGENT_CLIENT_TABNINE:
+    case LSM_AGENT_CLIENT_VISUAL_STUDIO:
+    case LSM_AGENT_CLIENT_TRAE:
+    case LSM_AGENT_CLIENT_ROO_CODE:
+    case LSM_AGENT_CLIENT_AMAZON_Q:
+    case LSM_AGENT_CLIENT_CODEBUDDY:
+    case LSM_AGENT_CLIENT_IBM_BOB_IDE:
+    case LSM_AGENT_CLIENT_IBM_BOB_SHELL:
+    case LSM_AGENT_CLIENT_POCHI:
+    case LSM_AGENT_CLIENT_SOURCEGRAPH_CODY:
         return true;
-    case CBM_AGENT_CLIENT_CONTINUE:
-    case CBM_AGENT_CLIENT_PI:
-    case CBM_AGENT_CLIENT_COUNT:
+    case LSM_AGENT_CLIENT_CONTINUE:
+    case LSM_AGENT_CLIENT_PI:
+    case LSM_AGENT_CLIENT_COUNT:
         return false;
     default:
         return false;
     }
 }
 
-int cbm_agent_client_install_mcp(cbm_agent_client_id_t id, const char *config_path,
+int lsm_agent_client_install_mcp(lsm_agent_client_id_t id, const char *config_path,
                                  const char *binary_path) {
     if (!config_path || config_path[0] == '\0' || !binary_path || binary_path[0] == '\0' ||
-        !cbm_agent_client_by_id(id)) {
-        return CBM_AGENT_EDIT_ERROR;
+        !lsm_agent_client_by_id(id)) {
+        return LSM_AGENT_EDIT_ERROR;
     }
-    if (id == CBM_AGENT_CLIENT_CONTINUE) {
+    if (id == LSM_AGENT_CLIENT_CONTINUE) {
         return agent_continue_edit(config_path, binary_path, false);
     }
     return agent_json_client(id) ? agent_json_edit(id, config_path, binary_path, false)
-                                 : CBM_AGENT_EDIT_NOT_APPLICABLE;
+                                 : LSM_AGENT_EDIT_NOT_APPLICABLE;
 }
 
-int cbm_agent_client_remove_mcp(cbm_agent_client_id_t id, const char *config_path,
+int lsm_agent_client_remove_mcp(lsm_agent_client_id_t id, const char *config_path,
                                 const char *binary_path) {
     if (!config_path || config_path[0] == '\0' || !binary_path || binary_path[0] == '\0' ||
-        !cbm_agent_client_by_id(id)) {
-        return CBM_AGENT_EDIT_ERROR;
+        !lsm_agent_client_by_id(id)) {
+        return LSM_AGENT_EDIT_ERROR;
     }
-    if (id == CBM_AGENT_CLIENT_CONTINUE) {
+    if (id == LSM_AGENT_CLIENT_CONTINUE) {
         return agent_continue_edit(config_path, binary_path, true);
     }
     return agent_json_client(id) ? agent_json_edit(id, config_path, binary_path, true)
-                                 : CBM_AGENT_EDIT_NOT_APPLICABLE;
+                                 : LSM_AGENT_EDIT_NOT_APPLICABLE;
 }
 
-static int agent_install_callback(cbm_agent_client_id_t id, const char *config_path,
+static int agent_install_callback(lsm_agent_client_id_t id, const char *config_path,
                                   const char *binary_path) {
-    return cbm_agent_client_install_mcp(id, config_path, binary_path);
+    return lsm_agent_client_install_mcp(id, config_path, binary_path);
 }
 
-static int agent_remove_callback(cbm_agent_client_id_t id, const char *config_path,
+static int agent_remove_callback(lsm_agent_client_id_t id, const char *config_path,
                                  const char *binary_path) {
-    return cbm_agent_client_remove_mcp(id, config_path, binary_path);
+    return lsm_agent_client_remove_mcp(id, config_path, binary_path);
 }

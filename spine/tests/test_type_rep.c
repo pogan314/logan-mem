@@ -6,243 +6,243 @@
  * Optional[T] sugar, and protocol structural matching.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/type_rep.h"
 
 /* ── UNION: flatten, dedup, collapse ──────────────────────────── */
 
 TEST(typerep_union_two_distinct) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *s = cbm_type_builtin(&a, "str");
-    const CBMType *m[2] = {i, s};
-    const CBMType *u = cbm_type_union(&a, m, 2);
-    ASSERT(cbm_type_is_union(u));
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *s = lsm_type_builtin(&a, "str");
+    const LSMType *m[2] = {i, s};
+    const LSMType *u = lsm_type_union(&a, m, 2);
+    ASSERT(lsm_type_is_union(u));
     ASSERT_EQ(u->data.union_type.count, 2);
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_union_dedupes_duplicates) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i1 = cbm_type_builtin(&a, "int");
-    const CBMType *i2 = cbm_type_builtin(&a, "int");
-    const CBMType *m[2] = {i1, i2};
-    const CBMType *u = cbm_type_union(&a, m, 2);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i1 = lsm_type_builtin(&a, "int");
+    const LSMType *i2 = lsm_type_builtin(&a, "int");
+    const LSMType *m[2] = {i1, i2};
+    const LSMType *u = lsm_type_union(&a, m, 2);
     /* dedup collapses to a single int type, not a union */
-    ASSERT(!cbm_type_is_union(u));
-    ASSERT_EQ(u->kind, CBM_TYPE_BUILTIN);
+    ASSERT(!lsm_type_is_union(u));
+    ASSERT_EQ(u->kind, LSM_TYPE_BUILTIN);
     ASSERT_STR_EQ(u->data.builtin.name, "int");
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_union_flattens_nested) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *s = cbm_type_builtin(&a, "str");
-    const CBMType *b = cbm_type_builtin(&a, "bytes");
-    const CBMType *inner_pair[2] = {i, s};
-    const CBMType *inner = cbm_type_union(&a, inner_pair, 2);
-    const CBMType *outer_pair[2] = {inner, b};
-    const CBMType *u = cbm_type_union(&a, outer_pair, 2);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *s = lsm_type_builtin(&a, "str");
+    const LSMType *b = lsm_type_builtin(&a, "bytes");
+    const LSMType *inner_pair[2] = {i, s};
+    const LSMType *inner = lsm_type_union(&a, inner_pair, 2);
+    const LSMType *outer_pair[2] = {inner, b};
+    const LSMType *u = lsm_type_union(&a, outer_pair, 2);
     /* flattening yields 3 distinct members */
-    ASSERT(cbm_type_is_union(u));
+    ASSERT(lsm_type_is_union(u));
     ASSERT_EQ(u->data.union_type.count, 3);
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_union_single_member_collapses) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *m[1] = {i};
-    const CBMType *u = cbm_type_union(&a, m, 1);
-    ASSERT(!cbm_type_is_union(u));
-    ASSERT_EQ(u->kind, CBM_TYPE_BUILTIN);
-    cbm_arena_destroy(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *m[1] = {i};
+    const LSMType *u = lsm_type_union(&a, m, 1);
+    ASSERT(!lsm_type_is_union(u));
+    ASSERT_EQ(u->kind, LSM_TYPE_BUILTIN);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_union_empty_is_unknown) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *u = cbm_type_union(&a, NULL, 0);
-    ASSERT(cbm_type_is_unknown(u));
-    cbm_arena_destroy(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *u = lsm_type_union(&a, NULL, 0);
+    ASSERT(lsm_type_is_unknown(u));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_optional_is_union_with_none) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *opt = cbm_type_optional(&a, i);
-    ASSERT(cbm_type_is_union(opt));
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *opt = lsm_type_optional(&a, i);
+    ASSERT(lsm_type_is_union(opt));
     ASSERT_EQ(opt->data.union_type.count, 2);
     /* membership: int + None */
     bool has_int = false, has_none = false;
     for (int k = 0; k < opt->data.union_type.count; k++) {
-        const CBMType *m = opt->data.union_type.members[k];
-        if (m->kind == CBM_TYPE_BUILTIN && strcmp(m->data.builtin.name, "int") == 0)
+        const LSMType *m = opt->data.union_type.members[k];
+        if (m->kind == LSM_TYPE_BUILTIN && strcmp(m->data.builtin.name, "int") == 0)
             has_int = true;
-        if (m->kind == CBM_TYPE_BUILTIN && strcmp(m->data.builtin.name, "None") == 0)
+        if (m->kind == LSM_TYPE_BUILTIN && strcmp(m->data.builtin.name, "None") == 0)
             has_none = true;
     }
     ASSERT(has_int);
     ASSERT(has_none);
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 /* ── LITERAL ───────────────────────────────────────────────────── */
 
 TEST(typerep_literal_int_3) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *base = cbm_type_builtin(&a, "int");
-    const CBMType *lit = cbm_type_literal(&a, base, "3");
-    ASSERT_EQ(lit->kind, CBM_TYPE_LITERAL);
-    ASSERT(cbm_type_equal(lit->data.literal.base, base));
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *base = lsm_type_builtin(&a, "int");
+    const LSMType *lit = lsm_type_literal(&a, base, "3");
+    ASSERT_EQ(lit->kind, LSM_TYPE_LITERAL);
+    ASSERT(lsm_type_equal(lit->data.literal.base, base));
     ASSERT_STR_EQ(lit->data.literal.literal_text, "3");
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_literal_equality_distinguishes_text) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *base = cbm_type_builtin(&a, "str");
-    const CBMType *foo = cbm_type_literal(&a, base, "\"foo\"");
-    const CBMType *bar = cbm_type_literal(&a, base, "\"bar\"");
-    const CBMType *foo2 = cbm_type_literal(&a, base, "\"foo\"");
-    ASSERT(!cbm_type_equal(foo, bar));
-    ASSERT(cbm_type_equal(foo, foo2));
-    cbm_arena_destroy(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *base = lsm_type_builtin(&a, "str");
+    const LSMType *foo = lsm_type_literal(&a, base, "\"foo\"");
+    const LSMType *bar = lsm_type_literal(&a, base, "\"bar\"");
+    const LSMType *foo2 = lsm_type_literal(&a, base, "\"foo\"");
+    ASSERT(!lsm_type_equal(foo, bar));
+    ASSERT(lsm_type_equal(foo, foo2));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 /* ── PROTOCOL ──────────────────────────────────────────────────── */
 
 TEST(typerep_protocol_method_set) {
-    CBMArena a;
-    cbm_arena_init(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
     const char *methods[] = {"read", "close", NULL};
-    const CBMType *proto = cbm_type_protocol(&a, "typing.IO", methods, NULL);
-    ASSERT(cbm_type_is_protocol(proto));
+    const LSMType *proto = lsm_type_protocol(&a, "typing.IO", methods, NULL);
+    ASSERT(lsm_type_is_protocol(proto));
     ASSERT_STR_EQ(proto->data.protocol.qualified_name, "typing.IO");
     ASSERT_NOT_NULL(proto->data.protocol.method_names);
     ASSERT_STR_EQ(proto->data.protocol.method_names[0], "read");
     ASSERT_STR_EQ(proto->data.protocol.method_names[1], "close");
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_protocol_satisfied_by_protocol_with_superset) {
-    CBMArena a;
-    cbm_arena_init(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
     const char *needed[] = {"read", "close", NULL};
     const char *have[] = {"read", "write", "close", "flush", NULL};
-    const CBMType *proto = cbm_type_protocol(&a, "P1", needed, NULL);
-    const CBMType *cand = cbm_type_protocol(&a, "P2", have, NULL);
-    ASSERT(cbm_type_protocol_satisfied_by(proto, cand));
-    cbm_arena_destroy(&a);
+    const LSMType *proto = lsm_type_protocol(&a, "P1", needed, NULL);
+    const LSMType *cand = lsm_type_protocol(&a, "P2", have, NULL);
+    ASSERT(lsm_type_protocol_satisfied_by(proto, cand));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_protocol_unsatisfied_when_method_missing) {
-    CBMArena a;
-    cbm_arena_init(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
     const char *needed[] = {"read", "close", NULL};
     const char *have[] = {"read", NULL};
-    const CBMType *proto = cbm_type_protocol(&a, "P1", needed, NULL);
-    const CBMType *cand = cbm_type_protocol(&a, "P2", have, NULL);
-    ASSERT(!cbm_type_protocol_satisfied_by(proto, cand));
-    cbm_arena_destroy(&a);
+    const LSMType *proto = lsm_type_protocol(&a, "P1", needed, NULL);
+    const LSMType *cand = lsm_type_protocol(&a, "P2", have, NULL);
+    ASSERT(!lsm_type_protocol_satisfied_by(proto, cand));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 /* ── MODULE ────────────────────────────────────────────────────── */
 
 TEST(typerep_module_carries_qn) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *m = cbm_type_module(&a, "os.path");
-    ASSERT(cbm_type_is_module(m));
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *m = lsm_type_module(&a, "os.path");
+    ASSERT(lsm_type_is_module(m));
     ASSERT_STR_EQ(m->data.module.module_qn, "os.path");
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_module_equality_by_qn) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *a1 = cbm_type_module(&a, "os");
-    const CBMType *a2 = cbm_type_module(&a, "os");
-    const CBMType *b = cbm_type_module(&a, "sys");
-    ASSERT(cbm_type_equal(a1, a2));
-    ASSERT(!cbm_type_equal(a1, b));
-    cbm_arena_destroy(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *a1 = lsm_type_module(&a, "os");
+    const LSMType *a2 = lsm_type_module(&a, "os");
+    const LSMType *b = lsm_type_module(&a, "sys");
+    ASSERT(lsm_type_equal(a1, a2));
+    ASSERT(!lsm_type_equal(a1, b));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 /* ── CALLABLE ──────────────────────────────────────────────────── */
 
 TEST(typerep_callable_with_args_and_return) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *s = cbm_type_builtin(&a, "str");
-    const CBMType *params[2] = {i, s};
-    const CBMType *c = cbm_type_callable(&a, params, 2, i);
-    ASSERT_EQ(c->kind, CBM_TYPE_CALLABLE);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *s = lsm_type_builtin(&a, "str");
+    const LSMType *params[2] = {i, s};
+    const LSMType *c = lsm_type_callable(&a, params, 2, i);
+    ASSERT_EQ(c->kind, LSM_TYPE_CALLABLE);
     ASSERT_EQ(c->data.callable.param_count, 2);
-    ASSERT(cbm_type_equal(c->data.callable.return_type, i));
-    cbm_arena_destroy(&a);
+    ASSERT(lsm_type_equal(c->data.callable.return_type, i));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_callable_elliptic_arity_minus_one) {
     /* Callable[..., R] — variadic in Python type-hint sense. */
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *r = cbm_type_builtin(&a, "int");
-    const CBMType *c = cbm_type_callable(&a, NULL, -1, r);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *r = lsm_type_builtin(&a, "int");
+    const LSMType *c = lsm_type_callable(&a, NULL, -1, r);
     ASSERT_EQ(c->data.callable.param_count, -1);
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 TEST(typerep_callable_equality) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *i = cbm_type_builtin(&a, "int");
-    const CBMType *s = cbm_type_builtin(&a, "str");
-    const CBMType *p1[1] = {i};
-    const CBMType *c1 = cbm_type_callable(&a, p1, 1, s);
-    const CBMType *c2 = cbm_type_callable(&a, p1, 1, s);
-    const CBMType *c3 = cbm_type_callable(&a, p1, 1, i); /* different return */
-    ASSERT(cbm_type_equal(c1, c2));
-    ASSERT(!cbm_type_equal(c1, c3));
-    cbm_arena_destroy(&a);
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *i = lsm_type_builtin(&a, "int");
+    const LSMType *s = lsm_type_builtin(&a, "str");
+    const LSMType *p1[1] = {i};
+    const LSMType *c1 = lsm_type_callable(&a, p1, 1, s);
+    const LSMType *c2 = lsm_type_callable(&a, p1, 1, s);
+    const LSMType *c3 = lsm_type_callable(&a, p1, 1, i); /* different return */
+    ASSERT(lsm_type_equal(c1, c2));
+    ASSERT(!lsm_type_equal(c1, c3));
+    lsm_arena_destroy(&a);
     PASS();
 }
 
 /* ── SUBSTITUTION ──────────────────────────────────────────────── */
 
 TEST(typerep_substitute_unbound_param_preserved) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *t = cbm_type_type_param(&a, "T");
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *t = lsm_type_type_param(&a, "T");
     const char *params[] = {"T", NULL};
-    const CBMType *args[] = {NULL, NULL};
-    const CBMType *sub = cbm_type_substitute(&a, t, params, args);
+    const LSMType *args[] = {NULL, NULL};
+    const LSMType *sub = lsm_type_substitute(&a, t, params, args);
     ASSERT(sub == t);
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
@@ -251,18 +251,18 @@ TEST(typerep_substitute_unbound_param_preserved) {
  * `template<class T, class U, class V>`) or trailing default template args.
  * Matching a param whose index exceeds the args length must NOT index past the
  * args array's NULL terminator. Pre-fix, this read args[2] one element past the
- * 2-slot stack array (ASan stack-buffer-overflow) and returned a bogus CBMType*
+ * 2-slot stack array (ASan stack-buffer-overflow) and returned a bogus LSMType*
  * that was later dereferenced -> SEGV in type_to_qn (c_lsp.c). The unbound
  * param must be preserved as-is. */
 TEST(typerep_substitute_short_args_no_oob_issue427) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *t = cbm_type_type_param(&a, "V");                   /* the 3rd declared param */
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *t = lsm_type_type_param(&a, "V");                   /* the 3rd declared param */
     const char *params[] = {"T", "U", "V", NULL};                      /* 3 declared params */
-    const CBMType *args[] = {cbm_type_type_param(&a, "Widget"), NULL}; /* 1 arg */
-    const CBMType *sub = cbm_type_substitute(&a, t, params, args);
+    const LSMType *args[] = {lsm_type_type_param(&a, "Widget"), NULL}; /* 1 arg */
+    const LSMType *sub = lsm_type_substitute(&a, t, params, args);
     ASSERT(sub == t); /* "V" (index 2) has no supplied arg -> preserved, no OOB */
-    cbm_arena_destroy(&a);
+    lsm_arena_destroy(&a);
     PASS();
 }
 
@@ -273,21 +273,21 @@ TEST(typerep_substitute_short_args_no_oob_issue427) {
  * garbage; the corrupt graph was dereferenced later -> SIGSEGV). Implausible
  * values (misaligned / null-page) must act as the terminator instead. */
 TEST(typerep_substitute_rejects_garbage_args_entries) {
-    CBMArena a;
-    cbm_arena_init(&a);
-    const CBMType *t =
-        cbm_type_reference(&a, cbm_type_type_param(&a, "T")); /* T& as in Wrapper<F, T&> */
+    LSMArena a;
+    lsm_arena_init(&a);
+    const LSMType *t =
+        lsm_type_reference(&a, lsm_type_type_param(&a, "T")); /* T& as in Wrapper<F, T&> */
     const char *params[] = {"F", "T", NULL};
-    const CBMType *args[2];
-    args[0] = cbm_type_named(&a, "proj.Fmt"); /* explicit arg for F */
-    args[1] = (const CBMType *)0x37;          /* simulated uninitialized stack garbage */
-    const CBMType *sub = cbm_type_substitute(&a, t, params, args);
+    const LSMType *args[2];
+    args[0] = lsm_type_named(&a, "proj.Fmt"); /* explicit arg for F */
+    args[1] = (const LSMType *)0x37;          /* simulated uninitialized stack garbage */
+    const LSMType *sub = lsm_type_substitute(&a, t, params, args);
     ASSERT_NOT_NULL(sub);
-    ASSERT_EQ(sub->kind, CBM_TYPE_REFERENCE);
+    ASSERT_EQ(sub->kind, LSM_TYPE_REFERENCE);
     /* T has no real binding: it must be preserved, never the garbage value. */
-    ASSERT_TRUE(sub->data.reference.elem != (const CBMType *)0x37);
-    ASSERT_EQ(sub->data.reference.elem->kind, CBM_TYPE_TYPE_PARAM);
-    cbm_arena_destroy(&a);
+    ASSERT_TRUE(sub->data.reference.elem != (const LSMType *)0x37);
+    ASSERT_EQ(sub->data.reference.elem->kind, LSM_TYPE_TYPE_PARAM);
+    lsm_arena_destroy(&a);
     PASS();
 }
 

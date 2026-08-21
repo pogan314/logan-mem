@@ -62,7 +62,7 @@ for func, label in FLOWS:
                         f"rather than deleting it")
         continue
 
-    delete_at = body.find("cbm_remove_indexes")
+    delete_at = body.find("lsm_remove_indexes")
     if delete_at < 0:
         # No deletion in this flow at all is fine — nothing to order.
         continue
@@ -70,7 +70,7 @@ for func, label in FLOWS:
     # Key on the configuration CALL, not a local variable name: the two flows
     # spell the result differently (one stores agent_config_rc, the other tests
     # the call inline), and the call is the thing that must precede deletion.
-    config_at = body.find("cbm_install_agent_configs")
+    config_at = body.find("lsm_install_agent_configs")
     if config_at < 0:
         failures.append(f"{label}: deletes indexes but no agent-configuration step "
                         f"was found before it; the ordering guarantee cannot hold")
@@ -78,7 +78,7 @@ for func, label in FLOWS:
 
     if delete_at < config_at:
         failures.append(
-            f"{label}: cbm_remove_indexes() runs BEFORE the agent-configuration\n"
+            f"{label}: lsm_remove_indexes() runs BEFORE the agent-configuration\n"
             f"      step. A failure after that point destroys data the user was\n"
             f"      told would be rebuilt, on a run that then aborts (#1558).")
 

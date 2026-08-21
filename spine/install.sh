@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# install.sh — One-line installer for codebase-memory-mcp.
+# install.sh — One-line installer for logan-spine-mcp.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/DeusData/logan-spine-mcp/main/install.sh | bash
 #   curl -fsSL ... | bash -s -- --dir /path   # Custom install directory
 #
 # Environment:
-#   CBM_DOWNLOAD_URL  Override base URL for downloads (for testing)
+#   LSM_DOWNLOAD_URL  Override base URL for downloads (for testing)
 
 # Wrap in main() to prevent partial execution from piped downloads.
 # If curl|bash is interrupted mid-transfer, bash would execute the partial
@@ -16,10 +16,10 @@ set -euo pipefail
 # called because the final line hasn't arrived yet.
 main() {
 
-REPO="DeusData/codebase-memory-mcp"
+REPO="DeusData/logan-spine-mcp"
 INSTALL_DIR="$HOME/.local/bin"
 SKIP_CONFIG=false
-CBM_DOWNLOAD_URL="${CBM_DOWNLOAD_URL:-https://github.com/${REPO}/releases/latest/download}"
+LSM_DOWNLOAD_URL="${LSM_DOWNLOAD_URL:-https://github.com/${REPO}/releases/latest/download}"
 
 # Security: every remote hop must remain HTTPS. Plain HTTP is accepted only
 # for an exact loopback authority used by local smoke tests, with redirects
@@ -28,12 +28,12 @@ is_loopback_http_url() {
     [[ "$1" =~ ^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?([/?\#].*)?$ ]]
 }
 
-if [[ "$CBM_DOWNLOAD_URL" == https://* ]]; then
-    CBM_DOWNLOAD_LOOPBACK=false
-elif is_loopback_http_url "$CBM_DOWNLOAD_URL"; then
-    CBM_DOWNLOAD_LOOPBACK=true
+if [[ "$LSM_DOWNLOAD_URL" == https://* ]]; then
+    LSM_DOWNLOAD_LOOPBACK=false
+elif is_loopback_http_url "$LSM_DOWNLOAD_URL"; then
+    LSM_DOWNLOAD_LOOPBACK=true
 else
-    echo "error: refusing non-HTTPS download URL: $CBM_DOWNLOAD_URL" >&2
+    echo "error: refusing non-HTTPS download URL: $LSM_DOWNLOAD_URL" >&2
     exit 1
 fi
 
@@ -41,7 +41,7 @@ download_file() {
     local url="$1"
     local destination="$2"
     local progress="$3"
-    if [ "$CBM_DOWNLOAD_LOOPBACK" = true ]; then
+    if [ "$LSM_DOWNLOAD_LOOPBACK" = true ]; then
         is_loopback_http_url "$url" || {
             echo "error: loopback download escaped its authority: $url" >&2
             return 1
@@ -129,10 +129,10 @@ detect_arch() {
 OS=$(detect_os)
 ARCH=$(detect_arch)
 
-echo "codebase-memory-mcp installer"
+echo "logan-spine-mcp installer"
 echo "  os:      $OS"
 echo "  arch:    $ARCH"
-echo "  target:  $INSTALL_DIR/codebase-memory-mcp"
+echo "  target:  $INSTALL_DIR/logan-spine-mcp"
 echo ""
 
 # Build download URL
@@ -148,9 +148,9 @@ fi
 PORTABLE=""
 [ "$OS" = "linux" ] && PORTABLE="-portable"
 
-ARCHIVE="codebase-memory-mcp-${OS}-${ARCH}${PORTABLE}.${EXT}"
+ARCHIVE="logan-spine-mcp-${OS}-${ARCH}${PORTABLE}.${EXT}"
 
-URL="${CBM_DOWNLOAD_URL}/${ARCHIVE}"
+URL="${LSM_DOWNLOAD_URL}/${ARCHIVE}"
 
 # Download
 DLDIR=$(mktemp -d)
@@ -159,9 +159,9 @@ trap 'rm -rf "$DLDIR"' EXIT
 echo "Downloading ${ARCHIVE}..."
 download_file "$URL" "$DLDIR/$ARCHIVE" true
 
-# Checksum verification is mandatory. Activation must never stop running CBM
+# Checksum verification is mandatory. Activation must never stop running LSM
 # sessions for a candidate whose published digest was not positively verified.
-CHECKSUM_URL="${CBM_DOWNLOAD_URL}/checksums.txt"
+CHECKSUM_URL="${LSM_DOWNLOAD_URL}/checksums.txt"
 download_file "$CHECKSUM_URL" "$DLDIR/checksums.txt" false || {
     echo "error: could not download checksums.txt" >&2
     exit 1
@@ -224,10 +224,10 @@ echo "Checksum verified."
 # release assets use the same four-member root layout; anything outside that
 # closed set is a release-integrity failure, not a sidecar to ignore.
 if [ "$OS" = "windows" ]; then
-    ARCHIVE_BINARY="codebase-memory-mcp.exe"
+    ARCHIVE_BINARY="logan-spine-mcp.exe"
     ARCHIVE_INSTALLER="install.ps1"
 else
-    ARCHIVE_BINARY="codebase-memory-mcp"
+    ARCHIVE_BINARY="logan-spine-mcp"
     ARCHIVE_INSTALLER="install.sh"
 fi
 ARCHIVE_MEMBERS_FILE="$DLDIR/archive-members.txt"
@@ -312,7 +312,7 @@ if ! CANDIDATE_VERSION=$("$DLBIN" --version 2>&1); then
 fi
 echo "Verified candidate: $CANDIDATE_VERSION"
 
-DEST="$INSTALL_DIR/codebase-memory-mcp"
+DEST="$INSTALL_DIR/logan-spine-mcp"
 INSTALL_ARGS=(-y --force "--dir=$INSTALL_DIR")
 if [ "$SKIP_CONFIG" = true ]; then
     INSTALL_ARGS+=(--skip-config)
@@ -371,7 +371,7 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
 fi
 
 echo ""
-echo "Done! Restart your coding agent to start using codebase-memory-mcp."
+echo "Done! Restart your coding agent to start using logan-spine-mcp."
 
 } # end main()
 

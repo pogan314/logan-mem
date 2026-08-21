@@ -1,11 +1,11 @@
 /*
- * mcp.h — MCP (Model Context Protocol) server for codebase-memory-mcp.
+ * mcp.h — MCP (Model Context Protocol) server for logan-spine-mcp.
  *
  * Implements JSON-RPC 2.0 over stdio with the MCP tool calling protocol.
  * Provides 14 graph analysis tools (search, trace, query, index, etc.)
  */
-#ifndef CBM_MCP_H
-#define CBM_MCP_H
+#ifndef LSM_MCP_H
+#define LSM_MCP_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,9 +15,9 @@
 
 /* ── Forward declarations ─────────────────────────────────────── */
 
-typedef struct cbm_store cbm_store_t; /* from store/store.h */
-struct cbm_watcher;                   /* from watcher/watcher.h */
-struct cbm_config;                    /* from cli/cli.h */
+typedef struct lsm_store lsm_store_t; /* from store/store.h */
+struct lsm_watcher;                   /* from watcher/watcher.h */
+struct lsm_config;                    /* from cli/cli.h */
 
 /* ── JSON-RPC types ───────────────────────────────────────────── */
 
@@ -28,7 +28,7 @@ typedef struct {
     const char *id_str;     /* non-NULL when id is a JSON string (issue #253) */
     bool has_id;            /* false for notifications */
     const char *params_raw; /* raw JSON string of params */
-} cbm_jsonrpc_request_t;
+} lsm_jsonrpc_request_t;
 
 typedef struct {
     int64_t id;
@@ -36,179 +36,179 @@ typedef struct {
     const char *result_json; /* JSON string for result (success) */
     const char *error_json;  /* JSON string for error (failure), NULL on success */
     int error_code;          /* JSON-RPC error code */
-} cbm_jsonrpc_response_t;
+} lsm_jsonrpc_response_t;
 
 /* ── JSON-RPC parsing / formatting ────────────────────────────── */
 
 /* Parse a JSON-RPC request line. Returns 0 on success, -1 on error.
- * Caller must call cbm_jsonrpc_request_free(). */
-int cbm_jsonrpc_parse(const char *line, cbm_jsonrpc_request_t *out);
-void cbm_jsonrpc_request_free(cbm_jsonrpc_request_t *r);
+ * Caller must call lsm_jsonrpc_request_free(). */
+int lsm_jsonrpc_parse(const char *line, lsm_jsonrpc_request_t *out);
+void lsm_jsonrpc_request_free(lsm_jsonrpc_request_t *r);
 
 /* Format a JSON-RPC response. Returns heap-allocated JSON string. */
-char *cbm_jsonrpc_format_response(const cbm_jsonrpc_response_t *resp);
+char *lsm_jsonrpc_format_response(const lsm_jsonrpc_response_t *resp);
 
 /* Format a JSON-RPC error response. Returns heap-allocated JSON string. */
-char *cbm_jsonrpc_format_error(int64_t id, int code, const char *message);
+char *lsm_jsonrpc_format_error(int64_t id, int code, const char *message);
 
 /* ── MCP protocol helpers ─────────────────────────────────────── */
 
 /* Format an MCP tool result with text content. Returns heap-allocated JSON. */
-char *cbm_mcp_text_result(const char *text, bool is_error);
+char *lsm_mcp_text_result(const char *text, bool is_error);
 
 /* Return true when notifications/cancelled params target the active request. */
-bool cbm_mcp_cancel_request_matches(const char *params_json, int64_t active_id,
+bool lsm_mcp_cancel_request_matches(const char *params_json, int64_t active_id,
                                     const char *active_id_str);
 
 /* Format the tools/list response. Returns heap-allocated JSON. */
-char *cbm_mcp_tools_list(void);
+char *lsm_mcp_tools_list(void);
 
 /* Return a tool's JSON input_schema string by name (static; do not free), or
  * NULL if the tool is unknown. Backs the CLI flag parser + per-tool --help. */
-const char *cbm_mcp_tool_input_schema(const char *tool_name);
+const char *lsm_mcp_tool_input_schema(const char *tool_name);
 
 /* Registry accessors: the number of tools tools/list advertises, and the name
  * of tool `index` (static, do not free; NULL when out of range). */
-int cbm_mcp_tool_count(void);
-const char *cbm_mcp_tool_name(int index);
+int lsm_mcp_tool_count(void);
+const char *lsm_mcp_tool_name(int index);
 
 /* Render the top-level --help "Tools:" block from the registry so the help
  * text cannot drift from tools/list (#1361). Heap-allocated; caller frees. */
-char *cbm_mcp_tools_help_list(void);
+char *lsm_mcp_tools_help_list(void);
 
 /* Format the initialize response. params_json is the raw initialize params
  * (used for protocol version negotiation). Returns heap-allocated JSON. */
-char *cbm_mcp_initialize_response(const char *params_json);
+char *lsm_mcp_initialize_response(const char *params_json);
 
 /* ── Tool argument helpers ────────────────────────────────────── */
 
 /* Extract a string argument from the tools/call params JSON.
  * Returns heap-allocated copy, or NULL if not found. */
-char *cbm_mcp_get_string_arg(const char *args_json, const char *key);
+char *lsm_mcp_get_string_arg(const char *args_json, const char *key);
 
 /* Extract an int argument. Returns default_val if not found. */
-int cbm_mcp_get_int_arg(const char *args_json, const char *key, int default_val);
+int lsm_mcp_get_int_arg(const char *args_json, const char *key, int default_val);
 
 /* Extract a bool argument. Returns false if not found. */
-bool cbm_mcp_get_bool_arg(const char *args_json, const char *key);
+bool lsm_mcp_get_bool_arg(const char *args_json, const char *key);
 
 /* Extract the tool name from a tools/call params JSON. Heap-allocated. */
-char *cbm_mcp_get_tool_name(const char *params_json);
+char *lsm_mcp_get_tool_name(const char *params_json);
 
 /* Extract the arguments sub-object from tools/call params. Heap-allocated JSON string. */
-char *cbm_mcp_get_arguments(const char *params_json);
+char *lsm_mcp_get_arguments(const char *params_json);
 
 /* ── MCP Server ───────────────────────────────────────────────── */
 
-typedef struct cbm_mcp_server cbm_mcp_server_t;
+typedef struct lsm_mcp_server lsm_mcp_server_t;
 
 typedef enum {
-    CBM_MCP_TOOL_PROFILE_ALL = 0,
+    LSM_MCP_TOOL_PROFILE_ALL = 0,
     /* Agent-facing restricted surfaces: only explicitly allowlisted inspection
      * tools are advertised or callable. Internal cache maintenance may still
      * write, so these are intentionally not named strictly read-only modes. */
-    CBM_MCP_TOOL_PROFILE_ANALYSIS = 1,
-    CBM_MCP_TOOL_PROFILE_SCOUT = 2,
-} cbm_mcp_tool_profile_t;
+    LSM_MCP_TOOL_PROFILE_ANALYSIS = 1,
+    LSM_MCP_TOOL_PROFILE_SCOUT = 2,
+} lsm_mcp_tool_profile_t;
 
 /* Parse the process-level tool-profile flag. Explicit malformed or unknown
  * values fail closed with -1; absence selects the full default surface. */
-int cbm_mcp_parse_tool_profile_args(int argc, const char *const argv[const],
-                                    cbm_mcp_tool_profile_t *profile_out);
+int lsm_mcp_parse_tool_profile_args(int argc, const char *const argv[const],
+                                    lsm_mcp_tool_profile_t *profile_out);
 
 /* Restricted servers must not start a second unrestricted HTTP/RPC surface. */
-bool cbm_mcp_tool_profile_allows_http(cbm_mcp_tool_profile_t profile);
+bool lsm_mcp_tool_profile_allows_http(lsm_mcp_tool_profile_t profile);
 
 /* Optional daemon-owned physical index executor. repo_path is canonical and
  * already authorized against this session; args_json contains that canonical
  * path plus all caller options. The callback returns a complete malloc-owned
  * MCP tool result. A NULL result is reported as an error and never degrades to
  * an uncoordinated in-process index. */
-typedef char *(*cbm_mcp_index_executor_fn)(void *context, const char *repo_path,
+typedef char *(*lsm_mcp_index_executor_fn)(void *context, const char *repo_path,
                                            const char *args_json);
 
 /* Daemon-owned exclusive lease for operations that mutate a published project
  * database. begin may wait, but must remain cancellable by its session owner;
  * every successful begin is paired with exactly one end. Standalone/worker
  * servers leave these callbacks unset. */
-typedef bool (*cbm_mcp_project_mutation_begin_fn)(void *context, const char *project);
-typedef void (*cbm_mcp_project_mutation_end_fn)(void *context, const char *project);
+typedef bool (*lsm_mcp_project_mutation_begin_fn)(void *context, const char *project);
+typedef void (*lsm_mcp_project_mutation_end_fn)(void *context, const char *project);
 
 /* Nonblocking counterpart for opportunistic writes during a read request. A
  * successful call is released through the primary mutation guard's end hook. */
-typedef bool (*cbm_mcp_project_mutation_try_begin_fn)(void *context, const char *project);
+typedef bool (*lsm_mcp_project_mutation_try_begin_fn)(void *context, const char *project);
 
 /* Create an MCP server. store_path is the SQLite database directory. */
-cbm_mcp_server_t *cbm_mcp_server_new(const char *store_path);
+lsm_mcp_server_t *lsm_mcp_server_new(const char *store_path);
 
 /* Select the tool surface exposed by tools/list and enforced by dispatch. */
-void cbm_mcp_server_set_tool_profile(cbm_mcp_server_t *srv, cbm_mcp_tool_profile_t profile);
+void lsm_mcp_server_set_tool_profile(lsm_mcp_server_t *srv, lsm_mcp_tool_profile_t profile);
 
 /* Free an MCP server. */
-void cbm_mcp_server_free(cbm_mcp_server_t *srv);
+void lsm_mcp_server_free(lsm_mcp_server_t *srv);
 
 /* Set external watcher reference (for auto-index registration). Not owned. */
-void cbm_mcp_server_set_watcher(cbm_mcp_server_t *srv, struct cbm_watcher *w);
+void lsm_mcp_server_set_watcher(lsm_mcp_server_t *srv, struct lsm_watcher *w);
 
 /* Set external config store reference (for auto_index setting). Not owned. */
-void cbm_mcp_server_set_config(cbm_mcp_server_t *srv, struct cbm_config *cfg);
+void lsm_mcp_server_set_config(lsm_mcp_server_t *srv, struct lsm_config *cfg);
 
 /* Set an explicit session context for an embedded/daemon-backed server.
  * session_root is copied and its project name is derived using the same naming
  * rule as indexing. allowed_root is copied when non-NULL; an explicit NULL
  * disables the workspace boundary for this server instead of falling back to
- * CBM_ALLOWED_ROOT. Returns false when the context is invalid or cannot be
+ * LSM_ALLOWED_ROOT. Returns false when the context is invalid or cannot be
  * copied. */
-bool cbm_mcp_server_set_session_context(cbm_mcp_server_t *srv, const char *session_root,
+bool lsm_mcp_server_set_session_context(lsm_mcp_server_t *srv, const char *session_root,
                                         const char *allowed_root);
 
 /* Read-only session context accessors. Returned strings are owned by srv. */
-const char *cbm_mcp_server_session_root(const cbm_mcp_server_t *srv);
-const char *cbm_mcp_server_session_project(const cbm_mcp_server_t *srv);
-const char *cbm_mcp_server_allowed_root(const cbm_mcp_server_t *srv);
+const char *lsm_mcp_server_session_root(const lsm_mcp_server_t *srv);
+const char *lsm_mcp_server_session_project(const lsm_mcp_server_t *srv);
+const char *lsm_mcp_server_allowed_root(const lsm_mcp_server_t *srv);
 
 /* Enable/disable per-server update checks and automatic indexing. Enabled by
  * default for standalone servers; daemon sessions disable these so the shared
  * coordinator owns background work. */
-void cbm_mcp_server_set_background_tasks(cbm_mcp_server_t *srv, bool enabled);
+void lsm_mcp_server_set_background_tasks(lsm_mcp_server_t *srv, bool enabled);
 
-void cbm_mcp_server_set_index_executor(cbm_mcp_server_t *srv, cbm_mcp_index_executor_fn executor,
+void lsm_mcp_server_set_index_executor(lsm_mcp_server_t *srv, lsm_mcp_index_executor_fn executor,
                                        void *context);
 
 /* Relay supervised worker logs to one local request (for CLI progress). The
  * callback/context are borrowed until the synchronous tool call returns. */
-void cbm_mcp_server_set_index_log_callback(cbm_mcp_server_t *srv, cbm_proc_log_cb callback,
+void lsm_mcp_server_set_index_log_callback(lsm_mcp_server_t *srv, lsm_proc_log_cb callback,
                                            void *context);
 
-void cbm_mcp_server_set_project_mutation_guard(cbm_mcp_server_t *srv,
-                                               cbm_mcp_project_mutation_begin_fn begin,
-                                               cbm_mcp_project_mutation_end_fn end, void *context);
+void lsm_mcp_server_set_project_mutation_guard(lsm_mcp_server_t *srv,
+                                               lsm_mcp_project_mutation_begin_fn begin,
+                                               lsm_mcp_project_mutation_end_fn end, void *context);
 
 /* Configure an optional nonblocking acquire for the configured mutation
  * guard. If no try hook is set, a read that requires recovery fails with a
  * configuration error rather than invoking the blocking begin callback. */
-void cbm_mcp_server_set_project_mutation_try_guard(cbm_mcp_server_t *srv,
-                                                   cbm_mcp_project_mutation_try_begin_fn try_begin);
+void lsm_mcp_server_set_project_mutation_try_guard(lsm_mcp_server_t *srv,
+                                                   lsm_mcp_project_mutation_try_begin_fn try_begin);
 
 /* Read one complete MCP message from in. Supports newline-delimited JSON and
  * Content-Length framing, including additional headers. Returns 1 on success,
  * 0 on clean EOF, and -1 on invalid input or an I/O/allocation error. On
  * success, *message is heap-allocated and *content_length_framed identifies the
  * transport framing used by the request. */
-int cbm_mcp_read_message(FILE *in, char **message, bool *content_length_framed);
+int lsm_mcp_read_message(FILE *in, char **message, bool *content_length_framed);
 
 /* Run the MCP server event loop on the given streams (typically stdin/stdout).
  * Blocks until EOF on input. Returns 0 on success, -1 on error. */
-int cbm_mcp_server_run(cbm_mcp_server_t *srv, FILE *in, FILE *out);
+int lsm_mcp_server_run(lsm_mcp_server_t *srv, FILE *in, FILE *out);
 
 /* Process a single JSON-RPC request line and return the response.
  * Returns heap-allocated JSON response string, or NULL for notifications. */
-char *cbm_mcp_server_handle(cbm_mcp_server_t *srv, const char *line);
+char *lsm_mcp_server_handle(lsm_mcp_server_t *srv, const char *line);
 
 /* ── Tool handler dispatch (for testing) ──────────────────────── */
 
 /* Handle a tools/call request. Returns MCP tool result JSON. */
-char *cbm_mcp_handle_tool(cbm_mcp_server_t *srv, const char *tool_name, const char *args_json);
+char *lsm_mcp_handle_tool(lsm_mcp_server_t *srv, const char *tool_name, const char *args_json);
 
 /* ── Supervised background index (RSS isolation, #832) ────────── */
 
@@ -219,14 +219,14 @@ char *cbm_mcp_handle_tool(cbm_mcp_server_t *srv, const char *tool_name, const ch
  * error response, never permission for a marked host to index in-process.
  * Exposed so the security boundary is directly regression-tested. */
 typedef enum {
-    CBM_MCP_SUPERVISED_RESULT_FALLBACK = 0,
-    CBM_MCP_SUPERVISED_RESULT_SUCCESS,
-    CBM_MCP_SUPERVISED_RESULT_CONTAINED_FAILURE,
-    CBM_MCP_SUPERVISED_RESULT_UNSAFE_TERMINAL,
-} cbm_mcp_supervised_result_disposition_t;
+    LSM_MCP_SUPERVISED_RESULT_FALLBACK = 0,
+    LSM_MCP_SUPERVISED_RESULT_SUCCESS,
+    LSM_MCP_SUPERVISED_RESULT_CONTAINED_FAILURE,
+    LSM_MCP_SUPERVISED_RESULT_UNSAFE_TERMINAL,
+} lsm_mcp_supervised_result_disposition_t;
 
-cbm_mcp_supervised_result_disposition_t cbm_mcp_supervised_result_disposition(
-    int spawn_result, const cbm_index_worker_result_t *worker_result);
+lsm_mcp_supervised_result_disposition_t lsm_mcp_supervised_result_disposition(
+    int spawn_result, const lsm_index_worker_result_t *worker_result);
 
 /* Run a full index of root_path in a supervised worker SUBPROCESS (the same
  * crash/hang-isolating runner used by handle_index_repository), so the child
@@ -236,52 +236,52 @@ cbm_mcp_supervised_result_disposition_t cbm_mcp_supervised_result_disposition(
  * reserved for invalid input/request construction failure; a marked host must
  * stop rather than use it as permission to index in-process. This is the shared
  * entry the session auto-index routes through. */
-char *cbm_mcp_index_run_supervised_path(const char *root_path);
+char *lsm_mcp_index_run_supervised_path(const char *root_path);
 
 /* ── Idle store eviction ──────────────────────────────────────── */
 
 /* Evict the cached project store if idle for more than timeout_s seconds.
  * Protects initial in-memory stores (those never accessed via a named project).
  * Called automatically by the event loop on poll() timeout. */
-void cbm_mcp_server_evict_idle(cbm_mcp_server_t *srv, int timeout_s);
+void lsm_mcp_server_evict_idle(lsm_mcp_server_t *srv, int timeout_s);
 
 /* Check if the server currently has a cached store open. */
-bool cbm_mcp_server_has_cached_store(cbm_mcp_server_t *srv);
+bool lsm_mcp_server_has_cached_store(lsm_mcp_server_t *srv);
 
 /* ── Testing helpers ───────────────────────────────────────────── */
 
 /* Get the store handle from a server (for test setup). */
-cbm_store_t *cbm_mcp_server_store(cbm_mcp_server_t *srv);
+lsm_store_t *lsm_mcp_server_store(lsm_mcp_server_t *srv);
 
 /* Set the project name associated with the server's current store (for test setup).
  * This prevents resolve_store() from trying to open a .db file when tools specify a project. */
-void cbm_mcp_server_set_project(cbm_mcp_server_t *srv, const char *project);
+void lsm_mcp_server_set_project(lsm_mcp_server_t *srv, const char *project);
 
 /* ── Cancellation support ─────────────────────────────────────── */
 
-struct cbm_pipeline; /* forward decl */
+struct lsm_pipeline; /* forward decl */
 
 /* Get the currently active pipeline (for signal handler cancellation).
  * Returns NULL if no pipeline is running. */
-struct cbm_pipeline *cbm_mcp_server_active_pipeline(cbm_mcp_server_t *srv);
+struct lsm_pipeline *lsm_mcp_server_active_pipeline(lsm_mcp_server_t *srv);
 
 /* Thread-safe cancellation for daemon connection teardown. Returns false when
  * no request scope is active. Long-running request operations share the atomic
  * cancellation token and own any process-tree teardown before returning. */
-bool cbm_mcp_server_cancel_active(cbm_mcp_server_t *srv);
+bool lsm_mcp_server_cancel_active(lsm_mcp_server_t *srv);
 
 /* Publish an outer request lifetime before crossing an asynchronous transport
  * boundary. The daemon application uses this to close the short interval
  * between accepting a request token and entering JSON-RPC/tool dispatch. Each
  * successful begin must be paired with end. */
-bool cbm_mcp_server_request_scope_begin(cbm_mcp_server_t *srv);
-void cbm_mcp_server_request_scope_end(cbm_mcp_server_t *srv);
+bool lsm_mcp_server_request_scope_begin(lsm_mcp_server_t *srv);
+void lsm_mcp_server_request_scope_end(lsm_mcp_server_t *srv);
 
 /* ── URI helpers ───────────────────────────────────────────────── */
 
 /* Parse a file:// URI and extract the filesystem path.
  * Writes to out_path (up to out_size bytes). Returns true on success.
  * On Windows, strips leading / from /C:/path. */
-bool cbm_parse_file_uri(const char *uri, char *out_path, int out_size);
+bool lsm_parse_file_uri(const char *uri, char *out_path, int out_size);
 
-#endif /* CBM_MCP_H */
+#endif /* LSM_MCP_H */

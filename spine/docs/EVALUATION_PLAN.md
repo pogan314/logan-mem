@@ -1,4 +1,4 @@
-# codebase-memory-mcp — Evaluation Plan (159 Languages)
+# logan-spine-mcp — Evaluation Plan (159 Languages)
 
 > **Status:** Working plan document, **for peer review prior to execution**. This is a **plan, not a
 > result set** — it defines *how* the next evaluation is run and contains no scores. Execution happens
@@ -12,7 +12,7 @@
 
 ## 1. Purpose
 
-Measure how well `codebase-memory-mcp`'s structured knowledge-graph queries answer real developer
+Measure how well `logan-spine-mcp`'s structured knowledge-graph queries answer real developer
 questions compared to plain text exploration (Grep / Glob / Read), across **all 159 supported
 languages**, and — for the 9 LSP-hybrid languages — how well the deeper capabilities
 (**cross-repo intelligence** and **semantic / similarity edges**) actually perform.
@@ -31,7 +31,7 @@ source code.
 
 | Old (v8) | New |
 |----------|-----|
-| 66 languages | **159 languages** (full `CBM_LANG_*` registry) |
+| 66 languages | **159 languages** (full `LSM_LANG_*` registry) |
 | 5 language *groups* share one 12-question set | **5 bespoke questions per language**, each its own subchapter (§12) |
 | Versioned result dirs `v(x)/` | **One** `eval-results/` tree, no versions |
 | MCP answered by a budget-capped sub-agent | **Hybrid**: main session orchestrates, graph-only sub-agents answer (§4) |
@@ -42,15 +42,15 @@ source code.
 
 ## 2. Scope: the 159 languages
 
-The supported set is the `CBMLanguage` enum in `internal/cbm/cbm.h` (`CBM_LANG_GO=0` …
-`CBM_LANG_CFML`, before `CBM_LANG_COUNT`). The canonical short name used throughout this plan is the
-lowercased enum suffix (`CBM_LANG_GO` → `go`, `CBM_LANG_CSHARP` → `csharp`,
-`CBM_LANG_COMMONLISP` → `commonlisp`). The complete repo assignment for all 159 is the master table
+The supported set is the `LSMLanguage` enum in `internal/lsm/lsm.h` (`LSM_LANG_GO=0` …
+`LSM_LANG_CFML`, before `LSM_LANG_COUNT`). The canonical short name used throughout this plan is the
+lowercased enum suffix (`LSM_LANG_GO` → `go`, `LSM_LANG_CSHARP` → `csharp`,
+`LSM_LANG_COMMONLISP` → `commonlisp`). The complete repo assignment for all 159 is the master table
 in §8.
 
 ### The 9 LSP-hybrid languages (deep-dive cohort)
 
-These have dedicated hybrid LSP modules under `internal/cbm/lsp/` and therefore type-aware
+These have dedicated hybrid LSP modules under `internal/lsm/lsp/` and therefore type-aware
 call/usage resolution, plus they are the only languages where cross-repo and semantic/similar edges
 are mature enough to deserve a deep-dive:
 
@@ -146,7 +146,7 @@ than relying solely on our own authored questions:
 
 ## 4. Execution model (sequential, main-channel)
 
-**One language at a time, in the main channel, never concurrently.** The CBM/graph side of the
+**One language at a time, in the main channel, never concurrently.** The LSM/graph side of the
 evaluation — indexing and answering the 5 questions with graph tools — runs **entirely in the main
 channel**. The **only** subagent used during the run is the **Explorer** baseline (it just
 Grep/Glob/Reads — it never indexes — so it adds no indexing load). There are **no teams, no graph
@@ -173,7 +173,7 @@ for each language L in order (skip if manifest says done):
        (this is the only subagent; it runs while/after step 4 — no indexing, no contention)
   6. WRITE L's per-language report incl. index time + full histogram (§10.4)
   7. JUDGE L (blind, §9) — see note below
-  8. DELETE L's index from ~/.cache/codebase-memory-mcp so the next language starts clean,
+  8. DELETE L's index from ~/.cache/logan-spine-mcp so the next language starts clean,
        then mark L done in manifest.json and move to L+1
 ```
 
@@ -275,7 +275,7 @@ every index is genuinely cold. The skeleton:
 
 ```bash
 # Start clean: no leftover DBs, fresh results tree
-rm -f ~/.cache/codebase-memory-mcp/*.db
+rm -f ~/.cache/logan-spine-mcp/*.db
 mkdir -p /tmp/eval-results
 
 for lang in $ALL_LANGS; do                      # ALL_LANGS = full 159-name list (§2 / §8)
@@ -283,7 +283,7 @@ for lang in $ALL_LANGS; do                      # ALL_LANGS = full 159-name list
 
   # --- step 2: cold index in the main channel, TIMED (key metric) ---
   t0=$(now_ms)
-  scripts/benchmark-index.sh ~/.local/bin/codebase-memory-mcp "$lang" /tmp/bench/"$lang" /tmp/eval-results
+  scripts/benchmark-index.sh ~/.local/bin/logan-spine-mcp "$lang" /tmp/bench/"$lang" /tmp/eval-results
   index_ms=$(( $(now_ms) - t0 ))                 # clone+index wall-clock → manifest + report (§5)
 
   # --- step 3: record per-type histograms (zeros back-filled) ---
@@ -293,7 +293,7 @@ for lang in $ALL_LANGS; do                      # ALL_LANGS = full 159-name list
   #               + per-language report + (deferred, blind) judge ---
 
   # --- step 8: delete THIS language's index so the next is cold, then mark done ---
-  rm -f ~/.cache/codebase-memory-mcp/*.db
+  rm -f ~/.cache/logan-spine-mcp/*.db
   manifest_mark_done "$lang" "$index_ms"
 done
 ```
@@ -323,7 +323,7 @@ SHA, and — **not just totals** — a **per-type breakdown**:
   back-fills missing types with `0`** rather than recording only the types that appeared.
 
 These come straight from `query_graph` (`MATCH (n) RETURN labels(n), count(*)` and
-`MATCH ()-[r]->() RETURN type(r), count(*)`) / `get_graph_schema` / `cbm_store_count_edges_by_type`,
+`MATCH ()-[r]->() RETURN type(r), count(*)`) / `get_graph_schema` / `lsm_store_count_edges_by_type`,
 then **reconciled against the canonical 32-edge / node-label lists so every type is present**. A
 `query_graph` aggregation only returns types that exist, so a present-but-zero row is impossible to
 get from the query alone — the metrics writer must add the zeros. **Zero-count types are the point**:
@@ -615,7 +615,7 @@ mechanical metrics (§5) roll up into:
 For every language where Graph < Explorer, or any FAIL: the failing dimension(s), a 5–15 line code
 sample read from the actual repo, and a root-cause tag from
 `{LABEL_MISMATCH, EXTRACTION_GAP, CALLS_MISSING, QUERY_STRATEGY, PARSE_ERROR}` with the lang-spec
-file (`internal/cbm/lang_specs.c`) and the tree-sitter node type that would fix it. Plus a
+file (`internal/lsm/lang_specs.c`) and the tree-sitter node type that would fix it. Plus a
 priority-ordered recommendations list (severity × languages affected).
 
 ### 10.3 Language tier
@@ -860,10 +860,10 @@ Deep-Dive section.
 scripts/clone-bench-repos.sh /tmp/bench
 
 # 2. Cold index all 159 (LSP cohort in full mode)
-rm -f ~/.cache/codebase-memory-mcp/*.db
+rm -f ~/.cache/logan-spine-mcp/*.db
 mkdir -p /tmp/eval-results
 for lang in $ALL_LANGS; do
-  scripts/benchmark-index.sh ~/.local/bin/codebase-memory-mcp "$lang" /tmp/bench/"$lang" /tmp/eval-results
+  scripts/benchmark-index.sh ~/.local/bin/logan-spine-mcp "$lang" /tmp/bench/"$lang" /tmp/eval-results
 done
 
 # 3. Cross-repo pass for the 9 LSP pairs (index each service dir, then cross-repo-intelligence)
@@ -1010,7 +1010,7 @@ D5→`search_code("instance ")` + `search_graph(name_pattern=".*walk.*|.*query.*
 
 > The report below is reproduced in full, unedited, as required by project policy.
 
-#### Challenge Review: EVALUATION_PLAN.md — codebase-memory-mcp 159-Language Benchmark
+#### Challenge Review: EVALUATION_PLAN.md — logan-spine-mcp 159-Language Benchmark
 
 ##### What Looks Good
 
@@ -1102,7 +1102,7 @@ If the Graph agent returns zero results on D2 (zero-result rate flagged in §5),
 4. **Session continuity (§13):** What happens when the main session context window fills up or hits the usage limit at language 94? Is there a described checkpoint format — e.g., a manifest of completed languages that `clone-bench-repos.sh` can consult to skip already-done languages — or does the whole run restart from zero?
 5. **D5 cross-group comparability (§3, §8):** You aggregate D5 scores across all 159 languages. But D5 for Go means `semantic_query=["dispatch","route"]` surfacing functions from a vector index. D5 for gitignore means "naming-pattern / config↔code links." These are different operations using different graph tools. Do you actually intend the cross-language D5 rollup in §10.1 to be meaningful, or is it cosmetic?
 6. **S2 ground truth (§11.2):** "3–5 known near-duplicate function pairs" — how will you construct this set for each of the 9 LSP languages? Will you use the simhash output the indexer already produces, or is this a manual read? A 3-pair sample with no inter-rater agreement cannot support a recall claim. What is the minimum ground-truth size you consider credible?
-7. **Token exclusion policy (§5):** If a developer is deciding whether to adopt codebase-memory-mcp, they pay the full session cost, including agent spawn, orientation, and formatting. Why should the reported "Token Ratio" exclude the Explorer's orientation cost? Would you consider reporting both the narrow metric and the full-session metric?
+7. **Token exclusion policy (§5):** If a developer is deciding whether to adopt logan-spine-mcp, they pay the full session cost, including agent spawn, orientation, and formatting. Why should the reported "Token Ratio" exclude the Explorer's orientation cost? Would you consider reporting both the narrow metric and the full-session metric?
 8. **The 159-vs-tiered question (over-engineering check):** The plan acknowledges ~30 ⚠️ repos need validation before questions can be written. For languages like `regex` (fixture corpus), `csv` (data, not code), `dotenv` (a handful of fixture files), `sshconfig` (few files), what meaningful D1–D5 question set can be written? Is the signal from these languages worth the cost of the infrastructure to collect it?
 
 ##### Recommendation
@@ -2947,7 +2947,7 @@ _Edge-type histogram (all 32 edge types, zeros included):_
 **Repo:** shadcn-ui/ui (symlink tsx) (`/tmp/bench/css`)   **Symlink:** yes
 **Indexed in:** fast   **Why this repo:** One of the most-starred React component ecosystems on GitHub; its design-token CSS (`globals.css` custom-property themes + `@layer` / `@tailwind` directives) is idiomatic, substantial, real-world CSS, satisfying the plan's "popular + idiomatic + non-trivial size" repo-selection criteria.
 
-> **Indexer note (fairness):** the CBM indexer's CSS spec extracts **no definition nodes** — no selectors, no custom-property declarations — only `@import` edges and the stylesheet module. There is **no `var()` define→use edge** and **no qualified name** for a selector block. Questions below are authored honestly around this: the structural dimensions are expected to be **grep-favoring or N/A**, not graph wins.
+> **Indexer note (fairness):** the LSM indexer's CSS spec extracts **no definition nodes** — no selectors, no custom-property declarations — only `@import` edges and the stylesheet module. There is **no `var()` define→use edge** and **no qualified name** for a selector block. Questions below are authored honestly around this: the structural dimensions are expected to be **grep-favoring or N/A**, not graph wins.
 
 **The 5 questions** (bespoke; dimension in brackets):
 1. **[D1 Definition/API]** "List every top-level selector block in `apps/www/styles/globals.css` [verify] — specifically the `:root` and `.dark` blocks that declare design tokens such as `--background`, `--foreground`, `--primary`, `--radius`. (Symmetric: these selectors are equally findable by `grep -nE ':root|\.dark'`. CSS yields no graph Definition nodes, so the graph is expected to do no better than — and likely worse than — plain grep here.)"
@@ -4200,7 +4200,7 @@ _Edge-type histogram (all 32 edge types, zeros included):_
 
 **The 5 questions** (bespoke; dimension in brackets):
 1. **[D1 Definition/API]** "In the root `pom.xml`, list the top-level `<plugin>` definitions under `<build>` — e.g. the `spring-boot-maven-plugin` and the `spring-javaformat-maven-plugin` [verify] entries. (Symmetric: grep-findable too — artifactIds appear as literal `<artifactId>` text under `<plugin>`.)"
-2. **[D2 Relationship]** "N/A for build/config XML. A root `pom.xml` has no call/reference graph in the codebase-memory sense — `<parent>` inheritance and `${...}` property placeholders are Maven's own resolution mechanics, not CALLS/IMPORTS edges the graph models. (Best-effort, non-scoring sub-probe: which `<parent>` POM does this inherit from — `spring-boot-starter-parent` — answerable by either tool from literal text; documented here only so the dimension is acknowledged, not forced into a fake relationship query.)"
+2. **[D2 Relationship]** "N/A for build/config XML. A root `pom.xml` has no call/reference graph in the logan-spine sense — `<parent>` inheritance and `${...}` property placeholders are Maven's own resolution mechanics, not CALLS/IMPORTS edges the graph models. (Best-effort, non-scoring sub-probe: which `<parent>` POM does this inherit from — `spring-boot-starter-parent` — answerable by either tool from literal text; documented here only so the dimension is acknowledged, not forced into a fake relationship query.)"
 3. **[D3 Retrieval]** "Retrieve the full `<dependencies>` block (the largest single definition) from the root `pom.xml`. (Symmetric: grep-findable too — the `<dependencies>` open/close tags are literal anchors; verbatim retrieval is the test, not structure.)"
 4. **[D4 Architecture]** "Describe the XML/config file organization of the repo: where build (`pom.xml`), CI workflow (`.github/workflows/*.yml` [verify]), and resource config (`src/main/resources/**`) markup live relative to the Java source tree."
 5. **[D5 Cross-cutting/Semantic]** "(Graph-favoring) Within the XML/config surface, which Maven property keys defined in `pom.xml` (e.g. `<java.version>`, `<webjars-bootstrap.version>` [verify]) are reused via `${...}` in the same or sibling config files, and are any version literals duplicated across `pom.xml` and CI workflow files [verify]? (Note: config↔Java-runtime semantic links are out of scope for XML — there is no graph edge from a Maven `<artifactId>` to Java usage — so this stays inside the markup/config tree where a cross-cutting query is meaningful.)"
@@ -9564,7 +9564,7 @@ _Edge-type histogram (all 32 edge types, zeros included):_
 ### 135. regex — E (Config/Data/Markup/Schema/Build/Template/HDL/Shader/Docs)
 
 **Repo:** tests/eval-fixtures/regex (fixture corpus, see plan section 8.1) (`/tmp/bench/regex`)   **Symlink:** no
-**Indexed in:** fast   **Why this repo:** No idiomatic standalone regex project exists; per §8.1 the language is exercised against a small curated, version-controlled fixture corpus of representative regex pattern files — the most reproducible stand-in the selection criteria allow for a data/grammar-fragment language. **Indexability precondition [verify]:** the current binary registers the regex grammar but does **not** map any `.regex` file extension in the discovery `EXT_TABLE` (regex is vendored primarily as an embedded/injection grammar). The corpus must therefore be wired to an extension the indexer routes to `CBM_LANG_REGEX` (or that wiring added) before it indexes at all; confirm at execution that the corpus files actually produce nodes.
+**Indexed in:** fast   **Why this repo:** No idiomatic standalone regex project exists; per §8.1 the language is exercised against a small curated, version-controlled fixture corpus of representative regex pattern files — the most reproducible stand-in the selection criteria allow for a data/grammar-fragment language. **Indexability precondition [verify]:** the current binary registers the regex grammar but does **not** map any `.regex` file extension in the discovery `EXT_TABLE` (regex is vendored primarily as an embedded/injection grammar). The corpus must therefore be wired to an extension the indexer routes to `LSM_LANG_REGEX` (or that wiring added) before it indexes at all; confirm at execution that the corpus files actually produce nodes.
 
 **The 5 questions** (bespoke; dimension in brackets):
 1. **[D1 Definition/API]** "For each pattern file in the corpus, report the single `pattern` node the index extracted and the file it lives in (the regex grammar's root node is `pattern`, so expect exactly one per file, named/anchored by its file). Confirm the file→node mapping is 1:1 across the corpus." [verify — exact fixture filenames AND one-pattern-node-per-file behavior confirmed grep-first at execution; both are plain-grep-findable since the files and their contents are flat text]
@@ -10936,7 +10936,7 @@ _Edge-type histogram (all 32 edge types, zeros included):_
 **Repo:** lirios/lirios (`/tmp/bench/qml`)   **Symlink:** no
 **Indexed in:** fast   **Why this repo:** Liri OS is a popular, actively-maintained Qt Quick desktop project whose UI is written idiomatically and substantially in QML (declarative object trees, properties, signals, imports) — matching the plan's "popular + idiomatic + substantial in the target language" repo-selection criterion for Group E markup.
 
-> **Indexer note (fairness):** the CBM QML spec parses with the `qmljs` grammar (a TypeScript superset). It extracts **`property` and `signal` members** (`ui_property`/`ui_signal` → field Definition nodes), **`import` statements** (`ui_import`/`import_statement` → IMPORTS edges), explicit **inline `component` declarations** (`ui_inline_component`) and any embedded JS functions/classes. It does **not** create a Definition node for the anonymous QML **root object** (`ui_object_definition` has no name field), so a QML file's root type has **no qualified name** — root-object retrieval falls back to file/line lookup, exactly like CSS selector blocks. Questions are authored honestly around this: D1/D3 are written so the property/signal/import structure the graph genuinely captures is testable, while the root-object parts are flagged as grep/file-retrieval parity rather than graph wins.
+> **Indexer note (fairness):** the LSM QML spec parses with the `qmljs` grammar (a TypeScript superset). It extracts **`property` and `signal` members** (`ui_property`/`ui_signal` → field Definition nodes), **`import` statements** (`ui_import`/`import_statement` → IMPORTS edges), explicit **inline `component` declarations** (`ui_inline_component`) and any embedded JS functions/classes. It does **not** create a Definition node for the anonymous QML **root object** (`ui_object_definition` has no name field), so a QML file's root type has **no qualified name** — root-object retrieval falls back to file/line lookup, exactly like CSS selector blocks. Questions are authored honestly around this: D1/D3 are written so the property/signal/import structure the graph genuinely captures is testable, while the root-object parts are flagged as grep/file-retrieval parity rather than graph wins.
 
 **The 5 questions** (bespoke; dimension in brackets):
 1. **[D1 Definition/API]** "List the declared `property` and `signal` members of the shell UI components — e.g. the `property`/`signal` declarations in `Indicator.qml` and `StatusBar.qml` [verify] — and any explicit `component`-keyword inline component definitions. (Symmetric: these are equally findable by `grep -nE '^\s*(property|signal|component) '`. Note the *anonymous root object type* of each `.qml` file is **not** a graph Definition node, so for the root type itself the graph does no better than grep — only the property/signal members and inline components are graph nodes.)"

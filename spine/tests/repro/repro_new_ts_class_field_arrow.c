@@ -20,7 +20,7 @@
  * DEFECT A -- extract_defs.c, extract_class_methods() (~line 3578):
  *   The function iterates the class body's direct children.  For each child it
  *   checks:
- *     cbm_kind_in_set(method_node, spec->function_node_types)
+ *     lsm_kind_in_set(method_node, spec->function_node_types)
  *   "public_field_definition" is NOT in ts_func_types -- only
  *   "function_declaration", "arrow_function", "method_definition", etc. are.
  *   So the body-scan loop hits `continue` and the method is never emitted.
@@ -44,7 +44,7 @@
  *   (the class "proj.ts.Foo"), NOT the method "proj.ts.Foo.handleClick".
  *
  * EXPECTED (correct) behavior:
- *   A. cbm_extract_file must emit a Method def with name="handleClick"
+ *   A. lsm_extract_file must emit a Method def with name="handleClick"
  *      and qualified_name containing both "Foo" and "handleClick".
  *   B. The call to helper() inside handleClick must have
  *      enclosing_func_qn pointing to the handleClick method, NOT just
@@ -60,7 +60,7 @@
  *
  * HOW TO CONFIRM THE BUG WITHOUT COMPILING:
  *   1. extract_class_methods (extract_defs.c ~3578): iterates body children;
- *      line ~3620 guards on cbm_kind_in_set(method_node, spec->function_node_types);
+ *      line ~3620 guards on lsm_kind_in_set(method_node, spec->function_node_types);
  *      "public_field_definition" is absent from ts_func_types (lang_specs.c ~237)
  *      -> guard fails -> no Method emitted.
  *   2. resolve_toplevel_arrow_name (extract_defs.c ~598): only handles
@@ -79,18 +79,18 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <string.h>
 
-static CBMFileResult *rx_ts(const char *src) {
-    return cbm_extract_file(src, (int)strlen(src), CBM_LANG_TYPESCRIPT, "proj", "ts.ts",
+static LSMFileResult *rx_ts(const char *src) {
+    return lsm_extract_file(src, (int)strlen(src), LSM_LANG_TYPESCRIPT, "proj", "ts.ts",
                             0, NULL, NULL);
 }
 
-static CBMDefinition *find_def_by_name(CBMFileResult *r, const char *label, const char *name) {
+static LSMDefinition *find_def_by_name(LSMFileResult *r, const char *label, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (label && (!d->label || strcmp(d->label, label) != 0))
             continue;
         if (name && (!d->name || strcmp(d->name, name) != 0))
@@ -120,25 +120,25 @@ TEST(repro_new_ts_class_field_arrow_method_def_dropped) {
         "    };\n"
         "}\n";
 
-    CBMFileResult *r = rx_ts(src);
+    LSMFileResult *r = rx_ts(src);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
     /* Precondition: the class Foo itself must be extracted. */
-    CBMDefinition *cls = find_def_by_name(r, "Class", "Foo");
+    LSMDefinition *cls = find_def_by_name(r, "Class", "Foo");
     ASSERT_NOT_NULL(cls);
 
     /* Precondition: the free helper() function must be extracted. */
-    CBMDefinition *helper = find_def_by_name(r, "Function", "helper");
+    LSMDefinition *helper = find_def_by_name(r, "Function", "helper");
     ASSERT_NOT_NULL(helper);
 
     /* DEFECT A PRIMARY ASSERTION: the arrow-function class field must
      * be emitted as a Method def under the class.
-     * WHY RED: extract_class_methods bails out at the cbm_kind_in_set check
+     * WHY RED: extract_class_methods bails out at the lsm_kind_in_set check
      * (public_field_definition is not in ts_func_types) without ever calling
      * push_method_def; and the walk_defs path fails in resolve_toplevel_arrow_name
      * (parent is public_field_definition, not variable_declarator). */
-    CBMDefinition *method = find_def_by_name(r, "Method", "handleClick");
+    LSMDefinition *method = find_def_by_name(r, "Method", "handleClick");
     ASSERT_NOT_NULL(method); /* RED on buggy code */
 
     /* Sanity: the emitted Method must be scoped to its class. */
@@ -146,7 +146,7 @@ TEST(repro_new_ts_class_field_arrow_method_def_dropped) {
     ASSERT_TRUE(strstr(method->qualified_name, "Foo") != NULL);
     ASSERT_TRUE(strstr(method->qualified_name, "handleClick") != NULL);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -173,7 +173,7 @@ TEST(repro_new_ts_class_field_arrow_call_enclosing_qn) {
         "    };\n"
         "}\n";
 
-    CBMFileResult *r = rx_ts(src);
+    LSMFileResult *r = rx_ts(src);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
@@ -197,7 +197,7 @@ TEST(repro_new_ts_class_field_arrow_call_enclosing_qn) {
      * which does not contain "handleClick" -> ASSERT_TRUE fires -> RED. */
     ASSERT_TRUE(strstr(enc, "handleClick") != NULL); /* RED on buggy code */
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

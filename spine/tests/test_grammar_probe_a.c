@@ -35,7 +35,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -56,7 +56,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } GpaProj;
 
 typedef struct {
@@ -70,29 +70,29 @@ static void gpa_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *gpa_open_indexed(GpaProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *gpa_open_indexed(GpaProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *gpa_index_files(GpaProj *lp, const GpaFile *files, int nfiles) {
+static lsm_store_t *gpa_index_files(GpaProj *lp, const GpaFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_gpa_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_gpa_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     gpa_to_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -100,7 +100,7 @@ static cbm_store_t *gpa_index_files(GpaProj *lp, const GpaFile *files, int nfile
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -111,9 +111,9 @@ static cbm_store_t *gpa_index_files(GpaProj *lp, const GpaFile *files, int nfile
     return gpa_open_indexed(lp);
 }
 
-static void gpa_cleanup(GpaProj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void gpa_cleanup(GpaProj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project);
     lp->project = NULL;
     th_rmtree(lp->tmpdir);
@@ -127,17 +127,17 @@ static void gpa_cleanup(GpaProj *lp, cbm_store_t *store) {
 
 /* ── Node-count helpers ─────────────────────────────────────────── */
 
-static int gpa_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int gpa_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Sum of all type-like labels. */
-static int gpa_type_nodes(cbm_store_t *store, const char *project) {
+static int gpa_type_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class","Struct","Interface","Enum","Trait","Type",NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -160,16 +160,16 @@ typedef struct {
 
 static GpaMetrics gpa_metrics_files(const GpaFile *files, int nfiles) {
     GpaProj lp;
-    cbm_store_t *store = gpa_index_files(&lp, files, nfiles);
+    lsm_store_t *store = gpa_index_files(&lp, files, nfiles);
     GpaMetrics m = {0};
     if (store) {
         m.ok          = 1;
-        m.total_nodes = cbm_store_count_nodes(store, lp.project);
+        m.total_nodes = lsm_store_count_nodes(store, lp.project);
         m.functions   = gpa_count_label(store, lp.project, "Function");
         m.methods     = gpa_count_label(store, lp.project, "Method");
         m.types       = gpa_type_nodes(store, lp.project);
-        m.imports     = cbm_store_count_edges_by_type(store, lp.project, "IMPORTS");
-        m.inherits    = cbm_store_count_edges_by_type(store, lp.project, "INHERITS");
+        m.imports     = lsm_store_count_edges_by_type(store, lp.project, "IMPORTS");
+        m.inherits    = lsm_store_count_edges_by_type(store, lp.project, "INHERITS");
     }
     gpa_cleanup(&lp, store);
     return m;
@@ -613,7 +613,7 @@ TEST(probe_crystal_imports_edge) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
- * GROUP 7 — D (.d) — CBM_LANG_DLANG
+ * GROUP 7 — D (.d) — LSM_LANG_DLANG
  *
  * D label histogram: Function:2, Module:1
  * D has `import`, structs, classes with `:` inheritance, interfaces.

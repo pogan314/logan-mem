@@ -57,7 +57,7 @@ for path in git("ls-files", "--others", "--exclude-standard", "*.sh").splitlines
 # Places that actually execute things.
 search_roots = [root / ".github" / "workflows", root / "scripts",
                 root / "test-infrastructure"]
-search_files = [root / "Makefile.cbm", root / "Makefile"]
+search_files = [root / "Makefile.lsm", root / "Makefile"]
 for base in search_roots:
     if base.is_dir():
         search_files += [p for p in base.rglob("*")

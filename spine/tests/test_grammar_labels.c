@@ -2,20 +2,20 @@
  * test_grammar_labels.c — Per-grammar node-type LABEL golden snapshot.
  *
  * For every supported grammar, snapshot the deterministic node-type-label
- * histogram that cbm_extract_file() produces for the shared fixture (e.g.
+ * histogram that lsm_extract_file() produces for the shared fixture (e.g.
  * "Class:1,Function:2,Module:1"). Asserting the histogram stays fixed catches
  * ANY future change to how a grammar's constructs are labeled — e.g. a class
  * silently downgraded to a Function, a lost Method, or a new spurious node.
  *
  * Node counts are deterministic (unlike edge counts), so an exact histogram
- * golden is stable. Labels come from CBMDefinition.label assigned during
+ * golden is stable. Labels come from LSMDefinition.label assigned during
  * extraction (the same labels that become graph-node labels downstream).
  *
  * Capture workflow: a grammar with no golden row prints a `[LABEL-CAPTURE]`
  * line and fails; copy those lines into LABEL_GOLDENS, then the test asserts.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "grammar_cases.h"
 
 #include <stdlib.h>
@@ -23,7 +23,7 @@
 
 /* Build a sorted "Label:count,Label:count" histogram of a result's def labels
  * (includes the always-emitted Module node). Deterministic + stable. */
-static void label_histogram(CBMFileResult *r, char *out, size_t out_sz) {
+static void label_histogram(LSMFileResult *r, char *out, size_t out_sz) {
     /* Collect distinct labels + counts (small N — linear scan is fine). */
     enum { MAXL = 32 };
     const char *labels[MAXL];
@@ -251,13 +251,13 @@ static const char *golden_for(const char *name) {
 }
 
 TEST(grammar_label_goldens) {
-    int n = (int)CBM_GRAMMAR_CASES_COUNT;
+    int n = (int)LSM_GRAMMAR_CASES_COUNT;
     int failures = 0;
     int missing = 0;
     for (int i = 0; i < n; i++) {
-        const GrammarCase *c = &CBM_GRAMMAR_CASES[i];
-        CBMFileResult *r =
-            cbm_extract_file(c->src, (int)strlen(c->src), c->lang, "lbl", c->path, 0, NULL, NULL);
+        const GrammarCase *c = &LSM_GRAMMAR_CASES[i];
+        LSMFileResult *r =
+            lsm_extract_file(c->src, (int)strlen(c->src), c->lang, "lbl", c->path, 0, NULL, NULL);
         if (!r) {
             fprintf(stderr, "  [LABEL] %-14s extract returned NULL\n", c->name);
             failures++;
@@ -265,7 +265,7 @@ TEST(grammar_label_goldens) {
         }
         char hist[256];
         label_histogram(r, hist, sizeof(hist));
-        cbm_free_result(r);
+        lsm_free_result(r);
 
         const char *golden = golden_for(c->name);
         if (!golden) {
@@ -289,7 +289,7 @@ TEST(grammar_label_goldens) {
 }
 
 /* Count def nodes that are NOT the structural file/module wrappers. */
-static int non_module_defs(CBMFileResult *r) {
+static int non_module_defs(LSMFileResult *r) {
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
         const char *l = r->defs.items[i].label;
@@ -317,26 +317,26 @@ TEST(grammar_code_extracts_defs) {
     for (int k = 0; MUST_EXTRACT_DEFS[k]; k++) {
         const char *name = MUST_EXTRACT_DEFS[k];
         const GrammarCase *c = NULL;
-        for (int i = 0; i < (int)CBM_GRAMMAR_CASES_COUNT; i++) {
-            if (strcmp(CBM_GRAMMAR_CASES[i].name, name) == 0) {
-                c = &CBM_GRAMMAR_CASES[i];
+        for (int i = 0; i < (int)LSM_GRAMMAR_CASES_COUNT; i++) {
+            if (strcmp(LSM_GRAMMAR_CASES[i].name, name) == 0) {
+                c = &LSM_GRAMMAR_CASES[i];
                 break;
             }
         }
         if (!c) {
-            fprintf(stderr, "  [CODE-DEFS] FAIL %-14s — no fixture in CBM_GRAMMAR_CASES\n", name);
+            fprintf(stderr, "  [CODE-DEFS] FAIL %-14s — no fixture in LSM_GRAMMAR_CASES\n", name);
             failures++;
             continue;
         }
-        CBMFileResult *r =
-            cbm_extract_file(c->src, (int)strlen(c->src), c->lang, "cd", c->path, 0, NULL, NULL);
+        LSMFileResult *r =
+            lsm_extract_file(c->src, (int)strlen(c->src), c->lang, "cd", c->path, 0, NULL, NULL);
         if (!r) {
             fprintf(stderr, "  [CODE-DEFS] FAIL %-14s extract returned NULL\n", name);
             failures++;
             continue;
         }
         int nd = non_module_defs(r);
-        cbm_free_result(r);
+        lsm_free_result(r);
         if (nd < 1) {
             fprintf(stderr,
                     "  [CODE-DEFS] FAIL %-14s extracts 0 non-Module defs (under-extraction "

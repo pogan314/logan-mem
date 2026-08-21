@@ -20,7 +20,7 @@ typedef struct {
     const char *tag;
     const char *filename;
     const char *source;
-    CBMLanguage language;
+    LSMLanguage language;
     int check_bare_usage;
 } ArgUsageCase;
 
@@ -31,10 +31,10 @@ static int qn_ends_with_name(const char *qn, const char *name) {
     return strcmp(last ? last + 1 : qn, name) == 0;
 }
 
-static int raw_usage_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int raw_usage_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *u = &r->usages.items[i];
+        const LSMUsage *u = &r->usages.items[i];
         if (u->ref_name && strcmp(u->ref_name, target) == 0 &&
             qn_ends_with_name(u->enclosing_func_qn, caller)) {
             count++;
@@ -43,11 +43,11 @@ static int raw_usage_count(const CBMFileResult *r, const char *caller, const cha
     return count;
 }
 
-static int raw_usage_count_kind(const CBMFileResult *r, const char *caller, const char *target,
-                                CBMUsageKind kind) {
+static int raw_usage_count_kind(const LSMFileResult *r, const char *caller, const char *target,
+                                LSMUsageKind kind) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *u = &r->usages.items[i];
+        const LSMUsage *u = &r->usages.items[i];
         if (u->kind == kind && u->ref_name && strcmp(u->ref_name, target) == 0 &&
             qn_ends_with_name(u->enclosing_func_qn, caller)) {
             count++;
@@ -56,12 +56,12 @@ static int raw_usage_count_kind(const CBMFileResult *r, const char *caller, cons
     return count;
 }
 
-static int raw_usage_candidate_count(const CBMFileResult *r, const char *caller,
+static int raw_usage_candidate_count(const LSMFileResult *r, const char *caller,
                                      const char *target) {
     int count = 0;
     for (int i = 0; i < r->usages.count; i++) {
-        const CBMUsage *u = &r->usages.items[i];
-        if (u->kind == CBM_USAGE_VALUE && u->may_be_call_reference && u->ref_name &&
+        const LSMUsage *u = &r->usages.items[i];
+        if (u->kind == LSM_USAGE_VALUE && u->may_be_call_reference && u->ref_name &&
             strcmp(u->ref_name, target) == 0 && qn_ends_with_name(u->enclosing_func_qn, caller)) {
             count++;
         }
@@ -69,14 +69,14 @@ static int raw_usage_candidate_count(const CBMFileResult *r, const char *caller,
     return count;
 }
 
-static int raw_usage_exists(const CBMFileResult *r, const char *caller, const char *target) {
+static int raw_usage_exists(const LSMFileResult *r, const char *caller, const char *target) {
     return raw_usage_count(r, caller, target) > 0;
 }
 
-static int raw_call_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int raw_call_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *c = &r->calls.items[i];
+        const LSMCall *c = &r->calls.items[i];
         const char *callee = c->callee_name ? strrchr(c->callee_name, '.') : NULL;
         callee = callee ? callee + 1 : c->callee_name;
         if (callee && strcmp(callee, target) == 0 &&
@@ -87,15 +87,15 @@ static int raw_call_count(const CBMFileResult *r, const char *caller, const char
     return count;
 }
 
-static int raw_call_exists(const CBMFileResult *r, const char *caller, const char *target) {
+static int raw_call_exists(const LSMFileResult *r, const char *caller, const char *target) {
     return raw_call_count(r, caller, target) > 0;
 }
 
-static int resolved_call_count(const CBMFileResult *r, const char *caller, const char *target) {
+static int resolved_call_count(const LSMFileResult *r, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *c = &r->resolved_calls.items[i];
-        if (c->kind == CBM_RESOLVED_INVOCATION && qn_ends_with_name(c->caller_qn, caller) &&
+        const LSMResolvedCall *c = &r->resolved_calls.items[i];
+        if (c->kind == LSM_RESOLVED_INVOCATION && qn_ends_with_name(c->caller_qn, caller) &&
             qn_ends_with_name(c->callee_qn, target)) {
             count++;
         }
@@ -103,82 +103,82 @@ static int resolved_call_count(const CBMFileResult *r, const char *caller, const
     return count;
 }
 
-static int edge_connects(cbm_store_t *store, const char *project, const char *type,
+static int edge_connects(lsm_store_t *store, const char *project, const char *type,
                          const char *caller, const char *target) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int count = 0;
-    if (cbm_store_find_edges_by_type(store, project, type, &edges, &count) != CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, type, &edges, &count) != LSM_STORE_OK)
         return 0;
 
     int found = 0;
     for (int i = 0; i < count && !found; i++) {
-        cbm_node_t src = {0};
-        cbm_node_t dst = {0};
-        int src_ok = cbm_store_find_node_by_id(store, edges[i].source_id, &src) == CBM_STORE_OK;
-        int dst_ok = cbm_store_find_node_by_id(store, edges[i].target_id, &dst) == CBM_STORE_OK;
+        lsm_node_t src = {0};
+        lsm_node_t dst = {0};
+        int src_ok = lsm_store_find_node_by_id(store, edges[i].source_id, &src) == LSM_STORE_OK;
+        int dst_ok = lsm_store_find_node_by_id(store, edges[i].target_id, &dst) == LSM_STORE_OK;
         if (src_ok && dst_ok && src.name && dst.name && strcmp(src.name, caller) == 0 &&
             strcmp(dst.name, target) == 0) {
             found = 1;
         }
-        cbm_node_free_fields(&src);
-        cbm_node_free_fields(&dst);
+        lsm_node_free_fields(&src);
+        lsm_node_free_fields(&dst);
     }
-    cbm_store_free_edges(edges, count);
+    lsm_store_free_edges(edges, count);
     return found;
 }
 
-static int edge_connects_callable(cbm_store_t *store, const char *project, const char *type,
+static int edge_connects_callable(lsm_store_t *store, const char *project, const char *type,
                                   const char *caller, const char *target) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int count = 0;
-    if (cbm_store_find_edges_by_type(store, project, type, &edges, &count) != CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, type, &edges, &count) != LSM_STORE_OK)
         return 0;
 
     int found = 0;
     for (int i = 0; i < count && !found; i++) {
-        cbm_node_t src = {0};
-        cbm_node_t dst = {0};
-        int src_ok = cbm_store_find_node_by_id(store, edges[i].source_id, &src) == CBM_STORE_OK;
-        int dst_ok = cbm_store_find_node_by_id(store, edges[i].target_id, &dst) == CBM_STORE_OK;
+        lsm_node_t src = {0};
+        lsm_node_t dst = {0};
+        int src_ok = lsm_store_find_node_by_id(store, edges[i].source_id, &src) == LSM_STORE_OK;
+        int dst_ok = lsm_store_find_node_by_id(store, edges[i].target_id, &dst) == LSM_STORE_OK;
         int callable_target =
             dst.label && (strcmp(dst.label, "Function") == 0 || strcmp(dst.label, "Method") == 0);
         if (src_ok && dst_ok && callable_target && src.name && dst.name &&
             strcmp(src.name, caller) == 0 && strcmp(dst.name, target) == 0) {
             found = 1;
         }
-        cbm_node_free_fields(&src);
-        cbm_node_free_fields(&dst);
+        lsm_node_free_fields(&src);
+        lsm_node_free_fields(&dst);
     }
-    cbm_store_free_edges(edges, count);
+    lsm_store_free_edges(edges, count);
     return found;
 }
 
-static int edge_connects_target_qn(cbm_store_t *store, const char *project, const char *type,
+static int edge_connects_target_qn(lsm_store_t *store, const char *project, const char *type,
                                    const char *caller, const char *target_qn_fragment) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int count = 0;
-    if (cbm_store_find_edges_by_type(store, project, type, &edges, &count) != CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, type, &edges, &count) != LSM_STORE_OK)
         return 0;
 
     int found = 0;
     for (int i = 0; i < count && !found; i++) {
-        cbm_node_t src = {0};
-        cbm_node_t dst = {0};
-        int src_ok = cbm_store_find_node_by_id(store, edges[i].source_id, &src) == CBM_STORE_OK;
-        int dst_ok = cbm_store_find_node_by_id(store, edges[i].target_id, &dst) == CBM_STORE_OK;
+        lsm_node_t src = {0};
+        lsm_node_t dst = {0};
+        int src_ok = lsm_store_find_node_by_id(store, edges[i].source_id, &src) == LSM_STORE_OK;
+        int dst_ok = lsm_store_find_node_by_id(store, edges[i].target_id, &dst) == LSM_STORE_OK;
         if (src_ok && dst_ok && src.name && dst.qualified_name && strcmp(src.name, caller) == 0 &&
             strstr(dst.qualified_name, target_qn_fragment)) {
             found = 1;
         }
-        cbm_node_free_fields(&src);
-        cbm_node_free_fields(&dst);
+        lsm_node_free_fields(&src);
+        lsm_node_free_fields(&dst);
     }
-    cbm_store_free_edges(edges, count);
+    lsm_store_free_edges(edges, count);
     return found;
 }
 
 static int check_raw_argument_case(const ArgUsageCase *c) {
-    CBMFileResult *r = cbm_extract_file(c->source, (int)strlen(c->source), c->language, "repro",
+    LSMFileResult *r = lsm_extract_file(c->source, (int)strlen(c->source), c->language, "repro",
                                         c->filename, 0, NULL, NULL);
     if (!r) {
         fprintf(stderr, "  [call-arg] lang=%s invariant=extract result=null\n", c->tag);
@@ -196,14 +196,14 @@ static int check_raw_argument_case(const ArgUsageCase *c) {
     CHECK_RAW(!r->has_error && !r->parse_incomplete, "valid_fixture");
     CHECK_RAW(raw_call_exists(r, "argument", "accept"), "registrar_call_missing");
     CHECK_RAW(raw_call_exists(r, "direct", "handler"), "direct_call_missing");
-    CBMUsageKind expected_kind = CBM_USAGE_VALUE;
-    CBMUsageKind rejected_kind = CBM_USAGE_CALL_REFERENCE;
+    LSMUsageKind expected_kind = LSM_USAGE_VALUE;
+    LSMUsageKind rejected_kind = LSM_USAGE_CALL_REFERENCE;
     if (c->check_bare_usage) {
         CHECK_RAW(raw_usage_count_kind(r, "bare", "handler", expected_kind) == 1,
                   "bare_usage_kind_missing");
         CHECK_RAW(raw_usage_count_kind(r, "bare", "handler", rejected_kind) == 0,
                   "bare_usage_kind_duplicated");
-        if (c->language == CBM_LANG_KOTLIN) {
+        if (c->language == LSM_LANG_KOTLIN) {
             CHECK_RAW(raw_usage_candidate_count(r, "bare", "handler") == 1,
                       "bare_semantic_candidate_missing");
         }
@@ -218,7 +218,7 @@ static int check_raw_argument_case(const ArgUsageCase *c) {
     CHECK_RAW(!raw_call_exists(r, "argument", "handler"), "argument_fabricated_as_call");
 #undef CHECK_RAW
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return failures;
 }
 
@@ -229,14 +229,14 @@ static const ArgUsageCase SHARED_CASES[] = {
      "function argument() { accept(handler); }\n"
      "function direct() { handler(); }\n"
      "function bare() { handler; }\n",
-     CBM_LANG_JAVASCRIPT, 1},
+     LSM_LANG_JAVASCRIPT, 1},
     {"typescript", "main.ts",
      "function handler(): void {}\n"
      "function accept(cb: () => void): void {}\n"
      "function argument(): void { accept(handler); }\n"
      "function direct(): void { handler(); }\n"
      "function bare(): void { handler; }\n",
-     CBM_LANG_TYPESCRIPT, 1},
+     LSM_LANG_TYPESCRIPT, 1},
     {"go", "main.go",
      "package sample\n"
      "func handler() {}\n"
@@ -244,14 +244,14 @@ static const ArgUsageCase SHARED_CASES[] = {
      "func argument() { accept(handler) }\n"
      "func direct() { handler() }\n"
      "func bare() { _ = handler }\n",
-     CBM_LANG_GO, 1},
+     LSM_LANG_GO, 1},
     {"python", "main.py",
      "def handler():\n    pass\n"
      "def accept(cb):\n    pass\n"
      "def argument():\n    accept(handler)\n"
      "def direct():\n    handler()\n"
      "def bare():\n    handler\n",
-     CBM_LANG_PYTHON, 1},
+     LSM_LANG_PYTHON, 1},
     {"c", "main.c",
      "typedef void (*callback_t)(void);\n"
      "void handler(void) {}\n"
@@ -259,7 +259,7 @@ static const ArgUsageCase SHARED_CASES[] = {
      "void argument(void) { accept(handler); }\n"
      "void direct(void) { handler(); }\n"
      "void bare(void) { callback_t cb = handler; (void)cb; }\n",
-     CBM_LANG_C, 1},
+     LSM_LANG_C, 1},
     {"cpp", "main.cpp",
      "using Callback = void (*)();\n"
      "void handler() {}\n"
@@ -267,14 +267,14 @@ static const ArgUsageCase SHARED_CASES[] = {
      "void argument() { accept(handler); }\n"
      "void direct() { handler(); }\n"
      "void bare() { Callback cb = handler; (void)cb; }\n",
-     CBM_LANG_CPP, 0},
+     LSM_LANG_CPP, 0},
     {"rust", "main.rs",
      "fn handler() {}\n"
      "fn accept(_cb: fn()) {}\n"
      "fn argument() { accept(handler); }\n"
      "fn direct() { handler(); }\n"
      "fn bare() { let _cb: fn() = handler; }\n",
-     CBM_LANG_RUST, 1},
+     LSM_LANG_RUST, 1},
     {"csharp", "Main.cs",
      "using System;\n"
      "class Sample {\n"
@@ -284,21 +284,21 @@ static const ArgUsageCase SHARED_CASES[] = {
      "  static void direct() { handler(); }\n"
      "  static void bare() { Action cb = handler; }\n"
      "}\n",
-     CBM_LANG_CSHARP, 1},
+     LSM_LANG_CSHARP, 1},
     {"kotlin", "Main.kt",
      "fun handler() {}\n"
      "fun accept(cb: () -> Unit) {}\n"
      "fun argument() { accept(::handler) }\n"
      "fun direct() { handler() }\n"
      "fun bare() { val cb = ::handler }\n",
-     CBM_LANG_KOTLIN, 1},
+     LSM_LANG_KOTLIN, 1},
     {"tsx", "main.tsx",
      "function handler(): void {}\n"
      "function accept(cb: () => void): void {}\n"
      "function argument(): void { accept(handler); }\n"
      "function direct(): void { handler(); }\n"
      "function bare(): void { handler; }\n",
-     CBM_LANG_TSX, 1},
+     LSM_LANG_TSX, 1},
     {"cuda", "main.cu",
      "using Callback = void (*)();\n"
      "void handler() {}\n"
@@ -306,7 +306,7 @@ static const ArgUsageCase SHARED_CASES[] = {
      "void argument() { accept(handler); }\n"
      "void direct() { handler(); }\n"
      "void bare() { Callback cb = handler; (void)cb; }\n",
-     CBM_LANG_CUDA, 0},
+     LSM_LANG_CUDA, 0},
 };
 
 TEST(repro_call_argument_javascript) {
@@ -370,7 +370,7 @@ TEST(repro_python_local_shadow_does_not_link_global_callable) {
                                 "def argument(handler):\n    return accept(handler)\n"
                                 "def direct():\n    return handler()\n";
     RProj project = {0};
-    cbm_store_t *store = rh_index(&project, "main.py", source);
+    lsm_store_t *store = rh_index(&project, "main.py", source);
     if (!store) {
         FAIL("Python local-shadow fixture did not produce a graph store");
     }
@@ -403,11 +403,11 @@ TEST(repro_cpp_bare_function_value_usage) {
     static const char *source = "using Callback = void (*)();\n"
                                 "void handler() {}\n"
                                 "void bare() { Callback cb = handler; (void)cb; }\n";
-    CBMFileResult *r = cbm_extract_file(source, (int)strlen(source), CBM_LANG_CPP, "repro",
+    LSMFileResult *r = lsm_extract_file(source, (int)strlen(source), LSM_LANG_CPP, "repro",
                                         "main.cpp", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int found = raw_usage_exists(r, "bare", "handler");
-    cbm_free_result(r);
+    lsm_free_result(r);
     if (!found)
         fprintf(stderr, "  [call-arg] lang=cpp invariant=bare_usage_missing\n");
     ASSERT_TRUE(found);
@@ -419,11 +419,11 @@ static int check_ts_lsp_mode(int disabled) {
                                 "function accept(cb: () => void): void {}\n"
                                 "function argument(): void { accept(handler); }\n";
     if (disabled)
-        cbm_setenv("CBM_LSP_DISABLED", "1", 1);
+        lsm_setenv("LSM_LSP_DISABLED", "1", 1);
     else
-        cbm_unsetenv("CBM_LSP_DISABLED");
+        lsm_unsetenv("LSM_LSP_DISABLED");
 
-    CBMFileResult *r = cbm_extract_file(source, (int)strlen(source), CBM_LANG_TYPESCRIPT, "repro",
+    LSMFileResult *r = lsm_extract_file(source, (int)strlen(source), LSM_LANG_TYPESCRIPT, "repro",
                                         "main.ts", 0, NULL, NULL);
     int failures = 0;
     if (!r) {
@@ -488,20 +488,20 @@ static int check_ts_lsp_mode(int disabled) {
                     disabled ? "off" : "on", expected_resolved_total, r->resolved_calls.count);
             failures++;
         }
-        cbm_free_result(r);
+        lsm_free_result(r);
     }
     return failures;
 }
 
 TEST(repro_call_argument_ts_lsp_cannot_rescue) {
-    const char *prior = getenv("CBM_LSP_DISABLED");
-    char *saved = prior ? cbm_strdup(prior) : NULL;
+    const char *prior = getenv("LSM_LSP_DISABLED");
+    char *saved = prior ? lsm_strdup(prior) : NULL;
     int failures = check_ts_lsp_mode(1) + check_ts_lsp_mode(0);
     if (saved) {
-        cbm_setenv("CBM_LSP_DISABLED", saved, 1);
+        lsm_setenv("LSM_LSP_DISABLED", saved, 1);
         free(saved);
     } else {
-        cbm_unsetenv("CBM_LSP_DISABLED");
+        lsm_unsetenv("LSM_LSP_DISABLED");
     }
     ASSERT_EQ(failures, 0);
     PASS();
@@ -511,7 +511,7 @@ static int check_callable_reference_edges(const char *tag, const RFile *files, i
                                           const char *caller, const char *registrar,
                                           const char *target) {
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, nfiles);
+    lsm_store_t *store = rh_index_files(&project, files, nfiles);
     if (!store) {
         fprintf(stderr, "  [call-ref] case=%s invariant=index_store_missing\n", tag);
         rh_cleanup(&project, store);
@@ -631,7 +631,7 @@ TEST(repro_call_argument_ts_nested_and_value_refs) {
         "function valueArgument(): void { consume(runtimeOptions); }\n",
     }};
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 1);
+    lsm_store_t *store = rh_index_files(&project, files, 1);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("TS value-reference fixture did not produce a graph store");
@@ -701,7 +701,7 @@ TEST(repro_java_same_name_references_keep_occurrence_identity) {
                      "}\n"},
     };
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 3);
+    lsm_store_t *store = rh_index_files(&project, files, 3);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("Java same-name reference fixture did not produce a graph store");
@@ -725,7 +725,7 @@ TEST(repro_kotlin_bound_reference_uses_instance_type) {
         "fun boundReference(service: Service) { accept(service::handler) }\n",
     }};
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 1);
+    lsm_store_t *store = rh_index_files(&project, files, 1);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("Kotlin bound-reference fixture did not produce a graph store");
@@ -765,7 +765,7 @@ TEST(repro_php_same_name_references_keep_occurrence_identity) {
         "function references(): void { accept(A::handler(...)); accept(B::handler(...)); }\n",
     }};
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 1);
+    lsm_store_t *store = rh_index_files(&project, files, 1);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("PHP same-name reference fixture did not produce a graph store");
@@ -791,7 +791,7 @@ TEST(repro_php_magic_first_class_reference_uses_reason_match) {
         "function references(Magic $object): void { accept($object->missing(...)); }\n",
     }};
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 1);
+    lsm_store_t *store = rh_index_files(&project, files, 1);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("PHP magic callable-reference fixture did not produce a graph store");
@@ -810,15 +810,15 @@ TEST(repro_cpp_signature_types_preserve_positions_without_changing_legacy_types)
     static const char source[] = "struct FreeVec {};\n"
                                  "FreeVec operator+(FreeVec lhs, FreeVec rhs) { return lhs; }\n"
                                  "void positional(int first, FreeVec middle, int last) {}\n";
-    CBMFileResult *result = cbm_extract_file(source, (int)strlen(source), CBM_LANG_CPP, "repro",
+    LSMFileResult *result = lsm_extract_file(source, (int)strlen(source), LSM_LANG_CPP, "repro",
                                              "signature.cpp", 0, NULL, NULL);
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
 
-    const CBMDefinition *operator_def = NULL;
-    const CBMDefinition *positional_def = NULL;
+    const LSMDefinition *operator_def = NULL;
+    const LSMDefinition *positional_def = NULL;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         if (definition->name && strcmp(definition->name, "operator+") == 0)
             operator_def = definition;
         if (definition->name && strcmp(definition->name, "positional") == 0)
@@ -844,7 +844,7 @@ TEST(repro_cpp_signature_types_preserve_positions_without_changing_legacy_types)
     ASSERT_STR_EQ(positional_def->signature_param_types[1], "FreeVec");
     ASSERT_STR_EQ(positional_def->signature_param_types[2], "int");
 
-    cbm_free_result(result);
+    lsm_free_result(result);
     PASS();
 }
 
@@ -852,14 +852,14 @@ typedef struct {
     const char *tag;
     const char *filename;
     const char *source;
-    CBMLanguage language;
+    LSMLanguage language;
     const char *definition_name;
     const char *expected[4];
     int expected_count;
 } SignaturePositionCase;
 
 static int check_signature_position_case(const SignaturePositionCase *c) {
-    CBMFileResult *result = cbm_extract_file(c->source, (int)strlen(c->source), c->language,
+    LSMFileResult *result = lsm_extract_file(c->source, (int)strlen(c->source), c->language,
                                              "signature", c->filename, 0, NULL, NULL);
     if (!result) {
         fprintf(stderr, "  [signature-position] lang=%s invariant=extract_result\n", c->tag);
@@ -871,9 +871,9 @@ static int check_signature_position_case(const SignaturePositionCase *c) {
         fprintf(stderr, "  [signature-position] lang=%s invariant=valid_fixture\n", c->tag);
         failures++;
     }
-    const CBMDefinition *found = NULL;
+    const LSMDefinition *found = NULL;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         if (definition->name && strcmp(definition->name, c->definition_name) == 0) {
             found = definition;
             break;
@@ -902,7 +902,7 @@ static int check_signature_position_case(const SignaturePositionCase *c) {
             }
         }
     }
-    cbm_free_result(result);
+    lsm_free_result(result);
     return failures;
 }
 
@@ -912,7 +912,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "signature.c",
          "typedef struct Thing { int value; } Thing;\n"
          "void position(int first, Thing middle, int last) {}\n",
-         CBM_LANG_C,
+         LSM_LANG_C,
          "position",
          {"int", "Thing", "int", NULL},
          3},
@@ -920,7 +920,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "signature.cu",
          "struct Thing { int value; };\n"
          "void position(int first, Thing middle, int last) {}\n",
-         CBM_LANG_CUDA,
+         LSM_LANG_CUDA,
          "position",
          {"int", "Thing", "int", NULL},
          3},
@@ -929,14 +929,14 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "package sample\n"
          "type Thing struct{}\n"
          "func position(first, middle Thing, last int) {}\n",
-         CBM_LANG_GO,
+         LSM_LANG_GO,
          "position",
          {"Thing", "Thing", "int", NULL},
          3},
         {"javascript",
          "signature.js",
          "function position(first, middle, last) {}\n",
-         CBM_LANG_JAVASCRIPT,
+         LSM_LANG_JAVASCRIPT,
          "position",
          {"?", "?", "?", NULL},
          3},
@@ -944,7 +944,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "signature.ts",
          "class Sample {}\n"
          "function position(this: Sample, first: number, middle, last: number): void {}\n",
-         CBM_LANG_TYPESCRIPT,
+         LSM_LANG_TYPESCRIPT,
          "position",
          {"number", "?", "number", NULL},
          3},
@@ -952,7 +952,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "signature.tsx",
          "class Sample {}\n"
          "function position(this: Sample, first: number, middle, last: number): void {}\n",
-         CBM_LANG_TSX,
+         LSM_LANG_TSX,
          "position",
          {"number", "?", "number", NULL},
          3},
@@ -961,7 +961,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "class Sample:\n"
          "    def position(self, first: int, middle, last: int):\n"
          "        pass\n",
-         CBM_LANG_PYTHON,
+         LSM_LANG_PYTHON,
          "position",
          {"int", "?", "int", NULL},
          3},
@@ -969,7 +969,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "Signature.java",
          "class Thing {}\n"
          "class Signature { static void position(int first, Thing middle, int last) {} }\n",
-         CBM_LANG_JAVA,
+         LSM_LANG_JAVA,
          "position",
          {"int", "Thing", "int", NULL},
          3},
@@ -977,7 +977,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "Signature.cs",
          "class Thing {}\n"
          "class Signature { static void position(int first, Thing middle, int last) {} }\n",
-         CBM_LANG_CSHARP,
+         LSM_LANG_CSHARP,
          "position",
          {"int", "Thing", "int", NULL},
          3},
@@ -985,7 +985,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "Signature.kt",
          "class Thing\n"
          "fun position(first: Int, middle: Thing, last: Int) {}\n",
-         CBM_LANG_KOTLIN,
+         LSM_LANG_KOTLIN,
          "position",
          {"Int", "Thing", "Int", NULL},
          3},
@@ -994,7 +994,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "<?php\n"
          "class Thing {}\n"
          "function position(int $first, Thing $middle, int $last): void {}\n",
-         CBM_LANG_PHP,
+         LSM_LANG_PHP,
          "position",
          {"int", "Thing", "int", NULL},
          3},
@@ -1003,7 +1003,7 @@ TEST(repro_lsp_language_signatures_preserve_argument_positions) {
          "struct Thing;\n"
          "struct Sample;\n"
          "impl Sample { fn position(&self, first: i32, middle: Thing, last: i32) {} }\n",
-         CBM_LANG_RUST,
+         LSM_LANG_RUST,
          "position",
          {"i32", "Thing", "i32", NULL},
          3},
@@ -1032,7 +1032,7 @@ TEST(repro_cpp_operator_edges_require_semantic_resolution) {
     };
 
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 3);
+    lsm_store_t *store = rh_index_files(&project, files, 3);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("C++ semantic-operator fixture did not produce a graph store");
@@ -1064,14 +1064,14 @@ TEST(repro_cpp_operator_lsp_join_is_occurrence_exact) {
                                  "  Vec custom = lhs + rhs;\n"
                                  "  int primitive = a + b;\n"
                                  "}\n";
-    CBMFileResult *result = cbm_extract_file(source, (int)strlen(source), CBM_LANG_CPP, "repro",
+    LSMFileResult *result = lsm_extract_file(source, (int)strlen(source), LSM_LANG_CPP, "repro",
                                              "mixed.cpp", 0, NULL, NULL);
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
-    const CBMCall *custom = NULL;
-    const CBMCall *primitive = NULL;
+    const LSMCall *custom = NULL;
+    const LSMCall *primitive = NULL;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         if (!call->callee_name || strcmp(call->callee_name, "operator+") != 0)
             continue;
         if (call->start_line == 5)
@@ -1081,16 +1081,16 @@ TEST(repro_cpp_operator_lsp_join_is_occurrence_exact) {
     }
     ASSERT_NOT_NULL(custom);
     ASSERT_NOT_NULL(primitive);
-    ASSERT_NOT_NULL(cbm_pipeline_find_lsp_resolution(&result->resolved_calls, custom, false));
-    ASSERT_NULL(cbm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive, false));
-    cbm_free_result(result);
+    ASSERT_NOT_NULL(lsm_pipeline_find_lsp_resolution(&result->resolved_calls, custom, false));
+    ASSERT_NULL(lsm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive, false));
+    lsm_free_result(result);
     PASS();
 }
 
 typedef struct {
     const char *tag;
     const char *filename;
-    CBMLanguage language;
+    LSMLanguage language;
 } CompoundAssignmentCase;
 
 static const char COMPOUND_ASSIGNMENT_SOURCE[] =
@@ -1126,7 +1126,7 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
     uint32_t free_end = free_start + (uint32_t)strlen(free_site);
     uint32_t primitive_start = (uint32_t)(primitive_text - COMPOUND_ASSIGNMENT_SOURCE);
     uint32_t primitive_end = primitive_start + (uint32_t)strlen(primitive_site);
-    CBMFileResult *result = cbm_extract_file(
+    LSMFileResult *result = lsm_extract_file(
         COMPOUND_ASSIGNMENT_SOURCE, (int)strlen(COMPOUND_ASSIGNMENT_SOURCE), test_case->language,
         "compound_assignment", test_case->filename, 0, NULL, NULL);
     if (!result) {
@@ -1151,7 +1151,7 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
     int member_target_count = 0;
     int free_target_count = 0;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         if (!definition->name || strcmp(definition->name, "operator+=") != 0 ||
             !definition->qualified_name) {
             continue;
@@ -1171,15 +1171,15 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
                        strcmp(member_target_qn, free_target_qn) != 0,
                    "member_free_targets_distinct");
 
-    const CBMCall *member_carrier = NULL;
-    const CBMCall *free_carrier = NULL;
-    const CBMCall *primitive_carrier = NULL;
+    const LSMCall *member_carrier = NULL;
+    const LSMCall *free_carrier = NULL;
+    const LSMCall *primitive_carrier = NULL;
     int member_carrier_count = 0;
     int free_carrier_count = 0;
     int primitive_carrier_count = 0;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
-        if (!call->requires_lsp_resolution || call->source_origin != CBM_SOURCE_ORIGIN_RAW ||
+        const LSMCall *call = &result->calls.items[i];
+        if (!call->requires_lsp_resolution || call->source_origin != LSM_SOURCE_ORIGIN_RAW ||
             !call->callee_name || strcmp(call->callee_name, "operator+=") != 0) {
             continue;
         }
@@ -1203,17 +1203,17 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
     CHECK_COMPOUND(free_carrier_count == 1, "free_exact_gated_carrier");
     CHECK_COMPOUND(primitive_carrier_count == 1, "primitive_exact_gated_carrier");
 
-    const CBMResolvedCall *member_semantic = NULL;
-    const CBMResolvedCall *free_semantic = NULL;
+    const LSMResolvedCall *member_semantic = NULL;
+    const LSMResolvedCall *free_semantic = NULL;
     int member_semantic_count = 0;
     int free_semantic_count = 0;
     int member_wrong_target_count = 0;
     int free_wrong_target_count = 0;
     int primitive_semantic_count = 0;
     for (int i = 0; i < result->resolved_calls.count; i++) {
-        const CBMResolvedCall *resolved = &result->resolved_calls.items[i];
-        if (resolved->kind != CBM_RESOLVED_INVOCATION ||
-            resolved->source_origin != CBM_SOURCE_ORIGIN_RAW || !resolved->callee_qn ||
+        const LSMResolvedCall *resolved = &result->resolved_calls.items[i];
+        if (resolved->kind != LSM_RESOLVED_INVOCATION ||
+            resolved->source_origin != LSM_SOURCE_ORIGIN_RAW || !resolved->callee_qn ||
             !qn_ends_with_name(resolved->callee_qn, "operator+=")) {
             continue;
         }
@@ -1247,25 +1247,25 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
     CHECK_COMPOUND(free_wrong_target_count == 0, "free_semantic_wrong_target");
     CHECK_COMPOUND(primitive_semantic_count == 0, "primitive_semantic_false_positive");
 
-    const CBMResolvedCall *member_join =
+    const LSMResolvedCall *member_join =
         member_carrier
-            ? cbm_pipeline_find_lsp_resolution(&result->resolved_calls, member_carrier, false)
+            ? lsm_pipeline_find_lsp_resolution(&result->resolved_calls, member_carrier, false)
             : NULL;
-    const CBMResolvedCall *free_join =
+    const LSMResolvedCall *free_join =
         free_carrier
-            ? cbm_pipeline_find_lsp_resolution(&result->resolved_calls, free_carrier, false)
+            ? lsm_pipeline_find_lsp_resolution(&result->resolved_calls, free_carrier, false)
             : NULL;
-    const CBMResolvedCall *primitive_join =
+    const LSMResolvedCall *primitive_join =
         primitive_carrier
-            ? cbm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive_carrier, false)
+            ? lsm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive_carrier, false)
             : NULL;
     CHECK_COMPOUND(member_join && member_join == member_semantic, "member_exact_semantic_join");
     CHECK_COMPOUND(free_join && free_join == free_semantic, "free_exact_semantic_join");
     CHECK_COMPOUND(primitive_join == NULL, "primitive_join_false_positive");
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     RProj project;
-    cbm_store_t *store = rh_index(&project, test_case->filename, COMPOUND_ASSIGNMENT_SOURCE);
+    lsm_store_t *store = rh_index(&project, test_case->filename, COMPOUND_ASSIGNMENT_SOURCE);
     if (!store) {
         fprintf(stderr, "  [compound-assignment] lang=%s invariant=index_store_missing\n",
                 test_case->tag);
@@ -1293,8 +1293,8 @@ static int check_compound_assignment_case(const CompoundAssignmentCase *test_cas
 
 TEST(repro_cpp_cuda_compound_assignment_calls_are_semantic_and_occurrence_exact) {
     static const CompoundAssignmentCase cases[] = {
-        {"cpp", "compound_assignment.cpp", CBM_LANG_CPP},
-        {"cuda", "compound_assignment.cu", CBM_LANG_CUDA},
+        {"cpp", "compound_assignment.cpp", LSM_LANG_CPP},
+        {"cuda", "compound_assignment.cu", LSM_LANG_CUDA},
     };
     int failures = 0;
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
@@ -1309,14 +1309,14 @@ TEST(repro_kotlin_synthetic_calls_require_semantic_resolution) {
                                  "  val custom = lhs + rhs\n"
                                  "  val primitive = a + b\n"
                                  "}\n";
-    CBMFileResult *result = cbm_extract_file(source, (int)strlen(source), CBM_LANG_KOTLIN, "repro",
+    LSMFileResult *result = lsm_extract_file(source, (int)strlen(source), LSM_LANG_KOTLIN, "repro",
                                              "Mixed.kt", 0, NULL, NULL);
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
-    const CBMCall *custom = NULL;
-    const CBMCall *primitive = NULL;
+    const LSMCall *custom = NULL;
+    const LSMCall *primitive = NULL;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         if (!call->callee_name || strcmp(call->callee_name, "plus") != 0)
             continue;
         if (call->start_line == 3)
@@ -1326,10 +1326,10 @@ TEST(repro_kotlin_synthetic_calls_require_semantic_resolution) {
     }
     ASSERT_NOT_NULL(custom);
     ASSERT_NOT_NULL(primitive);
-    const CBMResolvedCall *custom_resolution =
-        cbm_pipeline_find_lsp_resolution(&result->resolved_calls, custom, true);
-    const CBMResolvedCall *primitive_resolution =
-        cbm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive, true);
+    const LSMResolvedCall *custom_resolution =
+        lsm_pipeline_find_lsp_resolution(&result->resolved_calls, custom, true);
+    const LSMResolvedCall *primitive_resolution =
+        lsm_pipeline_find_lsp_resolution(&result->resolved_calls, primitive, true);
     ASSERT_NOT_NULL(custom_resolution);
     ASSERT_TRUE(strstr(custom_resolution->callee_qn, ".Box.plus") != NULL);
     /* `Int.plus` is a valid semantic LSP resolution, but it is an external
@@ -1341,7 +1341,7 @@ TEST(repro_kotlin_synthetic_calls_require_semantic_resolution) {
         ASSERT_EQ(primitive_resolution->site_start_byte, primitive->site_start_byte);
         ASSERT_EQ(primitive_resolution->site_end_byte, primitive->site_end_byte);
     }
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     static const RFile files[] = {{
         "Builtins.kt",
@@ -1353,7 +1353,7 @@ TEST(repro_kotlin_synthetic_calls_require_semantic_resolution) {
         "fun destructureBuiltIn(value: Pair<Int, Int>) { val (left, right) = value }\n",
     }};
     RProj project;
-    cbm_store_t *store = rh_index_files(&project, files, 1);
+    lsm_store_t *store = rh_index_files(&project, files, 1);
     if (!store) {
         rh_cleanup(&project, store);
         FAIL("Kotlin synthetic-call negative fixture did not produce a graph store");
@@ -1407,13 +1407,13 @@ TEST(repro_callable_reference_parallel_pipeline) {
         built++;
     }
 
-    const char *prior_workers = getenv("CBM_WORKERS");
-    char *saved_workers = prior_workers ? cbm_strdup(prior_workers) : NULL;
-    cbm_setenv("CBM_WORKERS", "2", 1);
+    const char *prior_workers = getenv("LSM_WORKERS");
+    char *saved_workers = prior_workers ? lsm_strdup(prior_workers) : NULL;
+    lsm_setenv("LSM_WORKERS", "2", 1);
 
     RProj project;
     memset(&project, 0, sizeof(project));
-    cbm_store_t *store = built == TOTAL_FILES ? rh_index_files(&project, files, built) : NULL;
+    lsm_store_t *store = built == TOTAL_FILES ? rh_index_files(&project, files, built) : NULL;
     int failures = 0;
     if (!store) {
         fprintf(stderr, "  [call-ref] case=parallel invariant=index_store_missing\n");
@@ -1449,10 +1449,10 @@ TEST(repro_callable_reference_parallel_pipeline) {
 
     rh_cleanup(&project, store);
     if (saved_workers) {
-        cbm_setenv("CBM_WORKERS", saved_workers, 1);
+        lsm_setenv("LSM_WORKERS", saved_workers, 1);
         free(saved_workers);
     } else {
-        cbm_unsetenv("CBM_WORKERS");
+        lsm_unsetenv("LSM_WORKERS");
     }
     for (int i = 0; i < FILLER_FILES; i++) {
         free(filler_names[i]);

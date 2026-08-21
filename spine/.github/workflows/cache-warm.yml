@@ -54,8 +54,8 @@ jobs:
       - name: Build (test runner + product, no tests)
         run: |
           source scripts/env.sh
-          make -j"$(getconf _NPROCESSORS_ONLN)" -f Makefile.cbm \
-            build/c/test-runner cbm CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
+          make -j"$(getconf _NPROCESSORS_ONLN)" -f Makefile.lsm \
+            build/c/test-runner lsm CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 1500M
@@ -105,7 +105,7 @@ jobs:
       - name: Build (test runner + product, no tests)
         run: |
           source scripts/env.sh
-          make -j"$(nproc)" -f Makefile.cbm build/c/test-runner cbm CC=clang CXX=clang++
+          make -j"$(nproc)" -f Makefile.lsm build/c/test-runner lsm CC=clang CXX=clang++
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 1500M

@@ -57,7 +57,7 @@
  * FIX LOCATION (not implemented here):
  *   Use a sentinel of -1 (not 0) for "LIMIT not specified" so that
  *   limit==0 can be distinguished as an explicit request for zero rows.
- *   Change the initializer in cbm_return_clause_t to use -1, update the
+ *   Change the initializer in lsm_return_clause_t to use -1, update the
  *   parser to set limit = (int)strtol() only (already correct), and change
  *   all guards from `limit > 0` to `limit >= 0` (or `limit != -1`).
  */
@@ -69,24 +69,24 @@
 #include <stdlib.h>
 
 /* Build the same standard 4-Function fixture used by test_cypher.c. */
-static cbm_store_t *setup_limit_store(void) {
-    cbm_store_t *s = cbm_store_open_memory();
+static lsm_store_t *setup_limit_store(void) {
+    lsm_store_t *s = lsm_store_open_memory();
     if (!s) return NULL;
-    cbm_store_upsert_project(s, "test", "/tmp/test");
+    lsm_store_upsert_project(s, "test", "/tmp/test");
 
-    cbm_node_t n1 = {.project = "test", .label = "Function", .name = "HandleOrder",
+    lsm_node_t n1 = {.project = "test", .label = "Function", .name = "HandleOrder",
                      .qualified_name = "test.HandleOrder", .file_path = "handler.go"};
-    cbm_node_t n2 = {.project = "test", .label = "Function", .name = "ValidateOrder",
+    lsm_node_t n2 = {.project = "test", .label = "Function", .name = "ValidateOrder",
                      .qualified_name = "test.ValidateOrder", .file_path = "validate.go"};
-    cbm_node_t n3 = {.project = "test", .label = "Function", .name = "SubmitOrder",
+    lsm_node_t n3 = {.project = "test", .label = "Function", .name = "SubmitOrder",
                      .qualified_name = "test.SubmitOrder", .file_path = "submit.go"};
-    cbm_node_t n4 = {.project = "test", .label = "Function", .name = "LogError",
+    lsm_node_t n4 = {.project = "test", .label = "Function", .name = "LogError",
                      .qualified_name = "test.LogError", .file_path = "log.go"};
 
-    cbm_store_upsert_node(s, &n1);
-    cbm_store_upsert_node(s, &n2);
-    cbm_store_upsert_node(s, &n3);
-    cbm_store_upsert_node(s, &n4);
+    lsm_store_upsert_node(s, &n1);
+    lsm_store_upsert_node(s, &n2);
+    lsm_store_upsert_node(s, &n3);
+    lsm_store_upsert_node(s, &n4);
     return s;
 }
 
@@ -104,24 +104,24 @@ static cbm_store_t *setup_limit_store(void) {
  *   ASSERT_EQ(r.row_count, 0) fires -> RED.
  */
 TEST(repro_new_cypher_limit_zero_returns_no_rows) {
-    cbm_store_t *s = setup_limit_store();
+    lsm_store_t *s = setup_limit_store();
     ASSERT_NOT_NULL(s);
 
-    cbm_cypher_result_t r = {0};
+    lsm_cypher_result_t r = {0};
 
     /* Precondition: LIMIT 2 works and returns exactly 2 rows.
      * If RED here, the engine itself is broken -- unrelated to #limit-zero. */
-    int rc = cbm_cypher_execute(s, "MATCH (f:Function) RETURN f.name LIMIT 2", "test", 0, &r);
+    int rc = lsm_cypher_execute(s, "MATCH (f:Function) RETURN f.name LIMIT 2", "test", 0, &r);
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(r.row_count, 2);
-    cbm_cypher_result_free(&r);
+    lsm_cypher_result_free(&r);
 
     /* Precondition: without LIMIT there are 4 Function rows (ground truth). */
     memset(&r, 0, sizeof(r));
-    rc = cbm_cypher_execute(s, "MATCH (f:Function) RETURN f.name", "test", 0, &r);
+    rc = lsm_cypher_execute(s, "MATCH (f:Function) RETURN f.name", "test", 0, &r);
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(r.row_count, 4);
-    cbm_cypher_result_free(&r);
+    lsm_cypher_result_free(&r);
 
     /* PRIMARY ASSERTION: LIMIT 0 must return 0 rows.
      *
@@ -134,12 +134,12 @@ TEST(repro_new_cypher_limit_zero_returns_no_rows) {
      * max_rows (which >= 4), leaving all 4 rows.
      * row_count == 4 -> ASSERT_EQ(r.row_count, 0) fires -> RED. */
     memset(&r, 0, sizeof(r));
-    rc = cbm_cypher_execute(s, "MATCH (f:Function) RETURN f.name LIMIT 0", "test", 0, &r);
+    rc = lsm_cypher_execute(s, "MATCH (f:Function) RETURN f.name LIMIT 0", "test", 0, &r);
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(r.row_count, 0); /* RED on buggy code: returns 4 rows */
 
-    cbm_cypher_result_free(&r);
-    cbm_store_close(s);
+    lsm_cypher_result_free(&r);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -156,21 +156,21 @@ TEST(repro_new_cypher_limit_zero_returns_no_rows) {
  *   all bindings forward -> RETURN still returns 4 rows -> ASSERT_EQ fires -> RED.
  */
 TEST(repro_new_cypher_limit_zero_with_clause) {
-    cbm_store_t *s = setup_limit_store();
+    lsm_store_t *s = setup_limit_store();
     ASSERT_NOT_NULL(s);
 
-    cbm_cypher_result_t r = {0};
+    lsm_cypher_result_t r = {0};
 
     /* WITH ... LIMIT 0 should produce zero bindings, so RETURN returns nothing. */
-    int rc = cbm_cypher_execute(
+    int rc = lsm_cypher_execute(
         s,
         "MATCH (f:Function) WITH f LIMIT 0 RETURN f.name",
         "test", 0, &r);
     ASSERT_EQ(rc, 0);
     ASSERT_EQ(r.row_count, 0); /* RED on buggy code: returns 4 rows */
 
-    cbm_cypher_result_free(&r);
-    cbm_store_close(s);
+    lsm_cypher_result_free(&r);
+    lsm_store_close(s);
     PASS();
 }
 

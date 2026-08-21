@@ -23,20 +23,20 @@
  * Relaxed ordering is the right level: each is an independent scalar with no
  * happens-before relationship to publish alongside it, and the log path must
  * stay cheap enough that nobody is tempted to route around it. */
-static _Atomic CBMLogLevel g_log_level = CBM_LOG_INFO;
-static _Atomic CBMLogFormat g_log_format = CBM_LOG_FORMAT_TEXT;
+static _Atomic LSMLogLevel g_log_level = LSM_LOG_INFO;
+static _Atomic LSMLogFormat g_log_format = LSM_LOG_FORMAT_TEXT;
 /* Cast, not bare NULL: NULL is ((void*)0) and the implicit void*-to-
  * function-pointer conversion is not a compile-time constant, which
  * older Apple clang (Xcode 15.4, the macOS CI image) rejects outright
  * in a static initializer. The cast makes it an address constant. */
-static _Atomic cbm_log_sink_fn g_log_sink = (cbm_log_sink_fn)NULL;
-static _Atomic CBMLogSinkMode g_log_sink_mode = CBM_LOG_SINK_REPLACE;
+static _Atomic lsm_log_sink_fn g_log_sink = (lsm_log_sink_fn)NULL;
+static _Atomic LSMLogSinkMode g_log_sink_mode = LSM_LOG_SINK_REPLACE;
 
-/* See cbm_log_set_crash_durable in log.h. Read on every emitted line, so it
+/* See lsm_log_set_crash_durable in log.h. Read on every emitted line, so it
  * follows the same relaxed-atomic discipline as the four above. */
 static _Atomic bool g_log_crash_durable = false;
 
-void cbm_log_set_crash_durable(bool enabled) {
+void lsm_log_set_crash_durable(bool enabled) {
     if (enabled) {
         /* Best effort by contract: setvbuf is only guaranteed before a stream's
          * first operation, so a process that has already written to stderr
@@ -47,15 +47,15 @@ void cbm_log_set_crash_durable(bool enabled) {
     atomic_store_explicit(&g_log_crash_durable, enabled, memory_order_relaxed);
 }
 
-bool cbm_log_crash_durable(void) {
+bool lsm_log_crash_durable(void) {
     return atomic_load_explicit(&g_log_crash_durable, memory_order_relaxed);
 }
 
-/* CBM_LOG_LEVEL support — distilled from #414 (closes #413, thanks @santanusinha). */
-void cbm_log_init_from_env(void) {
+/* LSM_LOG_LEVEL support — distilled from #414 (closes #413, thanks @santanusinha). */
+void lsm_log_init_from_env(void) {
     /* getenv() is safe here: this runs at startup before any thread is created,
      * so there is no concurrent setenv() to race against. */
-    const char *raw = getenv("CBM_LOG_LEVEL");
+    const char *raw = getenv("LSM_LOG_LEVEL");
     if (raw && raw[0] != '\0') {
         /* Textual form, case-insensitive. Index of each name == its enum value. */
         static const char *const names[] = {"debug", "info", "warn", "error", "none"};
@@ -68,24 +68,24 @@ void cbm_log_init_from_env(void) {
         if (raw[i] == '\0') { /* fully consumed — candidate textual match */
             for (size_t lvl = 0; lvl < sizeof(names) / sizeof(names[0]); lvl++) {
                 if (strcmp(lower, names[lvl]) == 0) {
-                    cbm_log_set_level((CBMLogLevel)lvl);
+                    lsm_log_set_level((LSMLogLevel)lvl);
                     goto parse_format;
                 }
             }
         }
 
-        /* Numeric form: 0=debug .. 4=none, matching CBMLogLevel. */
+        /* Numeric form: 0=debug .. 4=none, matching LSMLogLevel. */
         char *end = NULL;
-        long n = strtol(raw, &end, CBM_DECIMAL_BASE);
-        if (end != raw && *end == '\0' && n >= CBM_LOG_DEBUG && n <= CBM_LOG_NONE) {
-            cbm_log_set_level((CBMLogLevel)n);
+        long n = strtol(raw, &end, LSM_DECIMAL_BASE);
+        if (end != raw && *end == '\0' && n >= LSM_LOG_DEBUG && n <= LSM_LOG_NONE) {
+            lsm_log_set_level((LSMLogLevel)n);
         }
     }
 
     /* Unrecognised value: leave the level unchanged (fail-open). */
 
 parse_format:;
-    const char *fmt = getenv("CBM_LOG_FORMAT");
+    const char *fmt = getenv("LSM_LOG_FORMAT");
     if (fmt && fmt[0] != '\0') {
         char lower_fmt[8];
         size_t i = 0;
@@ -94,9 +94,9 @@ parse_format:;
         }
         lower_fmt[i] = '\0';
         if (fmt[i] == '\0' && strcmp(lower_fmt, "json") == 0) {
-            cbm_log_set_format(CBM_LOG_FORMAT_JSON);
+            lsm_log_set_format(LSM_LOG_FORMAT_JSON);
         } else if (fmt[i] == '\0' && strcmp(lower_fmt, "text") == 0) {
-            cbm_log_set_format(CBM_LOG_FORMAT_TEXT);
+            lsm_log_set_format(LSM_LOG_FORMAT_TEXT);
         }
         return;
     }
@@ -106,42 +106,42 @@ parse_format:;
      * silently change the operator-selected output shape. */
 }
 
-void cbm_log_set_sink(cbm_log_sink_fn fn) {
-    cbm_log_set_sink_ex(fn, CBM_LOG_SINK_REPLACE);
+void lsm_log_set_sink(lsm_log_sink_fn fn) {
+    lsm_log_set_sink_ex(fn, LSM_LOG_SINK_REPLACE);
 }
 
-void cbm_log_set_sink_ex(cbm_log_sink_fn fn, CBMLogSinkMode mode) {
+void lsm_log_set_sink_ex(lsm_log_sink_fn fn, LSMLogSinkMode mode) {
     /* Mode first: a reader that observes the new sink then reads the mode can
      * never see the mode belonging to the PREVIOUS sink. */
     atomic_store_explicit(&g_log_sink_mode, mode, memory_order_relaxed);
     atomic_store_explicit(&g_log_sink, fn, memory_order_relaxed);
 }
 
-void cbm_log_set_level(CBMLogLevel level) {
+void lsm_log_set_level(LSMLogLevel level) {
     atomic_store_explicit(&g_log_level, level, memory_order_relaxed);
 }
 
-CBMLogLevel cbm_log_get_level(void) {
+LSMLogLevel lsm_log_get_level(void) {
     return atomic_load_explicit(&g_log_level, memory_order_relaxed);
 }
 
-void cbm_log_set_format(CBMLogFormat format) {
+void lsm_log_set_format(LSMLogFormat format) {
     atomic_store_explicit(&g_log_format, format, memory_order_relaxed);
 }
 
-CBMLogFormat cbm_log_get_format(void) {
+LSMLogFormat lsm_log_get_format(void) {
     return atomic_load_explicit(&g_log_format, memory_order_relaxed);
 }
 
-static const char *level_str(CBMLogLevel level) {
+static const char *level_str(LSMLogLevel level) {
     switch (level) {
-    case CBM_LOG_DEBUG:
+    case LSM_LOG_DEBUG:
         return "debug";
-    case CBM_LOG_INFO:
+    case LSM_LOG_INFO:
         return "info";
-    case CBM_LOG_WARN:
+    case LSM_LOG_WARN:
         return "warn";
-    case CBM_LOG_ERROR:
+    case LSM_LOG_ERROR:
         return "error";
     default:
         return "unknown";
@@ -234,12 +234,12 @@ static void finish_line(char *buf, size_t bufsz, size_t pos) {
 
 static void emit_line(const char *line) {
     /* Load ONCE: re-reading the global between the test and the call would
-     * let a concurrent cbm_log_set_sink turn a checked pointer into a NULL
+     * let a concurrent lsm_log_set_sink turn a checked pointer into a NULL
      * call. */
-    cbm_log_sink_fn sink = atomic_load_explicit(&g_log_sink, memory_order_relaxed);
+    lsm_log_sink_fn sink = atomic_load_explicit(&g_log_sink, memory_order_relaxed);
     if (sink) {
         sink(line);
-        if (atomic_load_explicit(&g_log_sink_mode, memory_order_relaxed) == CBM_LOG_SINK_REPLACE) {
+        if (atomic_load_explicit(&g_log_sink_mode, memory_order_relaxed) == LSM_LOG_SINK_REPLACE) {
             return;
         }
     }
@@ -253,17 +253,17 @@ static void emit_line(const char *line) {
     }
 }
 
-void cbm_log(CBMLogLevel level, const char *msg, ...) {
+void lsm_log(LSMLogLevel level, const char *msg, ...) {
     if (level < atomic_load_explicit(&g_log_level, memory_order_relaxed)) {
         return;
     }
 
-    char line_buf[CBM_SZ_4K];
+    char line_buf[LSM_SZ_4K];
     size_t pos = 0;
     va_list args;
     va_start(args, msg);
 
-    if (atomic_load_explicit(&g_log_format, memory_order_relaxed) == CBM_LOG_FORMAT_JSON) {
+    if (atomic_load_explicit(&g_log_format, memory_order_relaxed) == LSM_LOG_FORMAT_JSON) {
         append_raw(line_buf, sizeof(line_buf), &pos, "{\"level\":");
         append_json_string(line_buf, sizeof(line_buf), &pos, level_str(level));
         append_raw(line_buf, sizeof(line_buf), &pos, ",\"event\":");
@@ -303,11 +303,11 @@ void cbm_log(CBMLogLevel level, const char *msg, ...) {
     emit_line(line_buf);
 }
 
-void cbm_log_control_record(const char *msg, ...) {
+void lsm_log_control_record(const char *msg, ...) {
     /* No threshold check: a control record's whole purpose is surviving
-     * CBM_LOG_LEVEL suppression. Always JSON, independent of CBM_LOG_FORMAT,
+     * LSM_LOG_LEVEL suppression. Always JSON, independent of LSM_LOG_FORMAT,
      * so consumers get one stable, fully escaped representation. */
-    char line_buf[CBM_SZ_4K];
+    char line_buf[LSM_SZ_4K];
     size_t pos = 0;
     va_list args;
     va_start(args, msg);
@@ -332,10 +332,10 @@ void cbm_log_control_record(const char *msg, ...) {
     emit_line(line_buf);
 }
 
-void cbm_log_int(CBMLogLevel level, const char *msg, const char *key, int64_t value) {
-    char value_buf[CBM_SZ_32];
+void lsm_log_int(LSMLogLevel level, const char *msg, const char *key, int64_t value) {
+    char value_buf[LSM_SZ_32];
     snprintf(value_buf, sizeof(value_buf), "%" PRId64, value);
-    cbm_log(level, msg, key ? key : "?", value_buf, NULL);
+    lsm_log(level, msg, key ? key : "?", value_buf, NULL);
 }
 
 static void copy_path_without_query(const char *path, char *out, size_t outsz) {
@@ -354,42 +354,42 @@ static void copy_path_without_query(const char *path, char *out, size_t outsz) {
     out[n] = '\0';
 }
 
-void cbm_log_mcp_request(const char *method, const char *tool_name, bool is_error,
+void lsm_log_mcp_request(const char *method, const char *tool_name, bool is_error,
                          int64_t duration_us) {
-    char duration_ms[CBM_SZ_32];
+    char duration_ms[LSM_SZ_32];
     snprintf(duration_ms, sizeof(duration_ms), "%" PRId64, duration_us / 1000);
     if (tool_name && tool_name[0] != '\0') {
-        cbm_log(is_error ? CBM_LOG_WARN : CBM_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
+        lsm_log(is_error ? LSM_LOG_WARN : LSM_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
                 "method", method ? method : "", "tool", tool_name, "status",
                 is_error ? "error" : "ok", "duration_ms", duration_ms, NULL);
     } else {
-        cbm_log(is_error ? CBM_LOG_WARN : CBM_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
+        lsm_log(is_error ? LSM_LOG_WARN : LSM_LOG_INFO, "mcp.request", "protocol", "jsonrpc",
                 "method", method ? method : "", "status", is_error ? "error" : "ok", "duration_ms",
                 duration_ms, NULL);
     }
 }
 
-void cbm_log_http_request(const char *component, const char *method, const char *path, int status,
+void lsm_log_http_request(const char *component, const char *method, const char *path, int status,
                           int64_t duration_ms, size_t request_bytes, size_t response_bytes) {
-    char safe_path[CBM_SZ_1K];
-    char status_buf[CBM_SZ_16];
-    char duration_buf[CBM_SZ_32];
-    char request_buf[CBM_SZ_32];
-    char response_buf[CBM_SZ_32];
+    char safe_path[LSM_SZ_1K];
+    char status_buf[LSM_SZ_16];
+    char duration_buf[LSM_SZ_32];
+    char request_buf[LSM_SZ_32];
+    char response_buf[LSM_SZ_32];
     copy_path_without_query(path, safe_path, sizeof(safe_path));
     snprintf(status_buf, sizeof(status_buf), "%d", status);
     snprintf(duration_buf, sizeof(duration_buf), "%" PRId64, duration_ms);
     snprintf(request_buf, sizeof(request_buf), "%zu", request_bytes);
     snprintf(response_buf, sizeof(response_buf), "%zu", response_bytes);
 
-    CBMLogLevel level = CBM_LOG_INFO;
+    LSMLogLevel level = LSM_LOG_INFO;
     if (status >= 500) {
-        level = CBM_LOG_ERROR;
+        level = LSM_LOG_ERROR;
     } else if (status >= 400) {
-        level = CBM_LOG_WARN;
+        level = LSM_LOG_WARN;
     }
 
-    cbm_log(level, "http.request", "component", component ? component : "", "method",
+    lsm_log(level, "http.request", "component", component ? component : "", "method",
             method ? method : "", "path", safe_path, "status", status_buf, "duration_ms",
             duration_buf, "request_bytes", request_buf, "response_bytes", response_buf, NULL);
 }

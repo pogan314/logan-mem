@@ -27,7 +27,7 @@
  * the gap is dominated by ctor-synthetic 0.50 markers and BCL long tail).
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "foundation/sanitized.h"
 #include "lsp/cs_lsp.h"
 #include <stdlib.h>
@@ -196,7 +196,7 @@ TEST(cslsp_bench_resolution_ratio) {
     struct timespec t0;
     struct timespec t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    CBMFileResult *r = cbm_extract_file(bench_source, slen, CBM_LANG_CSHARP,
+    LSMFileResult *r = lsm_extract_file(bench_source, slen, LSM_LANG_CSHARP,
                                         "test", "bench.cs", 0, NULL, NULL);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     ASSERT_NOT_NULL(r);
@@ -221,7 +221,7 @@ TEST(cslsp_bench_resolution_ratio) {
            ms);
 
     /* Free the result BEFORE asserting so a budget miss doesn't leak. */
-    cbm_free_result(r);
+    lsm_free_result(r);
 
     ASSERT_GTE(calls, 1);
     ASSERT_GTE(resolved, 1);
@@ -241,7 +241,7 @@ TEST(cslsp_bench_resolution_ratio) {
      * sanitized: 2000 ms. The condition used to name ASan specifically, which
      * left the TSan and MSan lanes measuring an instrumented parse against the
      * native 200 ms. */
-#if CBM_SANITIZED
+#if LSM_SANITIZED
     ASSERT(ms < 2000.0);
 #else
     ASSERT(ms < 200.0);

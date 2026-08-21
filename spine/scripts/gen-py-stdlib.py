@@ -1,11 +1,11 @@
 #!/usr/bin/env python3.9
 """
-gen-py-stdlib.py — Generate cbm_python_stdlib_register from typeshed stubs.
+gen-py-stdlib.py — Generate lsm_python_stdlib_register from typeshed stubs.
 
 Phase 10 of Python LSP integration. Walks a typeshed/stdlib checkout,
 parses each .pyi via the standard `ast` module, and emits a single C
-source file (internal/cbm/lsp/generated/python_stdlib_data.c) that
-populates a CBMTypeRegistry with classes + their method names and
+source file (internal/lsm/lsp/generated/python_stdlib_data.c) that
+populates a LSMTypeRegistry with classes + their method names and
 free functions per module.
 
 This is a v1 implementation — overload stacks collapse to the first
@@ -19,7 +19,7 @@ Usage:
     python3.9 scripts/gen-py-stdlib.py <typeshed-stdlib-path> <output.c>
 
 Defaults to /tmp/python-lsp-references/typeshed/stdlib and
-internal/cbm/lsp/generated/python_stdlib_data.c when run without args.
+internal/lsm/lsp/generated/python_stdlib_data.c when run without args.
 """
 
 from __future__ import annotations
@@ -315,13 +315,13 @@ C_HEADER = """\
 #include "../type_registry.h"
 #include <string.h>
 
-#define CBM_PYTHON_STDLIB_GENERATED 1
+#define LSM_PYTHON_STDLIB_GENERATED 1
 
-void cbm_python_stdlib_register(CBMTypeRegistry* reg, CBMArena* arena) {
+void lsm_python_stdlib_register(LSMTypeRegistry* reg, LSMArena* arena) {
     if (!reg || !arena) return;
 
-    CBMRegisteredType rt;
-    CBMRegisteredFunc rf;
+    LSMRegisteredType rt;
+    LSMRegisteredFunc rf;
 """
 
 C_FOOTER = """\
@@ -368,7 +368,7 @@ def emit(stubs: list[ModuleStubs], output_path: Path) -> None:
                     f"    static const char* {bases_array}[] = {{ {bases_c}, NULL }};\n"
                 )
                 out_lines.append(f"    rt.embedded_types = {bases_array};\n")
-            out_lines.append("    cbm_registry_add_type(reg, rt);\n")
+            out_lines.append("    lsm_registry_add_type(reg, rt);\n")
 
             # Also emit a registered method per class.method so registry
             # lookup_method(class_qn, name) works.
@@ -381,7 +381,7 @@ def emit(stubs: list[ModuleStubs], output_path: Path) -> None:
                 out_lines.append(
                     f"    rf.receiver_type = \"{c_escape(cls.qualified_name)}\";\n"
                 )
-                out_lines.append("    cbm_registry_add_func(reg, rf);\n")
+                out_lines.append("    lsm_registry_add_func(reg, rf);\n")
 
         for fn in ms.functions:
             out_lines.append("    memset(&rf, 0, sizeof(rf));\n")
@@ -389,7 +389,7 @@ def emit(stubs: list[ModuleStubs], output_path: Path) -> None:
                 f"    rf.qualified_name = \"{c_escape(fn.qualified_name)}\";\n"
             )
             out_lines.append(f"    rf.short_name = \"{c_escape(fn.short_name)}\";\n")
-            out_lines.append("    cbm_registry_add_func(reg, rf);\n")
+            out_lines.append("    lsm_registry_add_func(reg, rf);\n")
 
     output_path.write_text(C_HEADER + "".join(out_lines) + C_FOOTER, encoding="utf-8")
 
@@ -404,7 +404,7 @@ def main() -> int:
     parser.add_argument(
         "output",
         nargs="?",
-        default="internal/cbm/lsp/generated/python_stdlib_data.c",
+        default="internal/lsm/lsp/generated/python_stdlib_data.c",
     )
     args = parser.parse_args()
 

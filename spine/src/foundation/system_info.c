@@ -12,7 +12,7 @@
  */
 #include "foundation/constants.h"
 
-enum { DEFAULT_CORES = 1, MIN_WORKERS = 1, CBM_WORKERS_MAX = 256 };
+enum { DEFAULT_CORES = 1, MIN_WORKERS = 1, LSM_WORKERS_MAX = 256 };
 #include "foundation/log.h"
 #include "foundation/platform.h"
 #include "foundation/system_info_internal.h"
@@ -59,7 +59,7 @@ static size_t sysctl_size(const char *name, size_t fallback) {
     if (sysctlbyname(name, &val, &len, NULL, 0) == 0 && val > 0) {
         return val;
     }
-    /* Try CBM_SZ_64-bit variant */
+    /* Try LSM_SZ_64-bit variant */
     uint64_t val64 = 0;
     len = sizeof(val64);
     if (sysctlbyname(name, &val64, &len, NULL, 0) == 0 && val64 > 0) {
@@ -68,8 +68,8 @@ static size_t sysctl_size(const char *name, size_t fallback) {
     return fallback;
 }
 
-static cbm_system_info_t detect_system_macos(void) {
-    cbm_system_info_t info;
+static lsm_system_info_t detect_system_macos(void) {
+    lsm_system_info_t info;
     memset(&info, 0, sizeof(info));
 
     info.total_cores = sysctl_int("hw.ncpu", DEFAULT_CORES);
@@ -87,8 +87,8 @@ static cbm_system_info_t detect_system_macos(void) {
 
 #elif defined(__NetBSD__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 
-static cbm_system_info_t detect_system_bsd(void) {
-    cbm_system_info_t info;
+static lsm_system_info_t detect_system_bsd(void) {
+    lsm_system_info_t info;
     memset(&info, 0, sizeof(info));
 
     long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
@@ -129,9 +129,9 @@ static int read_small_file(const char *path, char *buf, size_t bufsz) {
 }
 
 /* Effective CPU count from a cgroup file tree. See header for contract. */
-int cbm_detect_cgroup_cpus(const char *cgroup_root) {
-    char path[CBM_PATH_MAX];
-    char buf[CBM_SZ_64];
+int lsm_detect_cgroup_cpus(const char *cgroup_root) {
+    char path[LSM_PATH_MAX];
+    char buf[LSM_SZ_64];
 
     /* cgroup v2: "<root>/cpu.max" — "<quota> <period>" or "max <period>". */
     snprintf(path, sizeof(path), "%s/cpu.max", cgroup_root);
@@ -154,7 +154,7 @@ int cbm_detect_cgroup_cpus(const char *cgroup_root) {
     if (read_small_file(path, buf, sizeof(buf)) <= 0) {
         return -1;
     }
-    long quota = strtol(buf, NULL, CBM_DECIMAL_BASE);
+    long quota = strtol(buf, NULL, LSM_DECIMAL_BASE);
     if (quota <= 0) {
         return -1;
     }
@@ -163,7 +163,7 @@ int cbm_detect_cgroup_cpus(const char *cgroup_root) {
     if (read_small_file(path, buf, sizeof(buf)) <= 0) {
         return -1;
     }
-    long period = strtol(buf, NULL, CBM_DECIMAL_BASE);
+    long period = strtol(buf, NULL, LSM_DECIMAL_BASE);
     if (period <= 0) {
         return -1;
     }
@@ -173,9 +173,9 @@ int cbm_detect_cgroup_cpus(const char *cgroup_root) {
 }
 
 /* Effective memory limit from a cgroup file tree. See header for contract. */
-size_t cbm_detect_cgroup_mem(const char *cgroup_root) {
-    char path[CBM_PATH_MAX];
-    char buf[CBM_SZ_64];
+size_t lsm_detect_cgroup_mem(const char *cgroup_root) {
+    char path[LSM_PATH_MAX];
+    char buf[LSM_SZ_64];
 
     /* cgroup v2: "<root>/memory.max" — "max" or integer bytes. */
     snprintf(path, sizeof(path), "%s/memory.max", cgroup_root);
@@ -184,7 +184,7 @@ size_t cbm_detect_cgroup_mem(const char *cgroup_root) {
             return 0;
         }
         char *end = NULL;
-        unsigned long long n = strtoull(buf, &end, CBM_DECIMAL_BASE);
+        unsigned long long n = strtoull(buf, &end, LSM_DECIMAL_BASE);
         if (end == buf || n == 0) {
             return 0;
         }
@@ -199,15 +199,15 @@ size_t cbm_detect_cgroup_mem(const char *cgroup_root) {
         return 0;
     }
     char *end = NULL;
-    unsigned long long n = strtoull(buf, &end, CBM_DECIMAL_BASE);
+    unsigned long long n = strtoull(buf, &end, LSM_DECIMAL_BASE);
     if (end == buf || n == 0 || n >= (ULLONG_MAX / 2)) {
         return 0;
     }
     return (size_t)n;
 }
 
-static cbm_system_info_t detect_system_linux(void) {
-    cbm_system_info_t info;
+static lsm_system_info_t detect_system_linux(void) {
+    lsm_system_info_t info;
     memset(&info, 0, sizeof(info));
 
     /* Host fallbacks. */
@@ -222,11 +222,11 @@ static cbm_system_info_t detect_system_linux(void) {
 
     /* Cgroup-aware overrides. min(cgroup, host) defends against
      * mis-mounted cgroups that report values larger than the host. */
-    int cg_cpus = cbm_detect_cgroup_cpus("/sys/fs/cgroup");
+    int cg_cpus = lsm_detect_cgroup_cpus("/sys/fs/cgroup");
     info.total_cores = (cg_cpus > 0 && cg_cpus < host_cpus) ? cg_cpus : host_cpus;
     info.perf_cores = info.total_cores; /* Linux doesn't distinguish P/E */
 
-    size_t cg_ram = cbm_detect_cgroup_mem("/sys/fs/cgroup");
+    size_t cg_ram = lsm_detect_cgroup_mem("/sys/fs/cgroup");
     info.total_ram = (cg_ram > 0 && (host_ram == 0 || cg_ram < host_ram)) ? cg_ram : host_ram;
 
     return info;
@@ -237,8 +237,8 @@ static cbm_system_info_t detect_system_linux(void) {
 /* ── Windows detection ───────────────────────────────────────────── */
 
 #ifdef _WIN32
-static cbm_system_info_t detect_system_windows(void) {
-    cbm_system_info_t info;
+static lsm_system_info_t detect_system_windows(void) {
+    lsm_system_info_t info;
     memset(&info, 0, sizeof(info));
 
     SYSTEM_INFO si;
@@ -262,9 +262,9 @@ static cbm_system_info_t detect_system_windows(void) {
 /* ── Public API ──────────────────────────────────────────────────── */
 
 static int info_cached = 0;
-static cbm_system_info_t cached_info;
+static lsm_system_info_t cached_info;
 
-cbm_system_info_t cbm_system_info(void) {
+lsm_system_info_t lsm_system_info(void) {
     if (!info_cached) {
 #ifdef _WIN32
         cached_info = detect_system_windows();
@@ -280,22 +280,22 @@ cbm_system_info_t cbm_system_info(void) {
     return cached_info;
 }
 
-int cbm_default_worker_count(bool initial) {
-    /* CBM_WORKERS env override (clamped to [1, CBM_WORKERS_MAX]).
+int lsm_default_worker_count(bool initial) {
+    /* LSM_WORKERS env override (clamped to [1, LSM_WORKERS_MAX]).
      * Useful inside containers where sysconf(_SC_NPROCESSORS_ONLN)
      * reports host CPUs rather than the cgroup's effective CPU quota.
-     * Same precedence shape as other CBM_* env overrides:
+     * Same precedence shape as other LSM_* env overrides:
      * explicit override > implicit detection. */
-    char buf[CBM_SZ_32];
-    if (cbm_safe_getenv("CBM_WORKERS", buf, sizeof(buf), NULL) != NULL) {
-        long n = strtol(buf, NULL, CBM_DECIMAL_BASE);
-        if (n >= MIN_WORKERS && n <= CBM_WORKERS_MAX) {
+    char buf[LSM_SZ_32];
+    if (lsm_safe_getenv("LSM_WORKERS", buf, sizeof(buf), NULL) != NULL) {
+        long n = strtol(buf, NULL, LSM_DECIMAL_BASE);
+        if (n >= MIN_WORKERS && n <= LSM_WORKERS_MAX) {
             return (int)n;
         }
-        cbm_log_warn("workers.env.invalid", "value", buf, "fallback", "sysconf");
+        lsm_log_warn("workers.env.invalid", "value", buf, "fallback", "sysconf");
     }
 
-    cbm_system_info_t info = cbm_system_info();
+    lsm_system_info_t info = lsm_system_info();
     if (initial) {
         /* Use all cores for initial indexing — user is waiting */
         return info.total_cores;

@@ -8,7 +8,7 @@
 #include "foundation/compat_thread.h"
 
 #include "foundation/platform.h"
-#include "foundation/sanitized.h" /* CBM_SANITIZED — diagnostic stack floor */
+#include "foundation/sanitized.h" /* LSM_SANITIZED — diagnostic stack floor */
 
 #include <mimalloc.h> /* mi_thread_done at thread exit */
 
@@ -17,7 +17,7 @@
 
 /* Default 8MB stack for all threads. macOS ARM64 default is only 512KB,
  * which is too small for deep pipeline passes (configlink, etc.). */
-#define CBM_DEFAULT_STACK_SIZE ((size_t)8 * CBM_SZ_1K * CBM_SZ_1K)
+#define LSM_DEFAULT_STACK_SIZE ((size_t)8 * LSM_SZ_1K * LSM_SZ_1K)
 
 #include <string.h>
 
@@ -31,14 +31,14 @@
  * DEFAULT, which silently did nothing for worker_pool/runtime/main, i.e. for
  * exactly the threads that overflow. Diagnostic builds only: the shipping
  * binary keeps its fixed, predictable stack sizes. */
-static size_t cbm_thread_stack_floor(size_t requested) {
-#if CBM_SANITIZED
-    const char *env = getenv("CBM_THREAD_STACK_MB");
+static size_t lsm_thread_stack_floor(size_t requested) {
+#if LSM_SANITIZED
+    const char *env = getenv("LSM_THREAD_STACK_MB");
     if (env && env[0]) {
         char *end = NULL;
         unsigned long mb = strtoul(env, &end, 10);
         if (end && *end == '\0' && mb > 0 && mb <= 1024) {
-            size_t floor_bytes = (size_t)mb * CBM_SZ_1K * CBM_SZ_1K;
+            size_t floor_bytes = (size_t)mb * LSM_SZ_1K * LSM_SZ_1K;
             if (floor_bytes > requested) {
                 return floor_bytes;
             }
@@ -48,8 +48,8 @@ static size_t cbm_thread_stack_floor(size_t requested) {
     return requested;
 }
 
-static size_t cbm_thread_default_stack_size(void) {
-    return cbm_thread_stack_floor(CBM_DEFAULT_STACK_SIZE);
+static size_t lsm_thread_default_stack_size(void) {
+    return lsm_thread_stack_floor(LSM_DEFAULT_STACK_SIZE);
 }
 
 /* ── Thread ───────────────────────────────────────────────────── */
@@ -76,21 +76,21 @@ typedef struct {
  * held against a ~300 KiB live set, growing without bound (#581). POSIX gets
  * this from a pthread TSD destructor, which is why only Windows leaked.
  *
- * CBM_MI_THREAD_DONE=0 disables it, so one binary can demonstrate both
+ * LSM_MI_THREAD_DONE=0 disables it, so one binary can demonstrate both
  * behaviours rather than requiring a rebuild to establish causality. */
 static bool thread_release_heap_enabled(void) {
     static int state = -1;
     if (state < 0) {
-        char buf[CBM_SZ_16];
+        char buf[LSM_SZ_16];
         state =
-            (cbm_safe_getenv("CBM_MI_THREAD_DONE", buf, sizeof(buf), NULL) != NULL && buf[0] == '0')
+            (lsm_safe_getenv("LSM_MI_THREAD_DONE", buf, sizeof(buf), NULL) != NULL && buf[0] == '0')
                 ? 0
                 : 1;
     }
     return state == 1;
 }
 
-static void NTAPI cbm_thread_detach_callback(PVOID handle, DWORD reason, PVOID reserved) {
+static void NTAPI lsm_thread_detach_callback(PVOID handle, DWORD reason, PVOID reserved) {
     (void)handle;
     (void)reserved;
     if (reason == DLL_THREAD_DETACH && thread_release_heap_enabled()) {
@@ -101,9 +101,9 @@ static void NTAPI cbm_thread_detach_callback(PVOID handle, DWORD reason, PVOID r
 /* Park the callback in .CRT$XLB, the table the loader walks. The linker only
  * emits a TLS directory when _tls_used is referenced, so anchor it. */
 extern const IMAGE_TLS_DIRECTORY64 _tls_used;
-static const void *const cbm_tls_anchor __attribute__((used)) = &_tls_used;
-__attribute__((section(".CRT$XLB"), used)) PIMAGE_TLS_CALLBACK cbm_thread_detach_tls_cb =
-    cbm_thread_detach_callback;
+static const void *const lsm_tls_anchor __attribute__((used)) = &_tls_used;
+__attribute__((section(".CRT$XLB"), used)) PIMAGE_TLS_CALLBACK lsm_thread_detach_tls_cb =
+    lsm_thread_detach_callback;
 
 static DWORD WINAPI win_thread_wrapper(LPVOID lpParam) {
     win_thread_arg_t *a = (win_thread_arg_t *)lpParam;
@@ -124,36 +124,36 @@ static DWORD WINAPI win_thread_wrapper(LPVOID lpParam) {
     return 0;
 }
 
-int cbm_thread_create(cbm_thread_t *t, size_t stack_size, void *(*fn)(void *), void *arg) {
+int lsm_thread_create(lsm_thread_t *t, size_t stack_size, void *(*fn)(void *), void *arg) {
     if (stack_size == 0) {
-        stack_size = cbm_thread_default_stack_size();
+        stack_size = lsm_thread_default_stack_size();
     } else {
-        stack_size = cbm_thread_stack_floor(stack_size);
+        stack_size = lsm_thread_stack_floor(stack_size);
     }
     win_thread_arg_t *a = (win_thread_arg_t *)malloc(sizeof(win_thread_arg_t));
     if (!a) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     a->fn = fn;
     a->arg = arg;
     t->handle = CreateThread(NULL, stack_size, win_thread_wrapper, a, 0, NULL);
     if (!t->handle) {
         free(a);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     return 0;
 }
 
-int cbm_thread_join(cbm_thread_t *t) {
+int lsm_thread_join(lsm_thread_t *t) {
     if (WaitForSingleObject(t->handle, INFINITE) != WAIT_OBJECT_0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     CloseHandle(t->handle);
     t->handle = NULL;
     return 0;
 }
 
-int cbm_thread_detach(cbm_thread_t *t) {
+int lsm_thread_detach(lsm_thread_t *t) {
     if (t->handle) {
         CloseHandle(t->handle);
         t->handle = NULL;
@@ -163,11 +163,11 @@ int cbm_thread_detach(cbm_thread_t *t) {
 
 #else /* POSIX */
 
-int cbm_thread_create(cbm_thread_t *t, size_t stack_size, void *(*fn)(void *), void *arg) {
+int lsm_thread_create(lsm_thread_t *t, size_t stack_size, void *(*fn)(void *), void *arg) {
     if (stack_size == 0) {
-        stack_size = cbm_thread_default_stack_size();
+        stack_size = lsm_thread_default_stack_size();
     } else {
-        stack_size = cbm_thread_stack_floor(stack_size);
+        stack_size = lsm_thread_stack_floor(stack_size);
     }
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -177,7 +177,7 @@ int cbm_thread_create(cbm_thread_t *t, size_t stack_size, void *(*fn)(void *), v
     return rc;
 }
 
-int cbm_thread_join(cbm_thread_t *t) {
+int lsm_thread_join(lsm_thread_t *t) {
     int rc = pthread_join(t->handle, NULL);
     if (rc == 0) {
         memset(&t->handle, 0, sizeof(t->handle));
@@ -185,7 +185,7 @@ int cbm_thread_join(cbm_thread_t *t) {
     return rc;
 }
 
-int cbm_thread_detach(cbm_thread_t *t) {
+int lsm_thread_detach(lsm_thread_t *t) {
     int rc = pthread_detach(t->handle);
     if (rc == 0) {
         memset(&t->handle, 0, sizeof(t->handle));
@@ -199,37 +199,37 @@ int cbm_thread_detach(cbm_thread_t *t) {
 
 #ifdef _WIN32
 
-void cbm_mutex_init(cbm_mutex_t *m) {
+void lsm_mutex_init(lsm_mutex_t *m) {
     InitializeCriticalSection(&m->cs);
 }
 
-void cbm_mutex_lock(cbm_mutex_t *m) {
+void lsm_mutex_lock(lsm_mutex_t *m) {
     EnterCriticalSection(&m->cs);
 }
 
-void cbm_mutex_unlock(cbm_mutex_t *m) {
+void lsm_mutex_unlock(lsm_mutex_t *m) {
     LeaveCriticalSection(&m->cs);
 }
 
-void cbm_mutex_destroy(cbm_mutex_t *m) {
+void lsm_mutex_destroy(lsm_mutex_t *m) {
     DeleteCriticalSection(&m->cs);
 }
 
 #else /* POSIX */
 
-void cbm_mutex_init(cbm_mutex_t *m) {
+void lsm_mutex_init(lsm_mutex_t *m) {
     pthread_mutex_init(&m->mtx, NULL);
 }
 
-void cbm_mutex_lock(cbm_mutex_t *m) {
+void lsm_mutex_lock(lsm_mutex_t *m) {
     pthread_mutex_lock(&m->mtx);
 }
 
-void cbm_mutex_unlock(cbm_mutex_t *m) {
+void lsm_mutex_unlock(lsm_mutex_t *m) {
     pthread_mutex_unlock(&m->mtx);
 }
 
-void cbm_mutex_destroy(cbm_mutex_t *m) {
+void lsm_mutex_destroy(lsm_mutex_t *m) {
     pthread_mutex_destroy(&m->mtx);
 }
 
@@ -239,22 +239,22 @@ void cbm_mutex_destroy(cbm_mutex_t *m) {
 
 #ifdef _WIN32
 
-int cbm_aligned_alloc(void **ptr, size_t alignment, size_t size) {
+int lsm_aligned_alloc(void **ptr, size_t alignment, size_t size) {
     *ptr = _aligned_malloc(size, alignment);
     return *ptr ? 0 : -1;
 }
 
-void cbm_aligned_free(void *ptr) {
+void lsm_aligned_free(void *ptr) {
     _aligned_free(ptr);
 }
 
 #else /* POSIX */
 
-int cbm_aligned_alloc(void **ptr, size_t alignment, size_t size) {
+int lsm_aligned_alloc(void **ptr, size_t alignment, size_t size) {
     return posix_memalign(ptr, alignment, size);
 }
 
-void cbm_aligned_free(void *ptr) {
+void lsm_aligned_free(void *ptr) {
     free(ptr);
 }
 

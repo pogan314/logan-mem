@@ -48,7 +48,7 @@
  *   body appear in `r->defs` — this is the first.
  *
  * FIX LOCATION:
- *   `push_nested_class_nodes` in internal/cbm/extract_defs.c (~line 4900):
+ *   `push_nested_class_nodes` in internal/lsm/extract_defs.c (~line 4900):
  *   add `function_item` and `function_signature_item` to the set of node
  *   kinds that are re-queued onto the walk stack (or, equivalently, handle
  *   Rust `declaration_list` bodies via the same function-dispatch path used
@@ -56,16 +56,16 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 /*
  * count_method_defs_named — count defs with label "Method" matching name.
  * Mirrors the `has_def` helper in test_extraction.c but counts all matches.
  */
-static int count_method_defs_named(CBMFileResult *r, const char *name) {
+static int count_method_defs_named(LSMFileResult *r, const char *name) {
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        const CBMDefinition *d = &r->defs.items[i];
+        const LSMDefinition *d = &r->defs.items[i];
         if (d->label && strcmp(d->label, "Method") == 0 &&
             d->name  && strcmp(d->name,  name)    == 0) {
             n++;
@@ -78,7 +78,7 @@ static int count_method_defs_named(CBMFileResult *r, const char *name) {
  * count_defs_with_label — count all defs carrying the given label.
  * Mirrors the helper in test_extraction.c.
  */
-static int count_defs_with_label_local(CBMFileResult *r, const char *label) {
+static int count_defs_with_label_local(LSMFileResult *r, const char *label) {
     int n = 0;
     for (int i = 0; i < r->defs.count; i++) {
         if (r->defs.items[i].label && strcmp(r->defs.items[i].label, label) == 0)
@@ -144,8 +144,8 @@ TEST(repro_issue333_rust_extraction_depth) {
         "    s.describe()\n"
         "}\n";
 
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_RUST, "t", "lib.rs",
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_RUST, "t", "lib.rs",
                                         0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
@@ -241,7 +241,7 @@ TEST(repro_issue333_rust_extraction_depth) {
     int total_methods = count_defs_with_label_local(r, "Method");
     ASSERT_GTE(total_methods, 3);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

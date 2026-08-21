@@ -1,4 +1,4 @@
-/* Reproductions for CBMLanguage-to-spec registry invariants.
+/* Reproductions for LSMLanguage-to-spec registry invariants.
  *
  * This ledger classifies raw call-node metadata and generic identifier/reference
  * vocabulary. It does not claim that every call-capable language can produce an
@@ -27,26 +27,26 @@ typedef struct {
     const char *reason;
 } LanguageCapabilityEntry;
 
-size_t repro_call_argument_matrix_a_copy_language_ids(CBMLanguage *language_ids, size_t capacity);
-size_t repro_call_argument_matrix_b_copy_language_ids(CBMLanguage *language_ids, size_t capacity);
+size_t repro_call_argument_matrix_a_copy_language_ids(LSMLanguage *language_ids, size_t capacity);
+size_t repro_call_argument_matrix_b_copy_language_ids(LSMLanguage *language_ids, size_t capacity);
 
 #define CALL_WITH_REFERENCE_VOCAB(lang)                        \
-    [CBM_LANG_##lang] = {CAP_CALL_WITH_REFERENCE_VOCAB, #lang, \
+    [LSM_LANG_##lang] = {CAP_CALL_WITH_REFERENCE_VOCAB, #lang, \
                          "call metadata and a currently recognized reference node"}
 #define CALL_WITHOUT_REFERENCE_VOCAB(lang)                        \
-    [CBM_LANG_##lang] = {CAP_CALL_WITHOUT_REFERENCE_VOCAB, #lang, \
+    [LSM_LANG_##lang] = {CAP_CALL_WITHOUT_REFERENCE_VOCAB, #lang, \
                          "call metadata but no reference node recognized by extract_usages"}
 #define NO_CALL(lang) \
-    [CBM_LANG_##lang] = {CAP_NO_CALL, #lang, "no call-node metadata; callback case inapplicable"}
+    [LSM_LANG_##lang] = {CAP_NO_CALL, #lang, "no call-node metadata; callback case inapplicable"}
 #define TRANSFORM_ONLY(lang)                        \
-    [CBM_LANG_##lang] = {CAP_TRANSFORM_ONLY, #lang, \
+    [LSM_LANG_##lang] = {CAP_TRANSFORM_ONLY, #lang, \
                          "source is transformed into another registered language first"}
 #define UNSUPPORTED(lang) \
-    [CBM_LANG_##lang] = {CAP_UNSUPPORTED, #lang, "enum retained without a registered grammar"}
+    [LSM_LANG_##lang] = {CAP_UNSUPPORTED, #lang, "enum retained without a registered grammar"}
 
 /* Explicit ledger: no default initializer is intentional. A new enum remains
  * CAP_UNSET until its call-metadata/reference-vocabulary behavior is audited. */
-static const LanguageCapabilityEntry LANGUAGE_CAPABILITIES[CBM_LANG_COUNT] = {
+static const LanguageCapabilityEntry LANGUAGE_CAPABILITIES[LSM_LANG_COUNT] = {
     CALL_WITH_REFERENCE_VOCAB(GO),
     CALL_WITH_REFERENCE_VOCAB(PYTHON),
     CALL_WITH_REFERENCE_VOCAB(JAVASCRIPT),
@@ -218,8 +218,8 @@ static const LanguageCapabilityEntry LANGUAGE_CAPABILITIES[CBM_LANG_COUNT] = {
 #undef TRANSFORM_ONLY
 #undef UNSUPPORTED
 
-_Static_assert(sizeof(LANGUAGE_CAPABILITIES) / sizeof(LANGUAGE_CAPABILITIES[0]) == CBM_LANG_COUNT,
-               "language capability ledger must track CBM_LANG_COUNT");
+_Static_assert(sizeof(LANGUAGE_CAPABILITIES) / sizeof(LANGUAGE_CAPABILITIES[0]) == LSM_LANG_COUNT,
+               "language capability ledger must track LSM_LANG_COUNT");
 
 static int grammar_has_symbol(const TSLanguage *language, const char *expected_name) {
     uint32_t symbol_count = ts_language_symbol_count(language);
@@ -234,12 +234,12 @@ static int grammar_has_symbol(const TSLanguage *language, const char *expected_n
 
 /* Every enum value must either be unsupported (NULL) or map to a spec tagged
  * with that exact language. A missing designated initializer must never alias
- * the zero-initialized CBM_LANG_GO slot. */
+ * the zero-initialized LSM_LANG_GO slot. */
 TEST(repro_language_specs_do_not_alias_other_languages) {
     int failures = 0;
-    for (int value = 0; value < CBM_LANG_COUNT; value++) {
-        CBMLanguage language = (CBMLanguage)value;
-        const CBMLangSpec *spec = cbm_lang_spec(language);
+    for (int value = 0; value < LSM_LANG_COUNT; value++) {
+        LSMLanguage language = (LSMLanguage)value;
+        const LSMLangSpec *spec = lsm_lang_spec(language);
         if (spec && spec->language != language) {
             fprintf(
                 stderr,
@@ -256,9 +256,9 @@ TEST(repro_language_capability_ledger_covers_every_enum) {
     int failures = 0;
     int counts[CAP_COUNT] = {0};
 
-    for (int value = 0; value < CBM_LANG_COUNT; value++) {
+    for (int value = 0; value < LSM_LANG_COUNT; value++) {
         const LanguageCapabilityEntry *entry = &LANGUAGE_CAPABILITIES[value];
-        const CBMLangSpec *spec = cbm_lang_spec((CBMLanguage)value);
+        const LSMLangSpec *spec = lsm_lang_spec((LSMLanguage)value);
         if (entry->capability <= CAP_UNSET || entry->capability >= CAP_COUNT || !entry->name ||
             !entry->reason) {
             fprintf(stderr, "  [language-registry] invariant=capability_unset requested=%d\n",
@@ -279,7 +279,7 @@ TEST(repro_language_capability_ledger_covers_every_enum) {
             continue;
         }
 
-        if (!spec || spec->language != (CBMLanguage)value) {
+        if (!spec || spec->language != (LSMLanguage)value) {
             fprintf(stderr, "  [language-registry] lang=%s invariant=registered_spec_missing\n",
                     entry->name);
             failures++;
@@ -321,10 +321,10 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
         EXPECTED_NON_CALL_LANGUAGES = 52,
         EXPECTED_NON_CALL_DOMAIN_CONTROLS = 2,
     };
-    CBMLanguage matrix_a_ids[CBM_LANG_COUNT];
-    CBMLanguage matrix_b_ids[CBM_LANG_COUNT];
-    unsigned int matrix_a_counts[CBM_LANG_COUNT] = {0};
-    unsigned int matrix_b_counts[CBM_LANG_COUNT] = {0};
+    LSMLanguage matrix_a_ids[LSM_LANG_COUNT];
+    LSMLanguage matrix_b_ids[LSM_LANG_COUNT];
+    unsigned int matrix_a_counts[LSM_LANG_COUNT] = {0};
+    unsigned int matrix_b_counts[LSM_LANG_COUNT] = {0};
     size_t matrix_a_rows = repro_call_argument_matrix_a_copy_language_ids(
         matrix_a_ids, sizeof(matrix_a_ids) / sizeof(matrix_a_ids[0]));
     size_t matrix_b_rows = repro_call_argument_matrix_b_copy_language_ids(
@@ -345,10 +345,10 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
     }
 
     size_t matrix_a_copied =
-        matrix_a_rows < CBM_LANG_COUNT ? matrix_a_rows : (size_t)CBM_LANG_COUNT;
+        matrix_a_rows < LSM_LANG_COUNT ? matrix_a_rows : (size_t)LSM_LANG_COUNT;
     for (size_t row = 0; row < matrix_a_copied; row++) {
         int language_id = (int)matrix_a_ids[row];
-        if (language_id < 0 || language_id >= CBM_LANG_COUNT) {
+        if (language_id < 0 || language_id >= LSM_LANG_COUNT) {
             fprintf(stderr,
                     "  [language-registry] matrix=A row=%zu invariant=language_id_range id=%d\n",
                     row, language_id);
@@ -359,10 +359,10 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
     }
 
     size_t matrix_b_copied =
-        matrix_b_rows < CBM_LANG_COUNT ? matrix_b_rows : (size_t)CBM_LANG_COUNT;
+        matrix_b_rows < LSM_LANG_COUNT ? matrix_b_rows : (size_t)LSM_LANG_COUNT;
     for (size_t row = 0; row < matrix_b_copied; row++) {
         int language_id = (int)matrix_b_ids[row];
-        if (language_id < 0 || language_id >= CBM_LANG_COUNT) {
+        if (language_id < 0 || language_id >= LSM_LANG_COUNT) {
             fprintf(stderr,
                     "  [language-registry] matrix=B row=%zu invariant=language_id_range id=%d\n",
                     row, language_id);
@@ -376,7 +376,7 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
     int covered_call_capable_languages = 0;
     int explicitly_non_call_languages = 0;
     int covered_non_call_domain_controls = 0;
-    for (int language_id = 0; language_id < CBM_LANG_COUNT; language_id++) {
+    for (int language_id = 0; language_id < LSM_LANG_COUNT; language_id++) {
         const LanguageCapabilityEntry *entry = &LANGUAGE_CAPABILITIES[language_id];
         const char *language_name = entry->name ? entry->name : "<unclassified>";
         unsigned int matrix_a_count = matrix_a_counts[language_id];
@@ -441,7 +441,7 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
             explicitly_non_call_languages++;
         }
         int expected_domain_control =
-            language_id == CBM_LANG_DIFF || language_id == CBM_LANG_BIBTEX;
+            language_id == LSM_LANG_DIFF || language_id == LSM_LANG_BIBTEX;
         if (expected_domain_control && total_count == 1) {
             covered_non_call_domain_controls++;
         } else if (total_count != 0 || expected_domain_control) {
@@ -481,10 +481,10 @@ TEST(repro_call_argument_matrices_equal_call_capability_ledger) {
 TEST(repro_primary_call_metadata_names_exist_in_grammars) {
     int failures = 0;
 
-    for (int value = 0; value < CBM_LANG_COUNT; value++) {
+    for (int value = 0; value < LSM_LANG_COUNT; value++) {
         const LanguageCapabilityEntry *entry = &LANGUAGE_CAPABILITIES[value];
-        const CBMLangSpec *spec = cbm_lang_spec((CBMLanguage)value);
-        const TSLanguage *language = cbm_ts_language((CBMLanguage)value);
+        const LSMLangSpec *spec = lsm_lang_spec((LSMLanguage)value);
+        const TSLanguage *language = lsm_ts_language((LSMLanguage)value);
         if (!spec || !spec->call_node_types || !spec->call_node_types[0]) {
             continue;
         }
@@ -517,8 +517,8 @@ TEST(repro_primary_call_metadata_names_exist_in_grammars) {
  * mismatch, so exercise the AST-to-metadata contract directly. */
 TEST(repro_linkerscript_root_is_registered_as_module) {
     static const char source[] = "SECTIONS { .text : { *(.text) } }\n";
-    const CBMLangSpec *spec = cbm_lang_spec(CBM_LANG_LINKERSCRIPT);
-    const TSLanguage *language = cbm_ts_language(CBM_LANG_LINKERSCRIPT);
+    const LSMLangSpec *spec = lsm_lang_spec(LSM_LANG_LINKERSCRIPT);
+    const TSLanguage *language = lsm_ts_language(LSM_LANG_LINKERSCRIPT);
     TSParser *parser = ts_parser_new();
     int failures = 0;
 

@@ -10,7 +10,7 @@
  *   entry for `crate_a::helper` — only the definitions in the *same file*
  *   were seeded.  The LSP resolver therefore cannot match the call-site to
  *   a callee QN across the crate boundary, and the resulting
- *   CBMResolvedCall is either absent or marked with low confidence and
+ *   LSMResolvedCall is either absent or marked with low confidence and
  *   discarded.  When the pipeline writes graph edges for this project, no
  *   CALLS edge is minted for the cross-crate call — the call graph stops
  *   at the crate edge.
@@ -22,7 +22,7 @@
  *   (rustlsp_extra_cargo_wires_workspace_member in test_rust_lsp.c) only
  *   exercises the *single-file LSP* layer with a manually-parsed manifest;
  *   it does NOT verify that the full production pipeline (rh_index_files →
- *   cbm_pipeline → graph store) persists a cross-crate CALLS edge for a
+ *   lsm_pipeline → graph store) persists a cross-crate CALLS edge for a
  *   real multi-file Cargo workspace fixture.  That gap is what this test
  *   fills.
  *
@@ -55,13 +55,13 @@
  *
  * WHY THIS IS RED ON CURRENT CODE (even post-v0.8.1):
  *   The rustlsp_extra_cargo_wires_workspace_member unit test exercises only
- *   the LSP layer (cbm_run_rust_lsp_with_manifest called with a parsed
- *   CBMCargoManifest) and confirms the resolver *can* route
+ *   the LSP layer (lsm_run_rust_lsp_with_manifest called with a parsed
+ *   LSMCargoManifest) and confirms the resolver *can* route
  *   `engine::boot()` to `engine.boot` when given the manifest explicitly.
  *   BUT: the production pipeline's per-file extraction path
- *   (cbm_extract_file → cbm_run_rust_lsp) does NOT receive a pre-parsed
+ *   (lsm_extract_file → lsm_run_rust_lsp) does NOT receive a pre-parsed
  *   workspace manifest — it only gets the individual file's content.
- *   Additionally, cbm_pxc_has_cross_lsp() returns false for CBM_LANG_RUST
+ *   Additionally, lsm_pxc_has_cross_lsp() returns false for LSM_LANG_RUST
  *   (pass_lsp_cross.c), so the cross-file LSP pass is never invoked for
  *   Rust.  Therefore a real workspace indexed through index_repository
  *   produces no CALLS edges crossing into crate_a, and this test is RED.
@@ -112,9 +112,9 @@
  *   No CALLS edge whose target QN contains "crate_a" exists in the store.
  *
  * This test is RED on current code because:
- *   1. cbm_run_rust_lsp is called with NULL manifest (cbm.c:645), so no
+ *   1. lsm_run_rust_lsp is called with NULL manifest (lsm.c:645), so no
  *      workspace metadata is available at extraction time.
- *   2. cbm_pxc_has_cross_lsp returns false for CBM_LANG_RUST
+ *   2. lsm_pxc_has_cross_lsp returns false for LSM_LANG_RUST
  *      (pass_lsp_cross.c:281), so the cross-file LSP pass never runs for
  *      Rust and cannot seed crate_a defs into crate_b's resolver context.
  *   3. With two `helper` candidates (crate_a and crate_b-local), the
@@ -199,7 +199,7 @@ TEST(repro_issue56_cross_crate_calls) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     /*
@@ -218,22 +218,22 @@ TEST(repro_issue56_cross_crate_calls) {
      * RED if no edge with target QN containing "crate_a" is found.
      * GREEN when cross-crate resolution is correctly implemented.
      */
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    int rc = cbm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &edge_count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &edge_count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     int found_cross_crate = 0;
     for (int i = 0; i < edge_count && !found_cross_crate; i++) {
-        cbm_node_t target_node;
-        if (cbm_store_find_node_by_id(store, edges[i].target_id, &target_node) == CBM_STORE_OK) {
+        lsm_node_t target_node;
+        if (lsm_store_find_node_by_id(store, edges[i].target_id, &target_node) == LSM_STORE_OK) {
             if (target_node.qualified_name &&
                 strstr(target_node.qualified_name, "crate_a")) {
                 found_cross_crate = 1;
             }
         }
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
 
     /*
      * RED: no CALLS edge routes into crate_a's namespace.

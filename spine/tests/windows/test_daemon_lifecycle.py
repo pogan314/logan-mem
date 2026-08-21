@@ -15,7 +15,7 @@ suite (the Windows leg's test-infra hang sensitivity is on record).
 Exit code: 0 == lifecycle behaves (green), 1 == regression, 2 == setup error.
 
 Usage:
-    python test_daemon_lifecycle.py <path-to-codebase-memory-mcp[.exe]>
+    python test_daemon_lifecycle.py <path-to-logan-spine-mcp[.exe]>
 """
 import os
 import re
@@ -26,7 +26,7 @@ import tempfile
 
 def run_cli(binary, cache, args, timeout=60):
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = cache
+    env["LSM_CACHE_DIR"] = cache
     return subprocess.run([binary] + args, capture_output=True, timeout=timeout, env=env)
 
 
@@ -52,7 +52,7 @@ def main():
         print("FAIL: binary not found: %s" % binary)
         return 2
 
-    work = tempfile.mkdtemp(prefix="cbm_win_daemonctl_")
+    work = tempfile.mkdtemp(prefix="lsm_win_daemonctl_")
     cache = os.path.join(work, "cache")
     os.makedirs(cache, exist_ok=True)
     daemon_pid = 0

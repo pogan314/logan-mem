@@ -38,7 +38,7 @@
  *   - only genuine ts_lsp cross-file inheritance resolution turns it GREEN.
  *
  * ROOT-CAUSE POINTER (for the eventual fixer): ts_lsp cross-file inheritance
- * resolution — internal/cbm/lsp/ts_lsp.c resolve_member_call/lookup_method
+ * resolution — internal/lsm/lsp/ts_lsp.c resolve_member_call/lookup_method
  * only walks methods declared on the receiver's OWN class as registered in the
  * module registry; it does not follow the (correctly extracted) INHERITS edge
  * from Derived to an imported Base to find `greet` there. See PR #836/#840 and
@@ -79,12 +79,12 @@ static const RFile kTsInherited[] = {
 /* ── Local store helpers ─────────────────────────────────────────────────── */
 
 /* True if some node with `label` has a QN ending in `suffix`. */
-static int node_with_qn_suffix(cbm_store_t *store, const char *project,
+static int node_with_qn_suffix(lsm_store_t *store, const char *project,
                                const char *label, const char *suffix) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) !=
-        CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) !=
+        LSM_STORE_OK)
         return 0;
     int found = 0;
     size_t sl = strlen(suffix);
@@ -96,7 +96,7 @@ static int node_with_qn_suffix(cbm_store_t *store, const char *project,
                 found = 1;
         }
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return found;
 }
 
@@ -112,22 +112,22 @@ static int node_with_qn_suffix(cbm_store_t *store, const char *project,
  * When `dump` is non-zero every CALLS edge is printed to stderr so a RED run
  * documents exactly what the graph contains instead.
  */
-static int lsp_resolved_edge_exists(cbm_store_t *store, const char *project,
+static int lsp_resolved_edge_exists(lsm_store_t *store, const char *project,
                                     const char *caller_substr,
                                     const char *callee_suffix,
                                     const char *strategy_substr, int dump) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int n = 0;
-    if (cbm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) !=
-        CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) !=
+        LSM_STORE_OK)
         return 0;
     int found = 0;
     size_t cl = strlen(callee_suffix);
     for (int i = 0; i < n; i++) {
-        cbm_node_t src, tgt;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &src) != CBM_STORE_OK)
+        lsm_node_t src, tgt;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &src) != LSM_STORE_OK)
             continue;
-        if (cbm_store_find_node_by_id(store, edges[i].target_id, &tgt) != CBM_STORE_OK)
+        if (lsm_store_find_node_by_id(store, edges[i].target_id, &tgt) != LSM_STORE_OK)
             continue;
         if (dump)
             fprintf(stderr, "    [ts-inherited] CALLS %s (%s) -> %s props=%s\n",
@@ -151,7 +151,7 @@ static int lsp_resolved_edge_exists(cbm_store_t *store, const char *project,
             continue;
         found = 1;
     }
-    cbm_store_free_edges(edges, n);
+    lsm_store_free_edges(edges, n);
     return found;
 }
 
@@ -165,29 +165,29 @@ static int lsp_resolved_edge_exists(cbm_store_t *store, const char *project,
  */
 TEST(repro_ts_inherited_extraction_preconditions) {
     /* base.ts extracts cleanly and defines Method greet. */
-    ASSERT_TRUE(inv_extract_clean(kTsInherited[0].content, CBM_LANG_TYPESCRIPT,
+    ASSERT_TRUE(inv_extract_clean(kTsInherited[0].content, LSM_LANG_TYPESCRIPT,
                                   "base.ts"));
-    CBMFileResult *rb =
-        inv_rx(kTsInherited[0].content, CBM_LANG_TYPESCRIPT, "base.ts");
+    LSMFileResult *rb =
+        inv_rx(kTsInherited[0].content, LSM_LANG_TYPESCRIPT, "base.ts");
     ASSERT_NOT_NULL(rb);
     int greet_methods = 0;
     for (int i = 0; i < rb->defs.count; i++) {
-        CBMDefinition *d = &rb->defs.items[i];
+        LSMDefinition *d = &rb->defs.items[i];
         if (d->label && strcmp(d->label, "Method") == 0 && d->name &&
             strcmp(d->name, "greet") == 0)
             greet_methods++;
     }
-    cbm_free_result(rb);
+    lsm_free_result(rb);
     ASSERT_EQ(greet_methods, 1);
 
     /* derived.ts extracts cleanly and contains the greet call site. */
-    ASSERT_TRUE(inv_extract_clean(kTsInherited[1].content, CBM_LANG_TYPESCRIPT,
+    ASSERT_TRUE(inv_extract_clean(kTsInherited[1].content, LSM_LANG_TYPESCRIPT,
                                   "derived.ts"));
-    CBMFileResult *rd =
-        inv_rx(kTsInherited[1].content, CBM_LANG_TYPESCRIPT, "derived.ts");
+    LSMFileResult *rd =
+        inv_rx(kTsInherited[1].content, LSM_LANG_TYPESCRIPT, "derived.ts");
     ASSERT_NOT_NULL(rd);
     int has_greet_call = inv_has_call(rd, "greet");
-    cbm_free_result(rd);
+    lsm_free_result(rd);
     ASSERT_TRUE(has_greet_call);
     PASS();
 }
@@ -202,7 +202,7 @@ TEST(repro_ts_inherited_extraction_preconditions) {
  */
 static int run_ts_inherited_pipeline(void) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(
+    lsm_store_t *store = rh_index_files(
         &lp, kTsInherited, (int)(sizeof(kTsInherited) / sizeof(kTsInherited[0])));
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed (setup, NOT the gap)\n", tf_red(),

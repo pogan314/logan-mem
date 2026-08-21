@@ -162,7 +162,7 @@ static const char k_query[] =
  * -------------------------------------------------------------------------- */
 TEST(repro_issue627_query_graph_no_crash) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, k_files,
+    lsm_store_t *store = rh_index_files(&lp, k_files,
                                         (int)(sizeof(k_files) / sizeof(k_files[0])));
     ASSERT_NOT_NULL(store);
 
@@ -183,7 +183,7 @@ TEST(repro_issue627_query_graph_no_crash) {
     pid_t pid = fork();
     if (pid == 0) {
         /* Child: run query_graph; exit cleanly if no crash. */
-        char *r = cbm_mcp_handle_tool(lp.srv, "query_graph", args);
+        char *r = lsm_mcp_handle_tool(lp.srv, "query_graph", args);
         if (r)
             free(r);
         _exit(0);
@@ -204,7 +204,7 @@ TEST(repro_issue627_query_graph_no_crash) {
     /* Run the query in the parent to inspect the result content.
      * Even on small graphs where the crash does not occur, the wrong-binding
      * bug causes query_graph to return an incorrect result set. */
-    char *resp = cbm_mcp_handle_tool(lp.srv, "query_graph", args);
+    char *resp = lsm_mcp_handle_tool(lp.srv, "query_graph", args);
     ASSERT_NOT_NULL(resp);
 
     /* Must not be an error response. */

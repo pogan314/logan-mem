@@ -42,7 +42,7 @@ function saveWidth(key: string, value: number) {
 
 /* Persist the node budget per project */
 function budgetKey(project: string): string {
-  return `cbm-node-budget:${project}`;
+  return `lsm-node-budget:${project}`;
 }
 function loadNodeBudget(project: string): number {
   try {
@@ -79,8 +79,8 @@ export function GraphTab({ project }: GraphTabProps) {
     setDisplay(next);
     saveDisplaySettings(next);
   }, []);
-  const [leftWidth, setLeftWidth] = useState(() => loadWidth("cbm-left-w", 260));
-  const [rightWidth, setRightWidth] = useState(() => loadWidth("cbm-right-w", 280));
+  const [leftWidth, setLeftWidth] = useState(() => loadWidth("lsm-left-w", 260));
+  const [rightWidth, setRightWidth] = useState(() => loadWidth("lsm-right-w", 280));
   const limitNotice = formatGraphLimitNotice(data);
 
   /* Node budget — keyed to its project so switching projects re-reads the
@@ -428,7 +428,7 @@ export function GraphTab({ project }: GraphTabProps) {
         onResize={(d) => {
           setLeftWidth((w) => {
             const nw = Math.max(150, Math.min(500, w + d));
-            saveWidth("cbm-left-w", nw);
+            saveWidth("lsm-left-w", nw);
             return nw;
           });
         }}
@@ -548,7 +548,7 @@ export function GraphTab({ project }: GraphTabProps) {
             onResize={(d) => {
               setRightWidth((w) => {
                 const nw = Math.max(200, Math.min(500, w + d));
-                saveWidth("cbm-right-w", nw);
+                saveWidth("lsm-right-w", nw);
                 return nw;
               });
             }}

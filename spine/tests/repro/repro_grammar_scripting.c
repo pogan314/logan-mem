@@ -9,23 +9,23 @@
  * CALLS another function strictly inside its body, a class where the language
  * has one idiomatically, and an idiomatic import where the language has one).
  *
- * Languages covered (12) and the CBM_LANG_* enum each uses:
- *   Python      -> CBM_LANG_PYTHON
- *   Ruby        -> CBM_LANG_RUBY
- *   PHP         -> CBM_LANG_PHP
- *   JavaScript  -> CBM_LANG_JAVASCRIPT
- *   TypeScript  -> CBM_LANG_TYPESCRIPT
- *   TSX         -> CBM_LANG_TSX
- *   Lua         -> CBM_LANG_LUA
- *   Perl        -> CBM_LANG_PERL
- *   R           -> CBM_LANG_R
- *   Julia       -> CBM_LANG_JULIA
- *   Groovy      -> CBM_LANG_GROOVY
- *   Dart        -> CBM_LANG_DART
+ * Languages covered (12) and the LSM_LANG_* enum each uses:
+ *   Python      -> LSM_LANG_PYTHON
+ *   Ruby        -> LSM_LANG_RUBY
+ *   PHP         -> LSM_LANG_PHP
+ *   JavaScript  -> LSM_LANG_JAVASCRIPT
+ *   TypeScript  -> LSM_LANG_TYPESCRIPT
+ *   TSX         -> LSM_LANG_TSX
+ *   Lua         -> LSM_LANG_LUA
+ *   Perl        -> LSM_LANG_PERL
+ *   R           -> LSM_LANG_R
+ *   Julia       -> LSM_LANG_JULIA
+ *   Groovy      -> LSM_LANG_GROOVY
+ *   Dart        -> LSM_LANG_DART
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error;
  *                        a hard crash would not return at all).
@@ -40,7 +40,7 @@
  *   6. calls-extracted : inv_has_call(r, "<callee>") == 1 (the in-body call was
  *                        captured).
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call);
  *                          assert mod == 0 -- every in-body call must be sourced
  *                          at a Function/Method node, NEVER at a Module node.
@@ -104,7 +104,7 @@
  * in-body callee name that must appear in the extracted calls.
  */
 static int single_file_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file,
+                               LSMLanguage lang, const char *file,
                                const char *expect_label,
                                const char *expect_label2, const char *callee) {
     const char *RED = tf_red();
@@ -118,7 +118,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -168,7 +168,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -190,7 +190,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -245,7 +245,7 @@ TEST(repro_grammar_scripting_python) {
         "class Calc:\n"
         "    def compute(self, x):\n"
         "        return add(x, 1)\n";
-    if (single_file_battery("Python", src, CBM_LANG_PYTHON, "calc.py",
+    if (single_file_battery("Python", src, LSM_LANG_PYTHON, "calc.py",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Python", "calc.py", src);
@@ -269,7 +269,7 @@ TEST(repro_grammar_scripting_ruby) {
         "    add(x, 1)\n"
         "  end\n"
         "end\n";
-    if (single_file_battery("Ruby", src, CBM_LANG_RUBY, "calc.rb",
+    if (single_file_battery("Ruby", src, LSM_LANG_RUBY, "calc.rb",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Ruby", "calc.rb", src);
@@ -293,7 +293,7 @@ TEST(repro_grammar_scripting_php) {
         "        return $this->add($x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("PHP", src, CBM_LANG_PHP, "Calculator.php",
+    if (single_file_battery("PHP", src, LSM_LANG_PHP, "Calculator.php",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("PHP", "Calculator.php", src);
@@ -318,7 +318,7 @@ TEST(repro_grammar_scripting_javascript) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("JavaScript", src, CBM_LANG_JAVASCRIPT, "calc.js",
+    if (single_file_battery("JavaScript", src, LSM_LANG_JAVASCRIPT, "calc.js",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("JavaScript", "calc.js", src);
@@ -343,7 +343,7 @@ TEST(repro_grammar_scripting_typescript) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("TypeScript", src, CBM_LANG_TYPESCRIPT, "calc.ts",
+    if (single_file_battery("TypeScript", src, LSM_LANG_TYPESCRIPT, "calc.ts",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("TypeScript", "calc.ts", src);
@@ -352,7 +352,7 @@ TEST(repro_grammar_scripting_typescript) {
 /* ── TSX ──────────────────────────────────────────────────────────────────────
  * Idiomatic: import, a typed free function, a component class with a method
  * returning JSX, in-body call. Expected: dims 1-6 + 8 GREEN, dim 7 GREEN
- * (shares the TS/JS func_kinds). Uses CBM_LANG_TSX with a .tsx file.
+ * (shares the TS/JS func_kinds). Uses LSM_LANG_TSX with a .tsx file.
  */
 TEST(repro_grammar_scripting_tsx) {
     static const char src[] =
@@ -367,7 +367,7 @@ TEST(repro_grammar_scripting_tsx) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("TSX", src, CBM_LANG_TSX, "Widget.tsx",
+    if (single_file_battery("TSX", src, LSM_LANG_TSX, "Widget.tsx",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("TSX", "Widget.tsx", src);
@@ -390,7 +390,7 @@ TEST(repro_grammar_scripting_lua) {
         "function compute(x)\n"
         "    return add(x, 1)\n"
         "end\n";
-    if (single_file_battery("Lua", src, CBM_LANG_LUA, "calc.lua",
+    if (single_file_battery("Lua", src, LSM_LANG_LUA, "calc.lua",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Lua", "calc.lua", src);
@@ -416,7 +416,7 @@ TEST(repro_grammar_scripting_perl) {
         "    my ($x) = @_;\n"
         "    return add($x, 1);\n"
         "}\n";
-    if (single_file_battery("Perl", src, CBM_LANG_PERL, "calc.pl",
+    if (single_file_battery("Perl", src, LSM_LANG_PERL, "calc.pl",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Perl", "calc.pl", src);
@@ -440,7 +440,7 @@ TEST(repro_grammar_scripting_r) {
         "compute <- function(x) {\n"
         "    add(x, 1)\n"
         "}\n";
-    if (single_file_battery("R", src, CBM_LANG_R, "calc.R",
+    if (single_file_battery("R", src, LSM_LANG_R, "calc.R",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("R", "calc.R", src);
@@ -465,7 +465,7 @@ TEST(repro_grammar_scripting_julia) {
         "function compute(x)\n"
         "    return add(x, 1)\n"
         "end\n";
-    if (single_file_battery("Julia", src, CBM_LANG_JULIA, "calc.jl",
+    if (single_file_battery("Julia", src, LSM_LANG_JULIA, "calc.jl",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Julia", "calc.jl", src);
@@ -493,7 +493,7 @@ TEST(repro_grammar_scripting_groovy) {
         "        return add(x, 1)\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Groovy", src, CBM_LANG_GROOVY, "Calculator.groovy",
+    if (single_file_battery("Groovy", src, LSM_LANG_GROOVY, "Calculator.groovy",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Groovy", "Calculator.groovy", src);
@@ -504,7 +504,7 @@ TEST(repro_grammar_scripting_groovy) {
  * Expected: dims 1-5 + 8 GREEN. Dim 6 (calls-extracted) and dim 7 are RED:
  * "selector call node carries no callee field and the first child is not an
  * identifier; no dart branch in extract_calls.c" (breadth file), so no in-body
- * CALLS edge is produced. RED IS the deliverable. Uses CBM_LANG_DART.
+ * CALLS edge is produced. RED IS the deliverable. Uses LSM_LANG_DART.
  */
 TEST(repro_grammar_scripting_dart) {
     static const char src[] =
@@ -519,7 +519,7 @@ TEST(repro_grammar_scripting_dart) {
         "    return add(x, 1);\n"
         "  }\n"
         "}\n";
-    if (single_file_battery("Dart", src, CBM_LANG_DART, "calc.dart",
+    if (single_file_battery("Dart", src, LSM_LANG_DART, "calc.dart",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Dart", "calc.dart", src);

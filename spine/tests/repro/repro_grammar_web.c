@@ -9,24 +9,24 @@
  * The battery dimensions applied per language are documented in the per-TEST
  * comment.
  *
- * Languages covered (12) and the CBM_LANG_* enum each uses (all verified in
- * internal/cbm/cbm.h; none missing, none skipped):
- *   HTML        -> CBM_LANG_HTML
- *   CSS         -> CBM_LANG_CSS
- *   SCSS        -> CBM_LANG_SCSS
- *   Vue         -> CBM_LANG_VUE
- *   Svelte      -> CBM_LANG_SVELTE
- *   Astro       -> CBM_LANG_ASTRO
- *   GraphQL     -> CBM_LANG_GRAPHQL
- *   Protobuf    -> CBM_LANG_PROTOBUF
- *   Thrift      -> CBM_LANG_THRIFT
- *   Prisma      -> CBM_LANG_PRISMA
- *   GoTemplate  -> CBM_LANG_GOTEMPLATE
- *   JSDoc       -> CBM_LANG_JSDOC
+ * Languages covered (12) and the LSM_LANG_* enum each uses (all verified in
+ * internal/lsm/lsm.h; none missing, none skipped):
+ *   HTML        -> LSM_LANG_HTML
+ *   CSS         -> LSM_LANG_CSS
+ *   SCSS        -> LSM_LANG_SCSS
+ *   Vue         -> LSM_LANG_VUE
+ *   Svelte      -> LSM_LANG_SVELTE
+ *   Astro       -> LSM_LANG_ASTRO
+ *   GraphQL     -> LSM_LANG_GRAPHQL
+ *   Protobuf    -> LSM_LANG_PROTOBUF
+ *   Thrift      -> LSM_LANG_THRIFT
+ *   Prisma      -> LSM_LANG_PRISMA
+ *   GoTemplate  -> LSM_LANG_GOTEMPLATE
+ *   JSDoc       -> LSM_LANG_JSDOC
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error).
  *   2. labels-valid    : inv_count_bad_labels(r) == 0
@@ -46,12 +46,12 @@
  *                        include_statement), GoTemplate (function_call /
  *                        template_action). Skipped for all others.
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call).
  *                          Only asserted when dim 6 is asserted (SCSS, GoTemplate).
  *                          For SCSS: expected RED (mixin_statement is parsed as
  *                          func_types so a "Function" def is extracted, but
- *                          cbm_find_enclosing_func relies on the same node being
+ *                          lsm_find_enclosing_func relies on the same node being
  *                          recognised in func_kinds_for_lang; if that mapping is
  *                          absent the call will be sourced at Module).
  *                          For GoTemplate: expected RED (no func_types so no
@@ -113,7 +113,7 @@
  * (HTML, VUE, SVELTE, ASTRO, JSDoc).
  */
 static int structural_base_battery(const char *lang_tag, const char *src,
-                                   CBMLanguage lang, const char *file) {
+                                   LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
@@ -124,7 +124,7 @@ static int structural_base_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -157,7 +157,7 @@ static int structural_base_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -168,7 +168,7 @@ static int structural_base_battery(const char *lang_tag, const char *src,
  * func_types. Returns 0 on PASS, 1 on FAIL.
  */
 static int schema_battery(const char *lang_tag, const char *src,
-                          CBMLanguage lang, const char *file,
+                          LSMLanguage lang, const char *file,
                           const char *expect_label, const char *expect_label2) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
@@ -180,7 +180,7 @@ static int schema_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -225,7 +225,7 @@ static int schema_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -236,7 +236,7 @@ static int schema_battery(const char *lang_tag, const char *src,
  * (e.g. pure-call languages like CSS). Returns 0 on PASS, 1 on FAIL.
  */
 static int callable_battery(const char *lang_tag, const char *src,
-                            CBMLanguage lang, const char *file,
+                            LSMLanguage lang, const char *file,
                             const char *expect_label, const char *callee) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
@@ -248,7 +248,7 @@ static int callable_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -295,7 +295,7 @@ static int callable_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -318,7 +318,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -379,7 +379,7 @@ TEST(repro_grammar_web_html) {
         "  </div>\n"
         "</body>\n"
         "</html>\n";
-    return structural_base_battery("HTML", src, CBM_LANG_HTML, "index.html");
+    return structural_base_battery("HTML", src, LSM_LANG_HTML, "index.html");
 }
 
 /* ── CSS ─────────────────────────────────────────────────────────────────────
@@ -408,7 +408,7 @@ TEST(repro_grammar_web_css) {
         ".container {\n"
         "  padding: 1rem;\n"
         "}\n";
-    return callable_battery("CSS", src, CBM_LANG_CSS, "style.css",
+    return callable_battery("CSS", src, LSM_LANG_CSS, "style.css",
                             NULL, "url");
 }
 
@@ -441,7 +441,7 @@ TEST(repro_grammar_web_scss) {
         "  @include flex-center;\n"
         "  background: #fff;\n"
         "}\n";
-    if (callable_battery("SCSS", src, CBM_LANG_SCSS, "styles.scss",
+    if (callable_battery("SCSS", src, LSM_LANG_SCSS, "styles.scss",
                          "Function", "flex-center") != 0)
         return 1;
     return pipeline_battery("SCSS", "styles.scss", src);
@@ -475,7 +475,7 @@ TEST(repro_grammar_web_vue) {
         "<style scoped>\n"
         ".hello { font-size: 1rem; }\n"
         "</style>\n";
-    return structural_base_battery("Vue", src, CBM_LANG_VUE, "Hello.vue");
+    return structural_base_battery("Vue", src, LSM_LANG_VUE, "Hello.vue");
 }
 
 /* ── Svelte ──────────────────────────────────────────────────────────────────
@@ -496,7 +496,7 @@ TEST(repro_grammar_web_svelte) {
         "</script>\n"
         "\n"
         "<button on:click={increment}>Clicked {count} times</button>\n";
-    return structural_base_battery("Svelte", src, CBM_LANG_SVELTE,
+    return structural_base_battery("Svelte", src, LSM_LANG_SVELTE,
                                    "Counter.svelte");
 }
 
@@ -524,7 +524,7 @@ TEST(repro_grammar_web_astro) {
         "    <main><p>Content</p></main>\n"
         "  </body>\n"
         "</html>\n";
-    return structural_base_battery("Astro", src, CBM_LANG_ASTRO,
+    return structural_base_battery("Astro", src, LSM_LANG_ASTRO,
                                    "index.astro");
 }
 
@@ -555,7 +555,7 @@ TEST(repro_grammar_web_graphql) {
         "type Query {\n"
         "  user(id: ID!): User\n"
         "}\n";
-    return schema_battery("GraphQL", src, CBM_LANG_GRAPHQL, "schema.graphql",
+    return schema_battery("GraphQL", src, LSM_LANG_GRAPHQL, "schema.graphql",
                           "Class", "Field");
 }
 
@@ -586,7 +586,7 @@ TEST(repro_grammar_web_protobuf) {
         "service UserService {\n"
         "  rpc GetUser (User) returns (User);\n"
         "}\n";
-    return schema_battery("Protobuf", src, CBM_LANG_PROTOBUF, "user.proto",
+    return schema_battery("Protobuf", src, LSM_LANG_PROTOBUF, "user.proto",
                           "Function", "Class");
 }
 
@@ -617,7 +617,7 @@ TEST(repro_grammar_web_thrift) {
         "  User GetUser(1: i64 id),\n"
         "  void CreateUser(1: User user),\n"
         "}\n";
-    return schema_battery("Thrift", src, CBM_LANG_THRIFT, "user.thrift",
+    return schema_battery("Thrift", src, LSM_LANG_THRIFT, "user.thrift",
                           "Function", "Class");
 }
 
@@ -653,7 +653,7 @@ TEST(repro_grammar_web_prisma) {
         "  email     String   @unique\n"
         "  createdAt DateTime @default(now())\n"
         "}\n";
-    return schema_battery("Prisma", src, CBM_LANG_PRISMA, "schema.prisma",
+    return schema_battery("Prisma", src, LSM_LANG_PRISMA, "schema.prisma",
                           "Class", "Field");
 }
 
@@ -687,7 +687,7 @@ TEST(repro_grammar_web_gotemplate) {
         "{{ define \"page\" }}\n"
         "  {{ template \"greeting\" . }}\n"
         "{{ end }}\n";
-    if (callable_battery("GoTemplate", src, CBM_LANG_GOTEMPLATE,
+    if (callable_battery("GoTemplate", src, LSM_LANG_GOTEMPLATE,
                          "index.tmpl", NULL, "printf") != 0)
         return 1;
     return pipeline_battery("GoTemplate", "index.tmpl", src);
@@ -713,7 +713,7 @@ TEST(repro_grammar_web_jsdoc) {
         " * @example\n"
         " * const result = add(1, 2); // 3\n"
         " */\n";
-    return structural_base_battery("JSDoc", src, CBM_LANG_JSDOC, "api.jsdoc");
+    return structural_base_battery("JSDoc", src, LSM_LANG_JSDOC, "api.jsdoc");
 }
 
 /* ── Suite ──────────────────────────────────────────────────────────────────── */

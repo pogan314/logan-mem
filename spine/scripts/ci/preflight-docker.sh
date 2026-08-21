@@ -27,7 +27,7 @@ Usage: scripts/ci/preflight-docker.sh [--deep] [--min-free-gb N] [--skip-gate]
 
 Bring the Colima/docker venue to the shape a GitHub runner would hand us,
 before any container-backed test/smoke/soak run (test-infrastructure/run.sh
-calls this automatically; CBM_SKIP_PREFLIGHT=1 opts out for a quick re-run).
+calls this automatically; LSM_SKIP_PREFLIGHT=1 opts out for a quick re-run).
 
 Sweeps stopped containers, dangling images and unused anonymous volumes, then
 asserts free space on the filesystem backing the docker data root. The build

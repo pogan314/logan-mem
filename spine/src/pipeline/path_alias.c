@@ -39,10 +39,10 @@
  * (Next.js Skyline, large nx workspaces) while bounding worst-case
  * memory and walk time. Cap hits are logged. */
 enum {
-    CBM_PATH_ALIAS_MAX_ENTRIES = 256, /* per single config file       */
-    CBM_PATH_ALIAS_MAX_FILES = 256,   /* config files per repo walk   */
-    CBM_PATH_ALIAS_MAX_FILE_BYTES = 64 * 1024,
-    CBM_PATH_ALIAS_MAX_DEPTH = 32, /* directory recursion depth    */
+    LSM_PATH_ALIAS_MAX_ENTRIES = 256, /* per single config file       */
+    LSM_PATH_ALIAS_MAX_FILES = 256,   /* config files per repo walk   */
+    LSM_PATH_ALIAS_MAX_FILE_BYTES = 64 * 1024,
+    LSM_PATH_ALIAS_MAX_DEPTH = 32, /* directory recursion depth    */
 };
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -71,7 +71,7 @@ static char *strip_resolved_ext(char *path) {
  * wildcard target like "../../packages/shared/src/" + wildcard) resolve
  * to a real repo-relative path. Naive concatenation left literal ".."
  * components in the target, which never match a module's FQN since
- * cbm_pipeline_fqn_module tokenizes on '/' without collapsing them
+ * lsm_pipeline_fqn_module tokenizes on '/' without collapsing them
  * (#730). A trailing '/' on target (the usual case right before a
  * wildcard) is preserved so the caller's later wildcard-substring
  * concat still lines up. Returns heap-allocated
@@ -137,8 +137,8 @@ static char *resolve_target_relative(const char *dir_prefix, const char *target)
 
 /* qsort comparator: alias entries by alias_prefix length, descending. */
 static int cmp_alias_entry_by_specificity(const void *a, const void *b) {
-    const cbm_path_alias_t *ea = a;
-    const cbm_path_alias_t *eb = b;
+    const lsm_path_alias_t *ea = a;
+    const lsm_path_alias_t *eb = b;
     size_t la = strlen(ea->alias_prefix);
     size_t lb = strlen(eb->alias_prefix);
     if (lb > la) {
@@ -152,8 +152,8 @@ static int cmp_alias_entry_by_specificity(const void *a, const void *b) {
 
 /* qsort comparator: scopes by dir_prefix length, descending. */
 static int cmp_scope_by_specificity(const void *a, const void *b) {
-    const cbm_path_alias_scope_t *sa = a;
-    const cbm_path_alias_scope_t *sb = b;
+    const lsm_path_alias_scope_t *sa = a;
+    const lsm_path_alias_scope_t *sb = b;
     size_t la = strlen(sa->dir_prefix);
     size_t lb = strlen(sb->dir_prefix);
     if (lb > la) {
@@ -171,15 +171,15 @@ static int cmp_scope_by_specificity(const void *a, const void *b) {
  * dir_prefix is the directory of the config file relative to the repo root
  * (e.g. "apps/manager", or "" for repo root). Returns NULL if the file is
  * missing, malformed, or has neither a usable paths block nor a baseUrl. */
-static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char *dir_prefix) {
-    FILE *f = cbm_fopen(abs_path, "r");
+static lsm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char *dir_prefix) {
+    FILE *f = lsm_fopen(abs_path, "r");
     if (!f) {
         return NULL;
     }
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (len <= 0 || len > CBM_PATH_ALIAS_MAX_FILE_BYTES) {
+    if (len <= 0 || len > LSM_PATH_ALIAS_MAX_FILE_BYTES) {
         fclose(f);
         return NULL;
     }
@@ -212,7 +212,7 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
         return NULL;
     }
 
-    cbm_path_alias_map_t *map = calloc(1, sizeof(*map));
+    lsm_path_alias_map_t *map = calloc(1, sizeof(*map));
     if (!map) {
         yyjson_doc_free(doc);
         return NULL;
@@ -227,10 +227,10 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
 
     if (paths_obj && yyjson_is_obj(paths_obj)) {
         size_t obj_size = yyjson_obj_size(paths_obj);
-        bool capped = obj_size > CBM_PATH_ALIAS_MAX_ENTRIES;
-        int capacity = (int)(capped ? (size_t)CBM_PATH_ALIAS_MAX_ENTRIES : obj_size);
+        bool capped = obj_size > LSM_PATH_ALIAS_MAX_ENTRIES;
+        int capacity = (int)(capped ? (size_t)LSM_PATH_ALIAS_MAX_ENTRIES : obj_size);
         if (capacity > 0) {
-            map->entries = calloc((size_t)capacity, sizeof(cbm_path_alias_t));
+            map->entries = calloc((size_t)capacity, sizeof(lsm_path_alias_t));
             if (!map->entries) {
                 free(map->base_url);
                 free(map);
@@ -249,12 +249,12 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
                 if (!target_pattern) {
                     continue;
                 }
-                cbm_path_alias_t *entry = &map->entries[map->count];
+                lsm_path_alias_t *entry = &map->entries[map->count];
                 const char *star = strchr(alias_pattern, '*');
                 if (star) {
                     entry->has_wildcard = true;
                     entry->alias_prefix =
-                        cbm_strndup(alias_pattern, (size_t)(star - alias_pattern));
+                        lsm_strndup(alias_pattern, (size_t)(star - alias_pattern));
                     entry->alias_suffix = strdup(star + 1);
                 } else {
                     entry->has_wildcard = false;
@@ -263,7 +263,7 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
                 }
                 const char *tstar = strchr(target_pattern, '*');
                 if (tstar) {
-                    char *pre = cbm_strndup(target_pattern, (size_t)(tstar - target_pattern));
+                    char *pre = lsm_strndup(target_pattern, (size_t)(tstar - target_pattern));
                     entry->target_prefix = resolve_target_relative(dir_prefix, pre);
                     free(pre);
                     entry->target_suffix = strdup(tstar + 1);
@@ -274,11 +274,11 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
                 map->count++;
             }
             if (capped) {
-                cbm_log_warn("path_alias.entries.cap_hit", "config", abs_path, "kept",
+                lsm_log_warn("path_alias.entries.cap_hit", "config", abs_path, "kept",
                              /* itoa via thread-local buffer would be tidier; keep simple */
                              "256_of_more");
             }
-            qsort(map->entries, (size_t)map->count, sizeof(cbm_path_alias_t),
+            qsort(map->entries, (size_t)map->count, sizeof(lsm_path_alias_t),
                   cmp_alias_entry_by_specificity);
         }
     }
@@ -289,7 +289,7 @@ static cbm_path_alias_map_t *load_tsconfig_file(const char *abs_path, const char
 
 /* ── Public API ────────────────────────────────────────────────── */
 
-static void free_alias_map(cbm_path_alias_map_t *map) {
+static void free_alias_map(lsm_path_alias_map_t *map) {
     if (!map) {
         return;
     }
@@ -304,7 +304,7 @@ static void free_alias_map(cbm_path_alias_map_t *map) {
     free(map);
 }
 
-void cbm_path_alias_collection_free(cbm_path_alias_collection_t *coll) {
+void lsm_path_alias_collection_free(lsm_path_alias_collection_t *coll) {
     if (!coll) {
         return;
     }
@@ -317,14 +317,14 @@ void cbm_path_alias_collection_free(cbm_path_alias_collection_t *coll) {
     free(coll);
 }
 
-char *cbm_path_alias_resolve(const cbm_path_alias_map_t *map, const char *module_path) {
+char *lsm_path_alias_resolve(const lsm_path_alias_map_t *map, const char *module_path) {
     if (!map || !module_path) {
         return NULL;
     }
     size_t mod_len = strlen(module_path);
 
     for (int i = 0; i < map->count; i++) {
-        const cbm_path_alias_t *e = &map->entries[i];
+        const lsm_path_alias_t *e = &map->entries[i];
 
         if (e->has_wildcard) {
             size_t prefix_len = strlen(e->alias_prefix);
@@ -379,8 +379,8 @@ char *cbm_path_alias_resolve(const cbm_path_alias_map_t *map, const char *module
 /* ── Repo walk ─────────────────────────────────────────────────── */
 
 typedef struct {
-    char abs[CBM_SZ_512];
-    char rel[CBM_SZ_256];
+    char abs[LSM_SZ_512];
+    char rel[LSM_SZ_256];
 } alias_config_hit_t;
 
 static const char *const TS_CONFIG_NAMES[] = {"tsconfig.json", "jsconfig.json"};
@@ -389,19 +389,19 @@ enum { TS_CONFIG_NAMES_COUNT = 2 };
 static void find_alias_files(const char *abs_dir, const char *rel_dir, alias_config_hit_t *out,
                              int *count, int max_count, int depth, char **excluded_dirs,
                              int excluded_count) {
-    if (*count >= max_count || depth > CBM_PATH_ALIAS_MAX_DEPTH) {
+    if (*count >= max_count || depth > LSM_PATH_ALIAS_MAX_DEPTH) {
         return;
     }
-    cbm_dir_t *d = cbm_opendir(abs_dir);
+    lsm_dir_t *d = lsm_opendir(abs_dir);
     if (!d) {
         return;
     }
 
     /* One config file per directory: prefer tsconfig.json over jsconfig.json. */
     for (int i = 0; i < TS_CONFIG_NAMES_COUNT && *count < max_count; i++) {
-        char check[CBM_SZ_512];
+        char check[LSM_SZ_512];
         snprintf(check, sizeof(check), "%s/%s", abs_dir, TS_CONFIG_NAMES[i]);
-        FILE *f = cbm_fopen(check, "r");
+        FILE *f = lsm_fopen(check, "r");
         if (f) {
             fclose(f);
             snprintf(out[*count].abs, sizeof(out[*count].abs), "%s", check);
@@ -411,8 +411,8 @@ static void find_alias_files(const char *abs_dir, const char *rel_dir, alias_con
         }
     }
 
-    cbm_dirent_t *ent;
-    while ((ent = cbm_readdir(d)) != NULL && *count < max_count) {
+    lsm_dirent_t *ent;
+    while ((ent = lsm_readdir(d)) != NULL && *count < max_count) {
         if (!ent->is_dir) {
             continue;
         }
@@ -422,50 +422,50 @@ static void find_alias_files(const char *abs_dir, const char *rel_dir, alias_con
             strcmp(name, "coverage") == 0 || strcmp(name, "target") == 0 /* Rust */) {
             continue;
         }
-        char child_abs[CBM_SZ_512];
-        char child_rel[CBM_SZ_256];
+        char child_abs[LSM_SZ_512];
+        char child_rel[LSM_SZ_256];
         snprintf(child_abs, sizeof(child_abs), "%s/%s", abs_dir, name);
         if (rel_dir[0] == '\0') {
             snprintf(child_rel, sizeof(child_rel), "%s", name);
         } else {
             snprintf(child_rel, sizeof(child_rel), "%s/%s", rel_dir, name);
         }
-        if (cbm_pipeline_relpath_is_excluded(child_rel, excluded_dirs, excluded_count)) {
+        if (lsm_pipeline_relpath_is_excluded(child_rel, excluded_dirs, excluded_count)) {
             continue;
         }
         find_alias_files(child_abs, child_rel, out, count, max_count, depth + 1, excluded_dirs,
                          excluded_count);
     }
-    cbm_closedir(d);
+    lsm_closedir(d);
 }
 
-cbm_path_alias_collection_t *cbm_load_path_aliases_excluded(const char *repo_path,
+lsm_path_alias_collection_t *lsm_load_path_aliases_excluded(const char *repo_path,
                                                             char **excluded_dirs,
                                                             int excluded_count) {
     if (!repo_path) {
         return NULL;
     }
-    alias_config_hit_t *hits = calloc(CBM_PATH_ALIAS_MAX_FILES, sizeof(*hits));
+    alias_config_hit_t *hits = calloc(LSM_PATH_ALIAS_MAX_FILES, sizeof(*hits));
     if (!hits) {
         return NULL;
     }
     int count = 0;
-    find_alias_files(repo_path, "", hits, &count, CBM_PATH_ALIAS_MAX_FILES, 0, excluded_dirs,
+    find_alias_files(repo_path, "", hits, &count, LSM_PATH_ALIAS_MAX_FILES, 0, excluded_dirs,
                      excluded_count);
-    if (count >= CBM_PATH_ALIAS_MAX_FILES) {
-        cbm_log_warn("path_alias.files.cap_hit", "repo", repo_path, "kept", "256_of_more");
+    if (count >= LSM_PATH_ALIAS_MAX_FILES) {
+        lsm_log_warn("path_alias.files.cap_hit", "repo", repo_path, "kept", "256_of_more");
     }
     if (count == 0) {
         free(hits);
         return NULL;
     }
 
-    cbm_path_alias_collection_t *coll = calloc(1, sizeof(*coll));
+    lsm_path_alias_collection_t *coll = calloc(1, sizeof(*coll));
     if (!coll) {
         free(hits);
         return NULL;
     }
-    coll->scopes = calloc((size_t)count, sizeof(cbm_path_alias_scope_t));
+    coll->scopes = calloc((size_t)count, sizeof(lsm_path_alias_scope_t));
     if (!coll->scopes) {
         free(coll);
         free(hits);
@@ -473,13 +473,13 @@ cbm_path_alias_collection_t *cbm_load_path_aliases_excluded(const char *repo_pat
     }
 
     for (int i = 0; i < count; i++) {
-        cbm_path_alias_map_t *map = load_tsconfig_file(hits[i].abs, hits[i].rel);
+        lsm_path_alias_map_t *map = load_tsconfig_file(hits[i].abs, hits[i].rel);
         if (!map) {
             continue;
         }
         const char *base = strrchr(hits[i].abs, '/');
         base = base ? base + 1 : hits[i].abs;
-        char selected_rel[CBM_SZ_512];
+        char selected_rel[LSM_SZ_512];
         if (hits[i].rel[0]) {
             snprintf(selected_rel, sizeof(selected_rel), "%s/%s", hits[i].rel, base);
         } else {
@@ -506,16 +506,16 @@ cbm_path_alias_collection_t *cbm_load_path_aliases_excluded(const char *repo_pat
         return NULL;
     }
 
-    qsort(coll->scopes, (size_t)coll->count, sizeof(cbm_path_alias_scope_t),
+    qsort(coll->scopes, (size_t)coll->count, sizeof(lsm_path_alias_scope_t),
           cmp_scope_by_specificity);
     return coll;
 }
 
-cbm_path_alias_collection_t *cbm_load_path_aliases(const char *repo_path) {
-    return cbm_load_path_aliases_excluded(repo_path, NULL, 0);
+lsm_path_alias_collection_t *lsm_load_path_aliases(const char *repo_path) {
+    return lsm_load_path_aliases_excluded(repo_path, NULL, 0);
 }
 
-const cbm_path_alias_map_t *cbm_path_alias_find_for_file(const cbm_path_alias_collection_t *coll,
+const lsm_path_alias_map_t *lsm_path_alias_find_for_file(const lsm_path_alias_collection_t *coll,
                                                          const char *rel_path) {
     if (!coll || !rel_path) {
         return NULL;

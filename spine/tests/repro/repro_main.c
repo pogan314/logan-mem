@@ -16,7 +16,7 @@
  *
  * Adding a cluster:
  *   1. create tests/repro/repro_<cluster>.c exporting `void suite_repro_<cluster>(void)`
- *   2. add it to TEST_REPRO_SRCS in Makefile.cbm
+ *   2. add it to TEST_REPRO_SRCS in Makefile.lsm
  *   3. forward-declare + RUN_SUITE it below
  */
 
@@ -27,7 +27,7 @@ int tf_skip_count = 0;
 
 #include "test_framework.h"
 #include "repro_runner.h"
-#include "foundation/compat.h" /* cbm_setenv — #845 supervisor kill switch */
+#include "foundation/compat.h" /* lsm_setenv — #845 supervisor kill switch */
 
 /* Per-suite summary + filter. RUN_SUITE prints a one-line
  * "[SUITE] <name> P passed, F failed" report (greppable for which suites still
@@ -36,7 +36,7 @@ int tf_skip_count = 0;
 #undef RUN_SUITE
 #define RUN_SUITE(name)                                                            \
     do {                                                                           \
-        if (!cbm_suite_enabled(#name))                                             \
+        if (!lsm_suite_enabled(#name))                                             \
             break;                                                                 \
         int _p0 = tf_pass_count, _f0 = tf_fail_count;                              \
         printf("\n%s=== %s ===%s\n", tf_dim(), #name, tf_reset());                 \
@@ -124,12 +124,12 @@ extern void suite_repro_lsp_java_cs(void);
 extern void suite_repro_lsp_kt_php_rust(void);
 
 int main(void) {
-    /* #845 belt-and-suspenders: this binary EMBEDS cbm_mcp_handle_tool and its
+    /* #845 belt-and-suspenders: this binary EMBEDS lsm_mcp_handle_tool and its
      * main() IGNORES argv — spawned as `<self> cli --index-worker …` it would
      * re-run EVERY repro suite recursively (the observed 11-min hangs). The
      * supervisor gate already ignores unmarked hosts; pin the kill switch too.
      * A test that exercises the supervisor must explicitly re-enable it. */
-    cbm_setenv("CBM_INDEX_SUPERVISOR", "0", 1);
+    lsm_setenv("LSM_INDEX_SUPERVISOR", "0", 1);
 
     /* Unbuffered: a reproduction may crash/_exit (or a sanitizer may _exit on a
      * leak) before stdio flushes — keep every printed line so the summary and the

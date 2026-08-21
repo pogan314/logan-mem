@@ -279,13 +279,13 @@ for caller_name, caller_jobs in (("release", blocks), ("dry-run", dry_jobs)):
 soak_jobs = workflow_jobs(soak_text)
 for job in ("soak-quick", "soak-quick-windows", "soak-quick-windows-arm64"):
     body = soak_jobs.get(job, "")
-    for token in ("inputs.use_release_artifacts", "actions/download-artifact@", "cbm-selected-artifact"):
+    for token in ("inputs.use_release_artifacts", "actions/download-artifact@", "lsm-selected-artifact"):
         if token not in body:
             failures.append(f"_soak.yml {job}: selected-artifact mode is missing {token}")
 portable_soak = soak_jobs.get("soak-quick-linux-portable", "")
 for token in ("if: ${{ inputs.use_release_artifacts }}",
               "binaries-linux-${{ matrix.arch }}-portable",
-              "cbm-selected-artifact"):
+              "lsm-selected-artifact"):
     if token not in portable_soak:
         failures.append(f"_soak.yml portable soak: missing selected tuple token {token}")
 

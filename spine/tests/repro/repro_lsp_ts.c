@@ -1,6 +1,6 @@
 /*
  * repro_lsp_ts.c — EXHAUSTIVE per-LSP-pass invariant suite for the TypeScript /
- * JavaScript / JSX hybrid LSP (internal/cbm/lsp/ts_lsp.c).
+ * JavaScript / JSX hybrid LSP (internal/lsm/lsp/ts_lsp.c).
  *
  * WHAT THIS ASSERTS — the LSP RESOLUTION CONTRACT, one invariant per strategy.
  *   The TS cross resolver resolves each call via a specific STRATEGY and tags the
@@ -29,7 +29,7 @@
  *                the exact gap for the eventual fixer.
  *
  * TIE TO repro_invariant_lsp_rescue.c — that file pins the MECHANISM by which
- *   these can silently fail: cbm_pipeline_find_lsp_resolution joins each
+ *   these can silently fail: lsm_pipeline_find_lsp_resolution joins each
  *   LSP-resolved call to the tree-sitter call by EXACT caller-QN string equality.
  *   When tree-sitter's enclosing-func walk falls back to the MODULE QN but the
  *   LSP built the real method QN, the strcmp never matches, the LSP rescue is
@@ -40,7 +40,7 @@
  *   in-function fixture sidesteps it; a cross-file fixture exercises it).
  *
  * STRATEGY INVENTORY — every literal "lsp_..." emitted by ts_lsp.c, grepped from
- *   the source (grep '"lsp_' internal/cbm/lsp/ts_lsp.c), with its keying site:
+ *   the source (grep '"lsp_' internal/lsm/lsp/ts_lsp.c), with its keying site:
  *     lsp_ts_local      (ts_lsp.c:2322)  bare identifier call f() resolving to a
  *                                        module-local function (call_expression
  *                                        function is an `identifier`, found in the
@@ -84,9 +84,9 @@
  *                                        "lsp_unresolved" surfaces in the graph.
  *
  * LANGUAGE SELECTION — the filename extension picks the language exactly as the
- *   production indexer does: ".ts" → CBM_LANG_TYPESCRIPT, ".tsx" → CBM_LANG_TSX.
+ *   production indexer does: ".ts" → LSM_LANG_TYPESCRIPT, ".tsx" → LSM_LANG_TSX.
  *   jsx_mode (required by resolve_jsx_element, ts_lsp.c:2620) is enabled ONLY for
- *   CBM_LANG_TSX (cbm.c:619, pass_lsp_cross.c:267), so the two JSX fixtures use
+ *   LSM_LANG_TSX (lsm.c:619, pass_lsp_cross.c:267), so the two JSX fixtures use
  *   ".tsx" files; the non-JSX fixtures use ".ts".
  *
  * NOTE: line comments only inside this header (no nested block comments, per
@@ -118,7 +118,7 @@
 static int assert_lsp_strategy_files(const RFile *files, int nfiles,
                                      const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -182,7 +182,7 @@ static int assert_lsp_strategy(const char *filename, const char *src,
 static int assert_no_resolvable_edge(const char *filename, const char *src,
                                      const char *callee_substr) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for no-edge callee %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, callee_substr);
@@ -226,7 +226,7 @@ static int assert_no_resolvable_edge(const char *filename, const char *src,
 static int assert_strategy_absent(const char *filename, const char *src,
                                   const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for absent-strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -254,7 +254,7 @@ static int assert_strategy_absent(const char *filename, const char *src,
 
 /* lsp_ts_local — bare identifier call f() that resolves to a module-local
  * function (ts_lsp.c:2310-2322: call_expression function is an `identifier`,
- * cbm_registry_lookup_symbol_by_args hits on the module QN). */
+ * lsm_registry_lookup_symbol_by_args hits on the module QN). */
 static const char kTsLocal[] =
     "function helper(x: number): number { return x + 1; }\n"
     "function caller(v: number): number { return helper(v); }\n";
@@ -300,7 +300,7 @@ static const RFile kTsImport[] = {
 /* lsp_ts_jsx — <Comp/> JSX element whose tag is a module-local component
  * function (ts_lsp.c:2643-2647). TSX only (jsx_mode); the tag's first letter is
  * uppercase so it is NOT treated as an intrinsic HTML element; it resolves via
- * cbm_registry_lookup_symbol on the module QN. App() renders <Widget/> defined
+ * lsm_registry_lookup_symbol on the module QN. App() renders <Widget/> defined
  * in the same file. */
 static const char kTsxJsx[] =
     "function Widget(): any { return null; }\n"

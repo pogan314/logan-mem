@@ -1,14 +1,14 @@
 /*
  * repro_lexical_binding_precision.c — exact lexical-shadowing contracts.
  *
- * These tests inspect raw CBMUsage rows rather than graph edges.  A local
+ * These tests inspect raw LSMUsage rows rather than graph edges.  A local
  * binding must block semantic promotion only for the identifier occurrence
  * whose language scope actually contains that binding.  The exact byte span
  * keeps a declaration, label, or same-spelled occurrence from satisfying the
  * assertion accidentally.
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -44,19 +44,19 @@ static uint32_t lb_identifier_offset(const char *source, const char *marker,
     return (uint32_t)(site - source);
 }
 
-static LBBindingSite lb_binding_site(const CBMFileResult *result, const char *caller_suffix,
+static LBBindingSite lb_binding_site(const LSMFileResult *result, const char *caller_suffix,
                                      const char *identifier, uint32_t start) {
     LBBindingSite match = {0};
     uint32_t end = start + (uint32_t)strlen(identifier);
     for (int i = 0; result && i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
+        const LSMUsage *usage = &result->usages.items[i];
         if (!usage->ref_name || strcmp(usage->ref_name, identifier) != 0 ||
             (caller_suffix && !lb_qn_ends_with(usage->enclosing_func_qn, caller_suffix)) ||
             usage->site_start_byte != start || usage->site_end_byte != end) {
             continue;
         }
         match.count++;
-        match.value_count += usage->kind == CBM_USAGE_VALUE;
+        match.value_count += usage->kind == LSM_USAGE_VALUE;
         match.candidate_count += usage->may_be_call_reference;
         match.blocked_count += usage->semantic_reference_blocked;
         match.local_shadow_count += usage->semantic_reference_local_shadow;
@@ -64,8 +64,8 @@ static LBBindingSite lb_binding_site(const CBMFileResult *result, const char *ca
     return match;
 }
 
-static CBMFileResult *lb_extract(const char *source, CBMLanguage language, const char *filename) {
-    return cbm_extract_file(source, (int)strlen(source), language, "repro", filename, 0, NULL,
+static LSMFileResult *lb_extract(const char *source, LSMLanguage language, const char *filename) {
+    return lsm_extract_file(source, (int)strlen(source), language, "repro", filename, 0, NULL,
                             NULL);
 }
 
@@ -90,12 +90,12 @@ TEST(repro_python_keyword_label_does_not_bind_local) {
     ASSERT_NEQ(site, UINT32_MAX);
     ASSERT_NEQ(control_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "keyword_label.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "keyword_label.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
     LBBindingSite control = lb_binding_site(result, "parameter_control", "handler", control_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -124,12 +124,12 @@ TEST(repro_python_function_name_does_not_shadow_itself) {
     ASSERT_NEQ(site, UINT32_MAX);
     ASSERT_NEQ(control_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "self_reference.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "self_reference.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "pass_self", "pass_self", site);
     LBBindingSite control = lb_binding_site(result, "parameter_control", "pass_self", control_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -162,12 +162,12 @@ TEST(repro_python_nested_function_binds_in_enclosing_function) {
     ASSERT_NEQ(site, UINT32_MAX);
     ASSERT_NEQ(control_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "nested_definition.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "nested_definition.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "outer", "handler", site);
     LBBindingSite control = lb_binding_site(result, "parameter_control", "handler", control_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -200,12 +200,12 @@ TEST(repro_python_assignment_blocks_earlier_use_for_whole_function) {
     ASSERT_NEQ(before_site, UINT32_MAX);
     ASSERT_NEQ(after_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "whole_function_local.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "whole_function_local.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite before = lb_binding_site(result, "caller", "handler", before_site);
     LBBindingSite after = lb_binding_site(result, "caller", "handler", after_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(before.count, 1);
     ASSERT_EQ(before.value_count, 1);
@@ -237,12 +237,12 @@ TEST(repro_javascript_block_local_stops_at_block_exit) {
     ASSERT_NEQ(inside_site, UINT32_MAX);
     ASSERT_NEQ(outside_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_JAVASCRIPT, "block_scope.js");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_JAVASCRIPT, "block_scope.js");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite inside = lb_binding_site(result, "caller", "handler", inside_site);
     LBBindingSite outside = lb_binding_site(result, "caller", "handler", outside_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(inside.count, 1);
     ASSERT_EQ(inside.value_count, 1);
@@ -275,12 +275,12 @@ TEST(repro_csharp_overload_bodies_do_not_share_parameter_bindings) {
     ASSERT_NEQ(first_site, UINT32_MAX);
     ASSERT_NEQ(second_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_CSHARP, "Overloads.cs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_CSHARP, "Overloads.cs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite first = lb_binding_site(result, "overloaded", "handler", first_site);
     LBBindingSite second = lb_binding_site(result, "overloaded", "handler", second_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(first.count, 1);
     ASSERT_EQ(first.value_count, 1);
@@ -309,12 +309,12 @@ TEST(repro_powershell_parameter_shadow_is_case_insensitive) {
     ASSERT_NEQ(exact_site, UINT32_MAX);
     ASSERT_NEQ(folded_site, UINT32_MAX);
 
-    CBMFileResult *result = lb_extract(source, CBM_LANG_POWERSHELL, "case_scope.ps1");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_POWERSHELL, "case_scope.ps1");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite exact = lb_binding_site(result, "Caller", "$Handler", exact_site);
     LBBindingSite folded = lb_binding_site(result, "Caller", "$handler", folded_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(exact.count, 1);
     ASSERT_EQ(exact.value_count, 1);
@@ -342,11 +342,11 @@ TEST(repro_python_local_class_binding_stops_at_class_namespace) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "local_class.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "local_class.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "outer", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -375,12 +375,12 @@ TEST(repro_python_method_lookup_bypasses_class_namespace) {
     uint32_t class_site = lb_identifier_offset(source, "accept_class(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
     ASSERT_NEQ(class_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "method_class_scope.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "method_class_scope.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "method", "handler", site);
     LBBindingSite class_usage = lb_binding_site(result, NULL, "handler", class_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(class_usage.count, 1);
     ASSERT_EQ(class_usage.blocked_count, 1);
@@ -406,11 +406,11 @@ TEST(repro_python_method_default_uses_class_namespace) {
 
     uint32_t site = lb_identifier_offset(source, "callback=handler", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "method_default_class_scope.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "method_default_class_scope.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "method", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -438,12 +438,12 @@ TEST(repro_python_local_import_alias_binds_whole_function) {
     uint32_t after_site = lb_identifier_offset(source, "accept_after(handler)", "handler");
     ASSERT_NEQ(before_site, UINT32_MAX);
     ASSERT_NEQ(after_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "local_import_alias.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "local_import_alias.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite before = lb_binding_site(result, "caller", "handler", before_site);
     LBBindingSite after = lb_binding_site(result, "caller", "handler", after_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(before.count, 1);
     ASSERT_EQ(before.blocked_count, 1);
@@ -465,11 +465,11 @@ TEST(repro_python_local_from_import_alias_binds_whole_function) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "local_from_import_alias.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "local_from_import_alias.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.blocked_count, 1);
@@ -492,11 +492,11 @@ TEST(repro_python_import_source_roles_do_not_bind) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "import_source_roles.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "import_source_roles.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -522,12 +522,12 @@ TEST(repro_python_future_import_is_not_binding_or_usage) {
     uint32_t usage_site = lb_identifier_offset(source, "accept(annotations)", "annotations");
     ASSERT_NEQ(directive_site, UINT32_MAX);
     ASSERT_NEQ(usage_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "future_import.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "future_import.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite directive = lb_binding_site(result, NULL, "annotations", directive_site);
     LBBindingSite usage = lb_binding_site(result, "caller", "annotations", usage_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(directive.count, 0);
     ASSERT_EQ(usage.count, 1);
@@ -536,11 +536,11 @@ TEST(repro_python_future_import_is_not_binding_or_usage) {
     PASS();
 }
 
-/* CBMImport metadata is consumed independently of lexical blockers. Preserve
+/* LSMImport metadata is consumed independently of lexical blockers. Preserve
  * the complete dependency path while recording Python's actual local binding. */
 TEST(repro_python_dotted_import_records_root_local_name) {
     static const char source[] = "import package.child\n";
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "dotted_import.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "dotted_import.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     ASSERT_EQ(result->imports.count, 1);
@@ -548,7 +548,7 @@ TEST(repro_python_dotted_import_records_root_local_name) {
     ASSERT_NOT_NULL(result->imports.items[0].module_path);
     ASSERT_STR_EQ(result->imports.items[0].local_name, "package");
     ASSERT_STR_EQ(result->imports.items[0].module_path, "package.child");
-    cbm_free_result(result);
+    lsm_free_result(result);
     PASS();
 }
 
@@ -562,11 +562,11 @@ TEST(repro_typescript_import_alias_blocks_raw_callable_fallback) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_TYPESCRIPT, "import_alias.ts");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_TYPESCRIPT, "import_alias.ts");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -586,11 +586,11 @@ TEST(repro_typescript_import_source_name_does_not_bind) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_TYPESCRIPT, "import_source_role.ts");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_TYPESCRIPT, "import_source_role.ts");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -608,11 +608,11 @@ TEST(repro_typescript_import_require_clause_binds_local) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_TYPESCRIPT, "import_require.ts");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_TYPESCRIPT, "import_require.ts");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -643,11 +643,11 @@ TEST(repro_javascript_deep_block_nesting_keeps_lexical_binding) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_JAVASCRIPT, "deep_blocks.js");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_JAVASCRIPT, "deep_blocks.js");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.blocked_count, 1);
@@ -675,11 +675,11 @@ TEST(repro_typescript_deep_block_nesting_keeps_lexical_binding) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_TYPESCRIPT, "deep_blocks.ts");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_TYPESCRIPT, "deep_blocks.ts");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.blocked_count, 1);
@@ -699,11 +699,11 @@ TEST(repro_rust_block_use_alias_binds_local_scope) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "block_use_alias.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "block_use_alias.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -723,11 +723,11 @@ TEST(repro_rust_use_source_name_does_not_bind) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "use_source_role.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "use_source_role.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -753,12 +753,12 @@ TEST(repro_rust_extern_crate_alias_binds_only_alias) {
     uint32_t source_site = lb_identifier_offset(source, "dependency);", "dependency");
     ASSERT_NEQ(alias_site, UINT32_MAX);
     ASSERT_NEQ(source_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "extern_alias.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "extern_alias.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite alias = lb_binding_site(result, "caller", "handler", alias_site);
     LBBindingSite original = lb_binding_site(result, "caller", "dependency", source_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(alias.count, 1);
     ASSERT_EQ(alias.blocked_count, 1);
@@ -778,11 +778,11 @@ TEST(repro_rust_brace_self_binds_prefix) {
 
     uint32_t site = lb_identifier_offset(source, "accept(values)", "values");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "brace_self.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "brace_self.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "values", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -802,11 +802,11 @@ TEST(repro_rust_use_item_binds_before_declaration) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "use_before_declaration.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "use_before_declaration.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.blocked_count, 1);
@@ -835,12 +835,12 @@ TEST(repro_rust_inline_module_import_does_not_leak) {
     }
     ASSERT_NEQ(inside_site, UINT32_MAX);
     ASSERT_NEQ(outside_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_RUST, "inline_module.rs");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_RUST, "inline_module.rs");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite inside = lb_binding_site(result, "inside", "handler", inside_site);
     LBBindingSite outside = lb_binding_site(result, "outside", "handler", outside_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(inside.count, 1);
     ASSERT_EQ(inside.blocked_count, 1);
@@ -866,11 +866,11 @@ TEST(repro_objectscript_set_target_binds_routine_local) {
 
     uint32_t site = lb_identifier_offset(source, "$$Accept(watched)", "watched");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_OBJECTSCRIPT_ROUTINE, "Binding.mac");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_OBJECTSCRIPT_ROUTINE, "Binding.mac");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "Caller", "watched", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -894,11 +894,11 @@ TEST(repro_objectscript_udl_set_target_binds_method_local) {
 
     uint32_t site = lb_identifier_offset(source, "..Accept(watched)", "watched");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_OBJECTSCRIPT_UDL, "Binding.cls");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_OBJECTSCRIPT_UDL, "Binding.cls");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "Caller", "watched", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -920,11 +920,11 @@ TEST(repro_python_default_expression_uses_enclosing_namespace) {
 
     uint32_t site = lb_identifier_offset(source, "=handler", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "default_scope.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "default_scope.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "nested", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.value_count, 1);
@@ -950,11 +950,11 @@ TEST(repro_python_global_assignment_is_module_binding) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "global_scope.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "global_scope.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -977,11 +977,11 @@ TEST(repro_python_module_assignment_blocks_callable_fallback) {
 
     uint32_t site = lb_identifier_offset(source, "accept(handler)", "handler");
     ASSERT_NEQ(site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_PYTHON, "module_binding.py");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_PYTHON, "module_binding.py");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite usage = lb_binding_site(result, "caller", "handler", site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(usage.count, 1);
     ASSERT_EQ(usage.candidate_count, 1);
@@ -1007,12 +1007,12 @@ TEST(repro_go_function_literal_parameter_does_not_leak) {
     uint32_t outside_site = lb_identifier_offset(source, "acceptOutside(handler)", "handler");
     ASSERT_NEQ(inside_site, UINT32_MAX);
     ASSERT_NEQ(outside_site, UINT32_MAX);
-    CBMFileResult *result = lb_extract(source, CBM_LANG_GO, "literal.go");
+    LSMFileResult *result = lb_extract(source, LSM_LANG_GO, "literal.go");
     ASSERT_NOT_NULL(result);
     ASSERT_FALSE(result->has_error || result->parse_incomplete);
     LBBindingSite inside = lb_binding_site(result, "caller", "handler", inside_site);
     LBBindingSite outside = lb_binding_site(result, "caller", "handler", outside_site);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     ASSERT_EQ(inside.count, 1);
     ASSERT_EQ(inside.blocked_count, 1);

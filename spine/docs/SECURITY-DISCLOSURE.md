@@ -1,7 +1,7 @@
 # Security Disclosure & Handling Process
 
 This document explains **how security reports are handled** for
-codebase-memory-mcp — what happens after you report a vulnerability, what you
+logan-spine-mcp — what happens after you report a vulnerability, what you
 can expect from us, and how disclosure and credit work.
 
 For **how to report** a vulnerability and **what is in scope**, see
@@ -35,7 +35,7 @@ We follow **coordinated disclosure**:
 | 3. **Fix privately** | Develop the fix in a private environment, with a regression guard, and validate it across all supported platforms (Linux, macOS, Windows) under full CI. | severity-dependent |
 | 4. **You verify** | We invite you (read-only) to confirm the fix resolves the issue and that the guard prevents regression. Your sign-off is welcomed; an unresponsive reporter will not indefinitely block a release. | — |
 | 5. **Release** | Merge the fix and cut a patched release promptly. | as fast as severity warrants |
-| 6. **Disclose** | Publish a [GitHub Security Advisory](https://github.com/DeusData/codebase-memory-mcp/security/advisories), request a **CVE** (GitHub is a CNA), and credit you. | after a short upgrade window |
+| 6. **Disclose** | Publish a [GitHub Security Advisory](https://github.com/DeusData/logan-spine-mcp/security/advisories), request a **CVE** (GitHub is a CNA), and credit you. | after a short upgrade window |
 
 **Overall fix timeline:** we aim to resolve and release a fix within **90 days**
 of triage, and much faster for high-severity issues. Critical, actively

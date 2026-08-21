@@ -18,7 +18,7 @@
  *   ONE Folder/Project node shared by every file in the package.  That shared
  *   node's file_path was clobbered by each file's always-emitted Module def —
  *   through TWO code paths:
- *     - sequential: cbm_gbuf_upsert_node updated name/file_path/range in
+ *     - sequential: lsm_gbuf_upsert_node updated name/file_path/range in
  *       place (its #667 guard only protected the label);
  *     - parallel:   merge_update_existing applied unconditional "src wins"
  *       when merging worker-local gbufs, even relabelling the Folder node to
@@ -32,13 +32,13 @@
  *   bogus entries varying per run.
  *
  * FIX (three co-ordinated parts):
- *   1. graph_buffer.c cbm_gbuf_upsert_node: a Module def colliding with a
+ *   1. graph_buffer.c lsm_gbuf_upsert_node: a Module def colliding with a
  *      Project/Folder node no longer updates ANY field (was: label only).
  *   2. graph_buffer.c merge_update_existing: same guard on the parallel
  *      worker-gbuf merge path.
  *   3. pipeline finders (pass_usages/pass_parallel/pass_calls): a lookup that
  *      lands on a structural directory container (Folder/Project — see
- *      cbm_pipeline_node_is_dir_container) is treated as a miss, falling
+ *      lsm_pipeline_node_is_dir_container) is treated as a miss, falling
  *      through to the per-file File node, so every file's class-level usages
  *      attribute to that file's unique File node.
  *
@@ -152,7 +152,7 @@ static const int k_nfiles = (int)(sizeof(k_files) / sizeof(k_files[0]));
 
 /* The full pipeline switches to the parallel (worker) path above
  * MIN_FILES_FOR_PARALLEL=50 files (pipeline.c). The bug has TWO faces:
- *   - sequential: cbm_gbuf_upsert_node clobbered the Folder node in place;
+ *   - sequential: lsm_gbuf_upsert_node clobbered the Folder node in place;
  *   - parallel:   merge_update_existing clobbered it during worker-local gbuf
  *                 merge (worker order → run-to-run nondeterminism).
  * The 4-file fixture only exercises the sequential face, so a second fixture
@@ -210,18 +210,18 @@ static int build_parallel_fixture(RFile *files, char **name_bufs, char **body_bu
  */
 static int collect_usage_sources_n(const RFile *files, int nfiles, char **out, int cap) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         return -1;
     }
 
     /* Locate the IRepository node by name. */
-    cbm_node_t *candidates = NULL;
+    lsm_node_t *candidates = NULL;
     int ncand = 0;
-    int rc = cbm_store_find_nodes_by_name(store, lp.project, "IRepository",
+    int rc = lsm_store_find_nodes_by_name(store, lp.project, "IRepository",
                                          &candidates, &ncand);
-    if (rc != CBM_STORE_OK || ncand == 0) {
-        cbm_store_free_nodes(candidates, ncand);
+    if (rc != LSM_STORE_OK || ncand == 0) {
+        lsm_store_free_nodes(candidates, ncand);
         rh_cleanup(&lp, store);
         return -1;
     }
@@ -235,7 +235,7 @@ static int collect_usage_sources_n(const RFile *files, int nfiles, char **out, i
             break;
         }
     }
-    cbm_store_free_nodes(candidates, ncand);
+    lsm_store_free_nodes(candidates, ncand);
 
     if (!target_id) {
         rh_cleanup(&lp, store);
@@ -243,18 +243,18 @@ static int collect_usage_sources_n(const RFile *files, int nfiles, char **out, i
     }
 
     /* Walk inbound USAGE edges. */
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int nedges = 0;
-    rc = cbm_store_find_edges_by_target_type(store, target_id, "USAGE", &edges, &nedges);
-    if (rc != CBM_STORE_OK) {
+    rc = lsm_store_find_edges_by_target_type(store, target_id, "USAGE", &edges, &nedges);
+    if (rc != LSM_STORE_OK) {
         rh_cleanup(&lp, store);
         return -1;
     }
 
     int found = 0;
     for (int i = 0; i < nedges && found < cap; i++) {
-        cbm_node_t src_node;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &src_node) != CBM_STORE_OK) {
+        lsm_node_t src_node;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &src_node) != LSM_STORE_OK) {
             continue;
         }
         if (!src_node.file_path || !src_node.file_path[0]) {
@@ -274,7 +274,7 @@ static int collect_usage_sources_n(const RFile *files, int nfiles, char **out, i
         out[found++] = strdup(src_node.file_path);
     }
 
-    cbm_store_free_edges(edges, nedges);
+    lsm_store_free_edges(edges, nedges);
     rh_cleanup(&lp, store);
     return found;
 }

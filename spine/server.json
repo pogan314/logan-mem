@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.DeusData/codebase-memory-mcp",
-  "title": "Codebase Memory",
+  "name": "io.github.DeusData/logan-spine-mcp",
+  "title": "Logan Spine",
   "description": "Codebase knowledge graph for AI agents \u2014 159 languages, sub-ms queries, 99% fewer tokens.",
   "repository": {
-    "url": "https://github.com/DeusData/codebase-memory-mcp",
+    "url": "https://github.com/DeusData/logan-spine-mcp",
     "source": "github"
   },
-  "websiteUrl": "https://deusdata.github.io/codebase-memory-mcp/",
+  "websiteUrl": "https://deusdata.github.io/logan-spine-mcp/",
   "version": "0.8.1",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "codebase-memory-mcp",
+      "identifier": "logan-spine-mcp",
       "version": "0.8.1",
       "runtimeHint": "npx",
       "transport": {
@@ -21,7 +21,7 @@
     },
     {
       "registryType": "pypi",
-      "identifier": "codebase-memory-mcp",
+      "identifier": "logan-spine-mcp",
       "version": "0.8.1",
       "runtimeHint": "uvx",
       "transport": {

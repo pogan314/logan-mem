@@ -17,22 +17,22 @@
 #include <unistd.h>
 #endif
 
-#define CTE_BEGIN "<!-- codebase-memory-mcp:start -->"
-#define CTE_END "<!-- codebase-memory-mcp:end -->"
+#define CTE_BEGIN "<!-- logan-spine-mcp:start -->"
+#define CTE_END "<!-- logan-spine-mcp:end -->"
 #define CTE_LIMIT (16U * 1024U * 1024U)
 #define CTE_PATH_CAP 1024U
 
 /* Expected test/public contracts for the post-verification race fix. Keeping
  * these declarations here makes this RED test file independent of production
  * header edits while the implementation is developed. */
-void cbm_text_set_prepublish_hook_for_testing(cbm_text_precommit_test_hook_t hook, void *context);
-void cbm_text_set_temp_closed_hook_for_testing(cbm_text_precommit_test_hook_t hook, void *context);
-int cbm_text_write_owned_document_if_unchanged(const char *file_path, const char *owned_content,
+void lsm_text_set_prepublish_hook_for_testing(lsm_text_precommit_test_hook_t hook, void *context);
+void lsm_text_set_temp_closed_hook_for_testing(lsm_text_precommit_test_hook_t hook, void *context);
+int lsm_text_write_owned_document_if_unchanged(const char *file_path, const char *owned_content,
                                                const char *expected_content,
                                                size_t expected_length);
 
 static int cte_fixture(char *dir, size_t dir_size, char *path, size_t path_size) {
-    char *created = th_mktempdir("cbm_text_edit");
+    char *created = th_mktempdir("lsm_text_edit");
     if (!created) {
         return -1;
     }
@@ -47,7 +47,7 @@ static int cte_fixture(char *dir, size_t dir_size, char *path, size_t path_size)
 }
 
 static int cte_write_bytes(const char *path, const char *data, size_t len) {
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     if (!file) {
         return -1;
     }
@@ -59,7 +59,7 @@ static int cte_write_bytes(const char *path, const char *data, size_t len) {
 }
 
 static char *cte_read_bytes(const char *path, size_t *len_out) {
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file || fseek(file, 0L, SEEK_END) != 0) {
         if (file) {
             fclose(file);
@@ -103,18 +103,18 @@ static int cte_path_exists(const char *path) {
 }
 
 static size_t cte_temp_count(const char *dir) {
-    cbm_dir_t *directory = cbm_opendir(dir);
+    lsm_dir_t *directory = lsm_opendir(dir);
     if (!directory) {
         return SIZE_MAX;
     }
     size_t count = 0U;
-    cbm_dirent_t *entry = NULL;
-    while ((entry = cbm_readdir(directory)) != NULL) {
-        if (strstr(entry->name, ".cbm-text-") != NULL) {
+    lsm_dirent_t *entry = NULL;
+    while ((entry = lsm_readdir(directory)) != NULL) {
+        if (strstr(entry->name, ".lsm-text-") != NULL) {
             count++;
         }
     }
-    cbm_closedir(directory);
+    lsm_closedir(directory);
     return count;
 }
 
@@ -128,7 +128,7 @@ typedef struct {
 static void cte_change_before_commit(const char *path, void *context) {
     cte_precommit_change_t *change = (cte_precommit_change_t *)context;
     if (change->replace_identity &&
-        (!change->backup_path || cbm_rename_replace(path, change->backup_path) != 0)) {
+        (!change->backup_path || lsm_rename_replace(path, change->backup_path) != 0)) {
         change->result = -1;
         return;
     }
@@ -138,7 +138,7 @@ static void cte_change_before_commit(const char *path, void *context) {
 #ifndef _WIN32
 static void cte_replace_closed_temp(const char *path, void *context) {
     cte_precommit_change_t *change = (cte_precommit_change_t *)context;
-    if (!change->backup_path || cbm_rename_replace(path, change->backup_path) != 0) {
+    if (!change->backup_path || lsm_rename_replace(path, change->backup_path) != 0) {
         change->result = -1;
         return;
     }
@@ -157,10 +157,10 @@ TEST(config_text_managed_insert_preserves_bom_comments_and_is_idempotent) {
                             "\nUse search_graph first.\n" CTE_END "\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(cte_write_bytes(path, original, sizeof(original) - 1U), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "Use search_graph first.\n"),
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "Use search_graph first.\n"),
               0);
     ASSERT(cte_assert_bytes(path, expected, sizeof(expected) - 1U));
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "Use search_graph first.\n"),
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "Use search_graph first.\n"),
               0);
     ASSERT(cte_assert_bytes(path, expected, sizeof(expected) - 1U));
     ASSERT_EQ(cte_temp_count(dir), 0U);
@@ -176,7 +176,7 @@ TEST(config_text_managed_replace_preserves_crlf_surroundings) {
         "before\r\n" CTE_BEGIN "\r\nnew one\r\nnew two\r\n" CTE_END "\r\nafter\r\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(cte_write_bytes(path, original, sizeof(original) - 1U), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new one\nnew two"), 0);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new one\nnew two"), 0);
     ASSERT(cte_assert_bytes(path, expected, sizeof(expected) - 1U));
     th_cleanup(dir);
     PASS();
@@ -189,9 +189,9 @@ TEST(config_text_managed_no_final_newline_round_trip) {
     const char installed[] = "user text\n" CTE_BEGIN "\nowned\n" CTE_END;
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(cte_write_bytes(path, original, sizeof(original) - 1U), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), 0);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), 0);
     ASSERT(cte_assert_bytes(path, installed, sizeof(installed) - 1U));
-    ASSERT_EQ(cbm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT(cte_assert_bytes(path, original, sizeof(original) - 1U));
     th_cleanup(dir);
     PASS();
@@ -204,9 +204,9 @@ TEST(config_text_managed_remove_preserves_user_bytes) {
     const char expected[] = "alpha\nomega\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(cte_write_bytes(path, original, sizeof(original) - 1U), 0);
-    ASSERT_EQ(cbm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT(cte_assert_bytes(path, expected, sizeof(expected) - 1U));
-    ASSERT_EQ(cbm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
+    ASSERT_EQ(lsm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), 0);
     ASSERT(cte_assert_bytes(path, expected, sizeof(expected) - 1U));
     th_cleanup(dir);
     PASS();
@@ -227,9 +227,9 @@ TEST(config_text_managed_malformed_markers_fail_closed) {
     for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); i++) {
         size_t len = strlen(cases[i]);
         ASSERT_EQ(cte_write_bytes(path, cases[i], len), 0);
-        ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new"), -1);
+        ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "new"), -1);
         ASSERT(cte_assert_bytes(path, cases[i], len));
-        ASSERT_EQ(cbm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
+        ASSERT_EQ(lsm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
         ASSERT(cte_assert_bytes(path, cases[i], len));
     }
     th_cleanup(dir);
@@ -241,11 +241,11 @@ TEST(config_text_managed_rejects_unsafe_markers_and_owned_content) {
     char path[CTE_PATH_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, "keep\n"), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "nested " CTE_BEGIN), -1);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "nested " CTE_END), -1);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, "same", "same", "owned"), -1);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, "bad\nmarker", CTE_END, "owned"), -1);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "bad\x01text"), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "nested " CTE_BEGIN), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "nested " CTE_END), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, "same", "same", "owned"), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, "bad\nmarker", CTE_END, "owned"), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "bad\x01text"), -1);
     ASSERT(cte_assert_bytes(path, "keep\n", strlen("keep\n")));
     th_cleanup(dir);
     PASS();
@@ -256,25 +256,25 @@ TEST(config_text_owned_document_write_remove_exact_only) {
     char path[CTE_PATH_CAP];
     const char owned[] = "# Managed\n\nUse the graph.\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    ASSERT_EQ(cbm_text_write_owned_document(path, owned), 0);
-    ASSERT_EQ(cbm_text_create_owned_document(path, owned), -1);
-    ASSERT_EQ(cbm_text_ensure_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_create_owned_document(path, owned), -1);
+    ASSERT_EQ(lsm_text_ensure_owned_document(path, owned), 0);
     ASSERT(cte_assert_bytes(path, owned, sizeof(owned) - 1U));
-    ASSERT_EQ(cbm_text_write_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, owned), 0);
     ASSERT_EQ(th_write_file(path, "# User changed this\n"), 0);
-    ASSERT_EQ(cbm_text_ensure_owned_document(path, owned), -1);
-    ASSERT_EQ(cbm_text_remove_owned_document(path, owned), 1);
+    ASSERT_EQ(lsm_text_ensure_owned_document(path, owned), -1);
+    ASSERT_EQ(lsm_text_remove_owned_document(path, owned), 1);
     ASSERT(cte_assert_bytes(path, "# User changed this\n", strlen("# User changed this\n")));
-    ASSERT_EQ(cbm_text_write_owned_document(path, owned), 0);
-    ASSERT_EQ(cbm_text_remove_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_remove_owned_document(path, owned), 0);
     ASSERT(!cte_path_exists(path));
-    ASSERT_EQ(cbm_text_ensure_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_ensure_owned_document(path, owned), 0);
     ASSERT(cte_assert_bytes(path, owned, sizeof(owned) - 1U));
-    ASSERT_EQ(cbm_text_remove_owned_document(path, owned), 0);
-    ASSERT_EQ(cbm_text_create_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_remove_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_create_owned_document(path, owned), 0);
     ASSERT(cte_assert_bytes(path, owned, sizeof(owned) - 1U));
-    ASSERT_EQ(cbm_text_remove_owned_document(path, owned), 0);
-    ASSERT_EQ(cbm_text_remove_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_remove_owned_document(path, owned), 0);
+    ASSERT_EQ(lsm_text_remove_owned_document(path, owned), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -282,30 +282,30 @@ TEST(config_text_owned_document_write_remove_exact_only) {
 TEST(config_text_owned_document_migrates_exact_releases_only) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
-    const char *current = "name: codebase-memory\ntier: verify\n";
-    const char *released[] = {"name: codebase-memory\n", "name: codebase-memory\nlegacy: 2\n"};
-    const char *modified = "name: codebase-memory\nuser-note: keep\n";
+    const char *current = "name: logan-spine\ntier: verify\n";
+    const char *released[] = {"name: logan-spine\n", "name: logan-spine\nlegacy: 2\n"};
+    const char *modified = "name: logan-spine\nuser-note: keep\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
 
-    ASSERT_EQ(cbm_text_migrate_owned_document(path, current, released, 2U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document(path, current, released, 2U), 0);
     ASSERT(cte_assert_bytes(path, current, strlen(current)));
 
     ASSERT_EQ(th_write_file(path, released[1]), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document(path, current, released, 2U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document(path, current, released, 2U), 0);
     ASSERT(cte_assert_bytes(path, current, strlen(current)));
 
     ASSERT_EQ(th_write_file(path, modified), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document(path, current, released, 2U), 1);
+    ASSERT_EQ(lsm_text_migrate_owned_document(path, current, released, 2U), 1);
     ASSERT(cte_assert_bytes(path, modified, strlen(modified)));
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 2U, 04755U), -1);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 2U, 04755U), -1);
     ASSERT(cte_assert_bytes(path, modified, strlen(modified)));
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 2U, 0200U), -1);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 2U, 0200U), -1);
     ASSERT(cte_assert_bytes(path, modified, strlen(modified)));
 
-    ASSERT_EQ(cbm_text_remove_owned_document_any(path, current, released, 2U), 1);
+    ASSERT_EQ(lsm_text_remove_owned_document_any(path, current, released, 2U), 1);
     ASSERT(cte_assert_bytes(path, modified, strlen(modified)));
     ASSERT_EQ(th_write_file(path, released[0]), 0);
-    ASSERT_EQ(cbm_text_remove_owned_document_any(path, current, released, 2U), 0);
+    ASSERT_EQ(lsm_text_remove_owned_document_any(path, current, released, 2U), 0);
     ASSERT_FALSE(cte_path_exists(path));
 
     th_cleanup(dir);
@@ -320,15 +320,15 @@ TEST(config_text_rejects_invalid_utf8_and_controls) {
     const char nul_byte[] = {'k', 'e', 'e', 'p', '\0', 'x', '\n'};
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(cte_write_bytes(path, invalid_utf8, sizeof(invalid_utf8)), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
     ASSERT(cte_assert_bytes(path, invalid_utf8, sizeof(invalid_utf8)));
     ASSERT_EQ(cte_write_bytes(path, c1_control, sizeof(c1_control)), 0);
-    ASSERT_EQ(cbm_text_write_owned_document(path, "replacement\n"), -1);
+    ASSERT_EQ(lsm_text_write_owned_document(path, "replacement\n"), -1);
     ASSERT(cte_assert_bytes(path, c1_control, sizeof(c1_control)));
     ASSERT_EQ(cte_write_bytes(path, nul_byte, sizeof(nul_byte)), 0);
-    ASSERT_EQ(cbm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
+    ASSERT_EQ(lsm_text_remove_managed_block(path, CTE_BEGIN, CTE_END), -1);
     ASSERT(cte_assert_bytes(path, nul_byte, sizeof(nul_byte)));
-    ASSERT_EQ(cbm_text_write_owned_document(path, "bad\x7ftext"), -1);
+    ASSERT_EQ(lsm_text_write_owned_document(path, "bad\x7ftext"), -1);
     th_cleanup(dir);
     PASS();
 }
@@ -337,7 +337,7 @@ TEST(config_text_rejects_oversized_existing_file) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     ASSERT_NOT_NULL(file);
     char chunk[4096];
     memset(chunk, 'a', sizeof(chunk));
@@ -348,7 +348,7 @@ TEST(config_text_rejects_oversized_existing_file) {
         remaining -= amount;
     }
     ASSERT_EQ(fclose(file), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
     struct stat state;
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ((uint64_t)state.st_size, (uint64_t)CTE_LIMIT + 1U);
@@ -360,13 +360,13 @@ TEST(config_text_rejects_non_regular_paths) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
-    ASSERT_EQ(cbm_mkdir(path), 0);
-    ASSERT_EQ(cbm_text_write_owned_document(path, "owned\n"), -1);
-    ASSERT_EQ(cbm_rmdir(path), 0);
+    ASSERT_EQ(lsm_mkdir(path), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, "owned\n"), -1);
+    ASSERT_EQ(lsm_rmdir(path), 0);
 #ifndef _WIN32
     ASSERT_EQ(mkfifo(path, 0600), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
-    ASSERT_EQ(cbm_unlink(path), 0);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
+    ASSERT_EQ(lsm_unlink(path), 0);
 #endif
     ASSERT_EQ(cte_temp_count(dir), 0U);
     th_cleanup(dir);
@@ -384,27 +384,27 @@ TEST(config_text_rejects_links_privileged_mode_and_preserves_metadata) {
     ASSERT(snprintf(alias, sizeof(alias), "%s/alias.md", dir) > 0);
     ASSERT_EQ(th_write_file(target, "target\n"), 0);
     ASSERT_EQ(symlink(target, path), 0);
-    ASSERT_EQ(cbm_text_write_owned_document(path, "owned\n"), -1);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, "owned\n", NULL, 0U, 0755U), -1);
-    ASSERT_EQ(cbm_unlink(path), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, "owned\n"), -1);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, "owned\n", NULL, 0U, 0755U), -1);
+    ASSERT_EQ(lsm_unlink(path), 0);
 
     ASSERT_EQ(th_write_file(path, "shared\n"), 0);
     ASSERT_EQ(link(path, alias), 0);
-    ASSERT_EQ(cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, "owned\n", NULL, 0U, 0755U), -1);
-    ASSERT_EQ(cbm_unlink(alias), 0);
+    ASSERT_EQ(lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned"), -1);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, "owned\n", NULL, 0U, 0755U), -1);
+    ASSERT_EQ(lsm_unlink(alias), 0);
 
     ASSERT_EQ(chmod(path, 04755), 0);
     struct stat privileged;
     ASSERT_EQ(stat(path, &privileged), 0);
     if ((privileged.st_mode & S_ISUID) != 0) {
-        ASSERT_EQ(cbm_text_write_owned_document(path, "owned\n"), -1);
+        ASSERT_EQ(lsm_text_write_owned_document(path, "owned\n"), -1);
     }
     ASSERT_EQ(chmod(path, 0640), 0);
     struct stat before;
     struct stat after;
     ASSERT_EQ(stat(path, &before), 0);
-    ASSERT_EQ(cbm_text_write_owned_document(path, "owned\n"), 0);
+    ASSERT_EQ(lsm_text_write_owned_document(path, "owned\n"), 0);
     ASSERT_EQ(stat(path, &after), 0);
     ASSERT_EQ(after.st_mode & 0777U, before.st_mode & 0777U);
     ASSERT_EQ(after.st_uid, before.st_uid);
@@ -422,7 +422,7 @@ TEST(config_text_owned_document_mode_publishes_exact_bytes_atomically) {
     const char *foreign = "#!/bin/sh\necho foreign\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
 
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
     struct stat state;
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_mode & 0777U, 0755U);
@@ -430,14 +430,14 @@ TEST(config_text_owned_document_mode_publishes_exact_bytes_atomically) {
     ASSERT(cte_assert_bytes(path, current, strlen(current)));
     struct stat stable;
     ASSERT_EQ(stat(path, &stable), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_ino, stable.st_ino);
 
     ASSERT_EQ(chmod(path, 0600), 0);
     struct stat before;
     ASSERT_EQ(stat(path, &before), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_mode & 0777U, 0755U);
     ASSERT(state.st_ino != before.st_ino);
@@ -445,14 +445,14 @@ TEST(config_text_owned_document_mode_publishes_exact_bytes_atomically) {
 
     ASSERT_EQ(th_write_file(path, released[0]), 0);
     ASSERT_EQ(chmod(path, 0640), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 0);
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_mode & 0777U, 0755U);
     ASSERT(cte_assert_bytes(path, current, strlen(current)));
 
     ASSERT_EQ(th_write_file(path, foreign), 0);
     ASSERT_EQ(chmod(path, 0640), 0);
-    ASSERT_EQ(cbm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 1);
+    ASSERT_EQ(lsm_text_migrate_owned_document_mode(path, current, released, 1U, 0755U), 1);
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_mode & 0777U, 0640U);
     ASSERT(cte_assert_bytes(path, foreign, strlen(foreign)));
@@ -474,9 +474,9 @@ TEST(config_text_owned_document_mode_rejects_prepublish_replacement) {
     cte_precommit_change_t race = {
         .content = winner, .backup_path = backup, .replace_identity = 1, .result = -1};
 
-    cbm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_text_migrate_owned_document_mode(path, current, NULL, 0U, 0755U);
-    cbm_text_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_text_migrate_owned_document_mode(path, current, NULL, 0U, 0755U);
+    lsm_text_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
@@ -485,7 +485,7 @@ TEST(config_text_owned_document_mode_rejects_prepublish_replacement) {
     ASSERT_EQ(stat(path, &state), 0);
     ASSERT_EQ(state.st_mode & 0111U, 0U);
     ASSERT_EQ(cte_temp_count(dir), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -500,9 +500,9 @@ TEST(config_text_owned_document_mode_rejects_closed_temp_replacement) {
     cte_precommit_change_t race = {
         .content = current, .backup_path = backup, .replace_identity = 1, .result = -1};
 
-    cbm_text_set_temp_closed_hook_for_testing(cte_replace_closed_temp, &race);
-    int result = cbm_text_migrate_owned_document_mode(path, current, NULL, 0U, 0755U);
-    cbm_text_set_temp_closed_hook_for_testing(NULL, NULL);
+    lsm_text_set_temp_closed_hook_for_testing(cte_replace_closed_temp, &race);
+    int result = lsm_text_migrate_owned_document_mode(path, current, NULL, 0U, 0755U);
+    lsm_text_set_temp_closed_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
@@ -525,9 +525,9 @@ TEST(config_text_rejects_stale_content_and_identity) {
     ASSERT_EQ(th_write_file(path, "keep\n"), 0);
     cte_precommit_change_t content_change = {
         .content = "concurrent\n", .backup_path = NULL, .replace_identity = 0, .result = -1};
-    cbm_text_set_precommit_hook_for_testing(cte_change_before_commit, &content_change);
-    int result = cbm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned");
-    cbm_text_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_text_set_precommit_hook_for_testing(cte_change_before_commit, &content_change);
+    int result = lsm_text_upsert_managed_block(path, CTE_BEGIN, CTE_END, "owned");
+    lsm_text_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(content_change.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, "concurrent\n", strlen("concurrent\n")));
@@ -536,13 +536,13 @@ TEST(config_text_rejects_stale_content_and_identity) {
     ASSERT_EQ(th_write_file(path, "keep\n"), 0);
     cte_precommit_change_t identity_change = {
         .content = "keep\n", .backup_path = backup, .replace_identity = 1, .result = -1};
-    cbm_text_set_precommit_hook_for_testing(cte_change_before_commit, &identity_change);
-    result = cbm_text_write_owned_document(path, "owned\n");
-    cbm_text_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_text_set_precommit_hook_for_testing(cte_change_before_commit, &identity_change);
+    result = lsm_text_write_owned_document(path, "owned\n");
+    lsm_text_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(identity_change.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, "keep\n", strlen("keep\n")));
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     ASSERT_EQ(cte_temp_count(dir), 0U);
     th_cleanup(dir);
     PASS();
@@ -554,9 +554,9 @@ TEST(config_text_missing_target_race_does_not_replace_winner) {
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     cte_precommit_change_t race = {
         .content = "winner\n", .backup_path = NULL, .replace_identity = 0, .result = -1};
-    cbm_text_set_precommit_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_text_write_owned_document(path, "owned\n");
-    cbm_text_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_text_set_precommit_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_text_write_owned_document(path, "owned\n");
+    lsm_text_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, "winner\n", strlen("winner\n")));
@@ -573,9 +573,9 @@ TEST(config_text_exact_remove_rechecks_stale_snapshot) {
     ASSERT_EQ(th_write_file(path, owned), 0);
     cte_precommit_change_t change = {
         .content = "winner\n", .backup_path = NULL, .replace_identity = 0, .result = -1};
-    cbm_text_set_precommit_hook_for_testing(cte_change_before_commit, &change);
-    int result = cbm_text_remove_owned_document(path, owned);
-    cbm_text_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_text_set_precommit_hook_for_testing(cte_change_before_commit, &change);
+    int result = lsm_text_remove_owned_document(path, owned);
+    lsm_text_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, "winner\n", strlen("winner\n")));
@@ -595,15 +595,15 @@ TEST(config_text_existing_target_swap_after_check_preserves_winner) {
     cte_precommit_change_t race = {
         .content = winner, .backup_path = backup, .replace_identity = 1, .result = -1};
 
-    cbm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_text_write_owned_document(path, "owned\n");
-    cbm_text_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_text_write_owned_document(path, "owned\n");
+    lsm_text_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, winner, strlen(winner)));
     ASSERT_EQ(cte_temp_count(dir), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -620,14 +620,14 @@ TEST(config_text_exact_remove_swap_after_check_preserves_winner) {
     cte_precommit_change_t race = {
         .content = winner, .backup_path = backup, .replace_identity = 1, .result = -1};
 
-    cbm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
-    int result = cbm_text_remove_owned_document(path, owned);
-    cbm_text_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_text_set_prepublish_hook_for_testing(cte_change_before_commit, &race);
+    int result = lsm_text_remove_owned_document(path, owned);
+    lsm_text_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     ASSERT(cte_assert_bytes(path, winner, strlen(winner)));
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     th_cleanup(dir);
     PASS();
 }
@@ -636,20 +636,20 @@ TEST(config_text_write_owned_document_if_unchanged_rejects_stale_snapshot) {
     char dir[CTE_PATH_CAP];
     char path[CTE_PATH_CAP];
     const char *original = "name: Continue\n";
-    const char *updated = "name: Continue\nmcpServers:\n  - name: codebase-memory-mcp\n";
+    const char *updated = "name: Continue\nmcpServers:\n  - name: logan-spine-mcp\n";
     const char *winner = "name: Continue\nuser-setting: preserved\n";
     ASSERT_EQ(cte_fixture(dir, sizeof(dir), path, sizeof(path)), 0);
     ASSERT_EQ(th_write_file(path, original), 0);
-    ASSERT_EQ(cbm_text_write_owned_document_if_unchanged(path, updated, original, strlen(original)),
+    ASSERT_EQ(lsm_text_write_owned_document_if_unchanged(path, updated, original, strlen(original)),
               0);
     ASSERT(cte_assert_bytes(path, updated, strlen(updated)));
 
     ASSERT_EQ(th_write_file(path, winner), 0);
-    ASSERT_EQ(cbm_text_write_owned_document_if_unchanged(path, updated, original, strlen(original)),
+    ASSERT_EQ(lsm_text_write_owned_document_if_unchanged(path, updated, original, strlen(original)),
               -1);
     ASSERT(cte_assert_bytes(path, winner, strlen(winner)));
 
-    ASSERT_EQ(cbm_text_write_owned_document_if_unchanged(path, updated, NULL, 0U), -1);
+    ASSERT_EQ(lsm_text_write_owned_document_if_unchanged(path, updated, NULL, 0U), -1);
     ASSERT(cte_assert_bytes(path, winner, strlen(winner)));
     ASSERT_EQ(cte_temp_count(dir), 0U);
     th_cleanup(dir);

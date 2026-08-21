@@ -44,7 +44,7 @@
 #include "test_framework.h"
 #include "test_helpers.h"
 #include <mcp/mcp.h>
-#include <pipeline/pipeline.h> /* cbm_project_name_from_path */
+#include <pipeline/pipeline.h> /* lsm_project_name_from_path */
 
 #include <string.h>
 #include <stdlib.h>
@@ -90,9 +90,9 @@ static int r520_git(const char *dir, const char *args) {
 TEST(repro_issue520_detect_changes_includes_new_untracked_file) {
     /* --- set up a temporary git repo -------------------------------- */
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_r520_XXXXXX");
-    if (!cbm_mkdtemp(tmpdir))
-        FAIL("cbm_mkdtemp failed");
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_r520_XXXXXX");
+    if (!lsm_mkdtemp(tmpdir))
+        FAIL("lsm_mkdtemp failed");
 
     if (r520_git(tmpdir, "init -q") != 0) {
         th_rmtree(tmpdir);
@@ -112,16 +112,16 @@ TEST(repro_issue520_detect_changes_includes_new_untracked_file) {
     }
 
     /* --- index the repo via the MCP production flow ----------------- */
-    cbm_mcp_server_t *srv = cbm_mcp_server_new(NULL);
+    lsm_mcp_server_t *srv = lsm_mcp_server_new(NULL);
     if (!srv) {
         th_rmtree(tmpdir);
-        FAIL("cbm_mcp_server_new returned NULL");
+        FAIL("lsm_mcp_server_new returned NULL");
     }
 
     {
         char args[512];
         snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", tmpdir);
-        char *resp = cbm_mcp_handle_tool(srv, "index_repository", args);
+        char *resp = lsm_mcp_handle_tool(srv, "index_repository", args);
         free(resp);
     }
 
@@ -145,17 +145,17 @@ TEST(repro_issue520_detect_changes_includes_new_untracked_file) {
      * implicit fallback for a NULL project.  The real issue #520 reproduction
      * calls detect_changes(project="...") explicitly; the project name is
      * derived from the indexed repo path exactly as the pipeline derives it. */
-    char *dc_project = cbm_project_name_from_path(tmpdir);
+    char *dc_project = lsm_project_name_from_path(tmpdir);
     if (!dc_project) {
-        cbm_mcp_server_free(srv);
+        lsm_mcp_server_free(srv);
         th_rmtree(tmpdir);
-        FAIL("cbm_project_name_from_path failed");
+        FAIL("lsm_project_name_from_path failed");
     }
     char dc_args[640];
     snprintf(dc_args, sizeof(dc_args),
              "{\"base_branch\":\"main\",\"project\":\"%s\"}", dc_project);
     free(dc_project);
-    char *dc_resp = cbm_mcp_handle_tool(srv, "detect_changes", dc_args);
+    char *dc_resp = lsm_mcp_handle_tool(srv, "detect_changes", dc_args);
 
     /* --- assert the new file is reported ---------------------------- */
     /* Expected: dc_resp contains "new_func.py" in the changed_files list.
@@ -165,7 +165,7 @@ TEST(repro_issue520_detect_changes_includes_new_untracked_file) {
     int found = (strstr(dc_resp, "new_func.py") != NULL) ? 1 : 0;
 
     free(dc_resp);
-    cbm_mcp_server_free(srv);
+    lsm_mcp_server_free(srv);
     th_rmtree(tmpdir);
 
     /* This is the reproduce-first assertion: RED until the fix lands.

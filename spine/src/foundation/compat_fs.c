@@ -31,31 +31,31 @@
 #include "foundation/log.h"
 #include "foundation/win_utf8.h"
 
-struct cbm_dir {
+struct lsm_dir {
     HANDLE find_handle;
     WIN32_FIND_DATAW find_data;
-    wchar_t wide_pattern[CBM_PATH_MAX];
-    cbm_dirent_t entry;
+    wchar_t wide_pattern[LSM_PATH_MAX];
+    lsm_dirent_t entry;
     bool first;
     bool done;
 };
 
-cbm_dir_t *cbm_opendir(const char *path) {
+lsm_dir_t *lsm_opendir(const char *path) {
     if (!path) {
         return NULL;
     }
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return NULL;
     }
 
     size_t wlen = wcslen(wpath);
-    if (wlen == 0 || wlen + 2 >= CBM_PATH_MAX) {
+    if (wlen == 0 || wlen + 2 >= LSM_PATH_MAX) {
         free(wpath);
         return NULL;
     }
 
-    cbm_dir_t *d = (cbm_dir_t *)calloc(CBM_ALLOC_ONE, sizeof(cbm_dir_t));
+    lsm_dir_t *d = (lsm_dir_t *)calloc(LSM_ALLOC_ONE, sizeof(lsm_dir_t));
     if (!d) {
         free(wpath);
         return NULL;
@@ -83,7 +83,7 @@ cbm_dir_t *cbm_opendir(const char *path) {
     return d;
 }
 
-cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
+lsm_dirent_t *lsm_readdir(lsm_dir_t *d) {
     if (!d || d->done) {
         return NULL;
     }
@@ -104,14 +104,14 @@ cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
         }
     }
 
-    char *u8 = cbm_wide_to_utf8(d->find_data.cFileName);
+    char *u8 = lsm_wide_to_utf8(d->find_data.cFileName);
     if (!u8) {
         d->done = true;
         return NULL;
     }
     size_t nlen = strlen(u8);
-    if (nlen >= CBM_DIRENT_NAME_MAX) {
-        nlen = CBM_DIRENT_NAME_MAX - SKIP_ONE;
+    if (nlen >= LSM_DIRENT_NAME_MAX) {
+        nlen = LSM_DIRENT_NAME_MAX - SKIP_ONE;
     }
     memcpy(d->entry.name, u8, nlen);
     d->entry.name[nlen] = '\0';
@@ -121,19 +121,19 @@ cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
     return &d->entry;
 }
 
-int cbm_path_info_utf8(const char *path, cbm_path_info_t *out) {
+int lsm_path_info_utf8(const char *path, lsm_path_info_t *out) {
     if (!path || !out) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     WIN32_FILE_ATTRIBUTE_DATA data;
     BOOL ok = GetFileAttributesExW(wpath, GetFileExInfoStandard, &data);
     free(wpath);
     if (!ok) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     memset(out, 0, sizeof(*out));
     out->is_directory = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
@@ -157,7 +157,7 @@ int cbm_path_info_utf8(const char *path, cbm_path_info_t *out) {
     return 0;
 }
 
-void cbm_closedir(cbm_dir_t *d) {
+void lsm_closedir(lsm_dir_t *d) {
     if (d) {
         if (d->find_handle != INVALID_HANDLE_VALUE) {
             FindClose(d->find_handle);
@@ -184,27 +184,27 @@ void cbm_closedir(cbm_dir_t *d) {
  * pipe, so the POSIX path is unchanged.
  *
  * There is deliberately NO fallback to _popen when the isolated spawn fails:
- * falling back would silently re-arm the deadlock. cbm_popen logs a structured
+ * falling back would silently re-arm the deadlock. lsm_popen logs a structured
  * warning and returns NULL instead (every call site handles NULL). */
 
-enum { CBM_POPEN_MAX = 16 };
+enum { LSM_POPEN_MAX = 16 };
 static struct {
     FILE *fp;
     HANDLE proc;
-} g_popen_tab[CBM_POPEN_MAX];
+} g_popen_tab[LSM_POPEN_MAX];
 static CRITICAL_SECTION g_popen_lock;
 static INIT_ONCE g_popen_once = INIT_ONCE_STATIC_INIT;
 
 /* Test hook (declared in compat_fs_internal.h): 1 when the most recent
- * cbm_popen(..., "r") stream came from the isolated spawn. Test-only
+ * lsm_popen(..., "r") stream came from the isolated spawn. Test-only
  * observable; not synchronized across threads. */
 static volatile LONG g_popen_last_isolated = 0;
 
-int cbm_popen_last_was_isolated(void) {
+int lsm_popen_last_was_isolated(void) {
     return (int)g_popen_last_isolated;
 }
 
-static BOOL CALLBACK cbm_popen_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
+static BOOL CALLBACK lsm_popen_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
     (void)once;
     (void)param;
     (void)ctx;
@@ -215,7 +215,7 @@ static BOOL CALLBACK cbm_popen_init(PINIT_ONCE once, PVOID param, PVOID *ctx) {
 /* Resolve the shell explicitly — %COMSPEC%, else <system dir>\cmd.exe — so it
  * can be passed as lpApplicationName and CreateProcess never walks the search
  * path (no cmd.exe planting from a hostile CWD). Heap string; caller frees. */
-static wchar_t *cbm_resolve_comspec(void) {
+static wchar_t *lsm_resolve_comspec(void) {
     wchar_t buf[MAX_PATH];
     const wchar_t suffix[] = L"\\cmd.exe";
     DWORD n = GetEnvironmentVariableW(L"COMSPEC", buf, MAX_PATH);
@@ -231,10 +231,10 @@ static wchar_t *cbm_resolve_comspec(void) {
 
 /* On failure returns NULL with *stage naming the failing step and *gle the
  * GetLastError value captured at that step (0 when errno is the signal). */
-static FILE *cbm_popen_isolated(const char *cmd, const char **stage, DWORD *gle) {
+static FILE *lsm_popen_isolated(const char *cmd, const char **stage, DWORD *gle) {
     *stage = "";
     *gle = 0;
-    InitOnceExecuteOnce(&g_popen_once, cbm_popen_init, NULL, NULL);
+    InitOnceExecuteOnce(&g_popen_once, lsm_popen_init, NULL, NULL);
 
     SECURITY_ATTRIBUTES sa;
     sa.nLength = sizeof(sa);
@@ -288,14 +288,14 @@ static FILE *cbm_popen_isolated(const char *cmd, const char **stage, DWORD *gle)
     /* Run through cmd.exe /c so command quoting and `2>NUL` behave as under
      * _popen. The command line is heap-composed (no fixed-size truncation)
      * and widened via UTF-8 so non-ASCII repo paths survive intact. */
-    wchar_t *app = cbm_resolve_comspec();
+    wchar_t *app = lsm_resolve_comspec();
     wchar_t *wcmdline = NULL;
     if (app) {
         size_t u8len = strlen(cmd) + sizeof("cmd.exe /c ");
         char *u8 = (char *)malloc(u8len);
         if (u8) {
             snprintf(u8, u8len, "cmd.exe /c %s", cmd);
-            wcmdline = cbm_utf8_to_wide(u8);
+            wcmdline = lsm_utf8_to_wide(u8);
             free(u8);
         }
     }
@@ -351,7 +351,7 @@ static FILE *cbm_popen_isolated(const char *cmd, const char **stage, DWORD *gle)
     }
 
     EnterCriticalSection(&g_popen_lock);
-    for (int i = 0; i < CBM_POPEN_MAX; i++) {
+    for (int i = 0; i < LSM_POPEN_MAX; i++) {
         if (!g_popen_tab[i].fp) {
             g_popen_tab[i].fp = fp;
             g_popen_tab[i].proc = pi.hProcess;
@@ -367,21 +367,21 @@ static FILE *cbm_popen_isolated(const char *cmd, const char **stage, DWORD *gle)
     return NULL;
 }
 
-FILE *cbm_popen(const char *cmd, const char *mode) {
+FILE *lsm_popen(const char *cmd, const char *mode) {
     /* Our git shell-outs are all read-mode; they MUST use the isolated
      * spawn. On failure, log and fail the call — never fall back to
      * _popen, whose full handle inheritance re-arms the UI hang (#798). */
     if (mode && mode[0] == 'r' && mode[1] == '\0') {
         const char *stage = "";
         DWORD gle = 0;
-        FILE *fp = cbm_popen_isolated(cmd, &stage, &gle);
+        FILE *fp = lsm_popen_isolated(cmd, &stage, &gle);
         g_popen_last_isolated = (fp != NULL);
         if (!fp) {
-            char glebuf[CBM_SZ_16];
-            char errnobuf[CBM_SZ_16];
+            char glebuf[LSM_SZ_16];
+            char errnobuf[LSM_SZ_16];
             snprintf(glebuf, sizeof(glebuf), "%lu", (unsigned long)gle);
             snprintf(errnobuf, sizeof(errnobuf), "%d", errno);
-            cbm_log_warn("compat.popen_isolated_failed", "stage", stage, "gle", glebuf, "errno",
+            lsm_log_warn("compat.popen_isolated_failed", "stage", stage, "gle", glebuf, "errno",
                          errnobuf);
         }
         return fp;
@@ -390,12 +390,12 @@ FILE *cbm_popen(const char *cmd, const char *mode) {
     return _popen(cmd, mode);
 }
 
-int cbm_pclose(FILE *f) {
-    InitOnceExecuteOnce(&g_popen_once, cbm_popen_init, NULL, NULL);
+int lsm_pclose(FILE *f) {
+    InitOnceExecuteOnce(&g_popen_once, lsm_popen_init, NULL, NULL);
 
     HANDLE proc = NULL;
     EnterCriticalSection(&g_popen_lock);
-    for (int i = 0; i < CBM_POPEN_MAX; i++) {
+    for (int i = 0; i < LSM_POPEN_MAX; i++) {
         if (g_popen_tab[i].fp == f) {
             proc = g_popen_tab[i].proc;
             g_popen_tab[i].fp = NULL;
@@ -416,12 +416,12 @@ int cbm_pclose(FILE *f) {
     return got ? (int)code : -1;
 }
 
-FILE *cbm_fopen(const char *path, const char *mode) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+FILE *lsm_fopen(const char *path, const char *mode) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return NULL;
     }
-    wchar_t *wmode = cbm_utf8_to_wide(mode);
+    wchar_t *wmode = lsm_utf8_to_wide(mode);
     if (!wmode) {
         free(wpath);
         return NULL;
@@ -433,11 +433,11 @@ FILE *cbm_fopen(const char *path, const char *mode) {
 }
 
 /* Stamp the exact current user as owner and apply an owner-only protected
- * DACL on a directory cbm just created. Under the Administrators-default-owner
+ * DACL on a directory lsm just created. Under the Administrators-default-owner
  * policy (server/runner images), a plain _wmkdir yields an Administrators-owned
  * directory that the launcher/activation exact-owner validators reject. Only
  * freshly created directories are stamped; pre-existing ones keep their owner. */
-static void cbm_windows_stamp_dir_owner(const wchar_t *path) {
+static void lsm_windows_stamp_dir_owner(const wchar_t *path) {
     HANDLE token = NULL;
     TOKEN_USER *user = NULL;
     PACL acl = NULL;
@@ -478,7 +478,7 @@ static void cbm_windows_stamp_dir_owner(const wchar_t *path) {
     }
 }
 
-static bool cbm_windows_mkdir_component(wchar_t *path) {
+static bool lsm_windows_mkdir_component(wchar_t *path) {
     bool created = _wmkdir(path) == 0;
     if (!created && errno != EEXIST) {
         return false;
@@ -489,17 +489,17 @@ static bool cbm_windows_mkdir_component(wchar_t *path) {
         return false;
     }
     if (created) {
-        cbm_windows_stamp_dir_owner(path);
+        lsm_windows_stamp_dir_owner(path);
     }
     return true;
 }
 
-bool cbm_mkdir_p(const char *path, int mode) {
+bool lsm_mkdir_p(const char *path, int mode) {
     (void)mode;
     if (!path || path[0] == '\0') {
         return false;
     }
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return false;
     }
@@ -511,28 +511,28 @@ bool cbm_mkdir_p(const char *path, int mode) {
         return false;
     }
     wmemcpy(tmp, wpath, wlen + 1);
-    size_t start = wlen > 0U && cbm_win_path_separator(tmp[0]) ? 1U : 0U;
+    size_t start = wlen > 0U && lsm_win_path_separator(tmp[0]) ? 1U : 0U;
     if (wlen >= 8U && _wcsnicmp(tmp, L"\\\\?\\UNC\\", 8U) == 0) {
         /* Extended UNC roots are \\?\UNC\server\share\. Neither the server
          * nor share component is creatable; begin with the first descendant. */
         size_t separators = 0U;
         start = 8U;
         while (start < wlen && separators < 2U) {
-            if (cbm_win_path_separator(tmp[start])) {
+            if (lsm_win_path_separator(tmp[start])) {
                 separators++;
             }
             start++;
         }
     } else if (wlen >= 7U && wcsncmp(tmp, L"\\\\?\\", 4U) == 0 && tmp[5] == L':' &&
-               cbm_win_path_separator(tmp[6])) {
+               lsm_win_path_separator(tmp[6])) {
         start = 7U;
-    } else if (wlen >= 3U && tmp[1] == L':' && cbm_win_path_separator(tmp[2])) {
+    } else if (wlen >= 3U && tmp[1] == L':' && lsm_win_path_separator(tmp[2])) {
         start = 3U;
-    } else if (wlen >= 2U && cbm_win_path_separator(tmp[0]) && cbm_win_path_separator(tmp[1])) {
+    } else if (wlen >= 2U && lsm_win_path_separator(tmp[0]) && lsm_win_path_separator(tmp[1])) {
         size_t separators = 0U;
         start = 2U;
         while (start < wlen && separators < 2U) {
-            if (cbm_win_path_separator(tmp[start])) {
+            if (lsm_win_path_separator(tmp[start])) {
                 separators++;
             }
             start++;
@@ -540,38 +540,38 @@ bool cbm_mkdir_p(const char *path, int mode) {
     }
     bool ok = true;
     for (wchar_t *p = tmp + start; ok && *p; p++) {
-        if (cbm_win_path_separator(*p)) {
-            if (p == tmp || cbm_win_path_separator(p[-1])) {
+        if (lsm_win_path_separator(*p)) {
+            if (p == tmp || lsm_win_path_separator(p[-1])) {
                 continue;
             }
             wchar_t separator = *p;
             *p = L'\0';
-            ok = cbm_windows_mkdir_component(tmp);
+            ok = lsm_windows_mkdir_component(tmp);
             *p = separator;
         }
     }
     if (ok) {
-        ok = cbm_windows_mkdir_component(tmp);
+        ok = lsm_windows_mkdir_component(tmp);
     }
     free(tmp);
     free(wpath);
     return ok;
 }
 
-int cbm_unlink(const char *path) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+int lsm_unlink(const char *path) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     int ret = _wunlink(wpath);
     free(wpath);
     return ret;
 }
 
-int cbm_rmdir(const char *path) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+int lsm_rmdir(const char *path) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     int ret = _wrmdir(wpath);
     free(wpath);
@@ -583,10 +583,10 @@ int cbm_rmdir(const char *path) {
  * Quoting follows the MSVC CRT convention: arguments containing spaces,
  * tabs, or double-quotes are wrapped in double-quotes, with backslashes
  * before a closing quote doubled and the quote itself escaped. Argument
- * bytes are treated as UTF-8 and converted to wide via cbm_utf8_to_wide,
+ * bytes are treated as UTF-8 and converted to wide via lsm_utf8_to_wide,
  * so non-ASCII arguments (e.g. a non-ASCII %USERPROFILE%) survive intact.
  * Declared in compat_fs_internal.h so the test suite can drive it. */
-wchar_t *cbm_build_cmdline(const char *const *argv) {
+wchar_t *lsm_build_cmdline(const char *const *argv) {
     /* First pass: compute required buffer size. */
     size_t total = 1; /* NUL terminator */
     for (int i = 0; argv[i]; i++) {
@@ -622,7 +622,7 @@ wchar_t *cbm_build_cmdline(const char *const *argv) {
     }
 
     /* Build the quoted command line in UTF-8 first, then widen it as a
-     * whole via cbm_utf8_to_wide. Every character the quoting logic acts
+     * whole via lsm_utf8_to_wide. Every character the quoting logic acts
      * on (space, tab, '"', '\\') is ASCII and, by UTF-8's design, never
      * appears inside a multibyte sequence, so operating on raw bytes here
      * is safe and keeps multibyte argument bytes intact for conversion. */
@@ -678,19 +678,19 @@ wchar_t *cbm_build_cmdline(const char *const *argv) {
     }
     *w = '\0';
 
-    wchar_t *out = cbm_utf8_to_wide(buf);
+    wchar_t *out = lsm_utf8_to_wide(buf);
     free(buf);
     return out;
 }
 
-int cbm_exec_no_shell(const char *const *argv) {
+int lsm_exec_no_shell(const char *const *argv) {
     if (!argv || !argv[0]) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
-    wchar_t *cmdline = cbm_build_cmdline(argv);
+    wchar_t *cmdline = lsm_build_cmdline(argv);
     if (!cmdline) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     STARTUPINFOW si;
@@ -703,17 +703,17 @@ int cbm_exec_no_shell(const char *const *argv) {
      * (#1427). Without it every helper routed through here — git, codesign,
      * open — flashes a console window, and under a stdio MCP session with
      * auto_watch those steal focus while the user is typing. The other three
-     * CreateProcessW sites already set it: subprocess.c and cbm_popen_isolated
+     * CreateProcessW sites already set it: subprocess.c and lsm_popen_isolated
      * via #1448, and the detached daemon spawn in daemon/bootstrap.c, which has
      * had it since it was written. */
     if (!CreateProcessW(NULL, cmdline, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         free(cmdline);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     free(cmdline);
 
     WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD exit_code = (DWORD)CBM_NOT_FOUND;
+    DWORD exit_code = (DWORD)LSM_NOT_FOUND;
     GetExitCodeProcess(pi.hProcess, &exit_code);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -731,12 +731,12 @@ int cbm_exec_no_shell(const char *const *argv) {
 #include <sys/wait.h>
 #include <unistd.h>
 
-struct cbm_dir {
+struct lsm_dir {
     DIR *dir;
-    cbm_dirent_t entry;
+    lsm_dirent_t entry;
 };
 
-cbm_dir_t *cbm_opendir(const char *path) {
+lsm_dir_t *lsm_opendir(const char *path) {
     if (!path) {
         return NULL;
     }
@@ -744,7 +744,7 @@ cbm_dir_t *cbm_opendir(const char *path) {
     if (!dir) {
         return NULL;
     }
-    cbm_dir_t *d = (cbm_dir_t *)calloc(CBM_ALLOC_ONE, sizeof(cbm_dir_t));
+    lsm_dir_t *d = (lsm_dir_t *)calloc(LSM_ALLOC_ONE, sizeof(lsm_dir_t));
     if (!d) {
         closedir(dir);
         return NULL;
@@ -753,7 +753,7 @@ cbm_dir_t *cbm_opendir(const char *path) {
     return d;
 }
 
-cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
+lsm_dirent_t *lsm_readdir(lsm_dir_t *d) {
     if (!d || !d->dir) {
         return NULL;
     }
@@ -766,8 +766,8 @@ cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
             continue;
         }
         size_t nlen = strlen(de->d_name);
-        if (nlen >= CBM_DIRENT_NAME_MAX) {
-            nlen = CBM_DIRENT_NAME_MAX - SKIP_ONE;
+        if (nlen >= LSM_DIRENT_NAME_MAX) {
+            nlen = LSM_DIRENT_NAME_MAX - SKIP_ONE;
         }
         memcpy(d->entry.name, de->d_name, nlen);
         d->entry.name[nlen] = '\0';
@@ -793,13 +793,13 @@ cbm_dirent_t *cbm_readdir(cbm_dir_t *d) {
     return NULL;
 }
 
-int cbm_path_info_utf8(const char *path, cbm_path_info_t *out) {
+int lsm_path_info_utf8(const char *path, lsm_path_info_t *out) {
     if (!path || !out) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     struct stat state;
     if (lstat(path, &state) != 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     memset(out, 0, sizeof(*out));
     out->is_regular = S_ISREG(state.st_mode);
@@ -816,7 +816,7 @@ int cbm_path_info_utf8(const char *path, cbm_path_info_t *out) {
     return 0;
 }
 
-void cbm_closedir(cbm_dir_t *d) {
+void lsm_closedir(lsm_dir_t *d) {
     if (d) {
         if (d->dir) {
             closedir(d->dir);
@@ -825,19 +825,19 @@ void cbm_closedir(cbm_dir_t *d) {
     }
 }
 
-FILE *cbm_popen(const char *cmd, const char *mode) {
+FILE *lsm_popen(const char *cmd, const char *mode) {
     return popen(cmd, mode);
 }
 
-int cbm_pclose(FILE *f) {
+int lsm_pclose(FILE *f) {
     return pclose(f);
 }
 
-FILE *cbm_fopen(const char *path, const char *mode) {
+FILE *lsm_fopen(const char *path, const char *mode) {
     return fopen(path, mode);
 }
 
-static int cbm_open_directory_component(int parent, const char *component, int flags) {
+static int lsm_open_directory_component(int parent, const char *component, int flags) {
     int descriptor = openat(parent, component, flags);
 #if defined(O_NOFOLLOW) && defined(AT_SYMLINK_NOFOLLOW)
     if (descriptor < 0) {
@@ -851,7 +851,7 @@ static int cbm_open_directory_component(int parent, const char *component, int f
     return descriptor;
 }
 
-bool cbm_mkdir_p(const char *path, int mode) {
+bool lsm_mkdir_p(const char *path, int mode) {
     if (!path || path[0] == '\0') {
         return false;
     }
@@ -887,12 +887,12 @@ bool cbm_mkdir_p(const char *path, int mode) {
             *separator = '\0';
         }
         if (cursor[0] != '\0' && strcmp(cursor, ".") != 0) {
-            int next = cbm_open_directory_component(directory, cursor, flags);
+            int next = lsm_open_directory_component(directory, cursor, flags);
             if (next < 0 && errno == ENOENT) {
                 if (mkdirat(directory, cursor, (mode_t)mode) != 0 && errno != EEXIST) {
                     ok = false;
                 } else {
-                    next = cbm_open_directory_component(directory, cursor, flags);
+                    next = lsm_open_directory_component(directory, cursor, flags);
                 }
             }
             if (ok && next < 0) {
@@ -917,21 +917,21 @@ bool cbm_mkdir_p(const char *path, int mode) {
     return ok;
 }
 
-int cbm_unlink(const char *path) {
+int lsm_unlink(const char *path) {
     return unlink(path);
 }
 
-int cbm_rmdir(const char *path) {
+int lsm_rmdir(const char *path) {
     return rmdir(path);
 }
 
-int cbm_exec_no_shell(const char *const *argv) {
+int lsm_exec_no_shell(const char *const *argv) {
     if (!argv || !argv[0]) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     pid_t pid = fork();
     if (pid < 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     if (pid == 0) {
         /* Child: exec directly — no shell interpretation */
@@ -943,12 +943,12 @@ int cbm_exec_no_shell(const char *const *argv) {
     /* Parent: wait for child */
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
     }
-    return CBM_NOT_FOUND; /* killed by signal */
+    return LSM_NOT_FOUND; /* killed by signal */
 }
 
 #endif /* _WIN32 */
@@ -961,12 +961,12 @@ int cbm_exec_no_shell(const char *const *argv) {
  * canonicalization corrupts the path (#973).  GetFullPathNameW alone is also
  * only lexical and would let an allowed-root check follow a junction outside
  * the root.  Returns 0 when the path does not exist or cannot be resolved. */
-int cbm_canonical_path(const char *path, char *out, size_t out_sz) {
+int lsm_canonical_path(const char *path, char *out, size_t out_sz) {
     if (!path || !out || out_sz == 0) {
         return 0;
     }
 #ifdef _WIN32
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return 0;
     }
@@ -1010,7 +1010,7 @@ int cbm_canonical_path(const char *path, char *out, size_t out_sz) {
         size_t tail_length = wcslen(wfull + 4);
         wmemmove(wfull, wfull + 4, tail_length + 1);
     }
-    char *utf8 = cbm_wide_to_utf8(wfull);
+    char *utf8 = lsm_wide_to_utf8(wfull);
     free(wfull);
     if (!utf8) {
         return 0;
@@ -1033,11 +1033,11 @@ int cbm_canonical_path(const char *path, char *out, size_t out_sz) {
  * replaces atomically; Windows rename fails with EEXIST when the target
  * exists, so use write-through MoveFileExW(MOVEFILE_REPLACE_EXISTING) there
  * (wide paths — raw MoveFileExA would re-mangle non-ASCII cache paths). */
-int cbm_rename_replace(const char *src, const char *dst) {
+int lsm_rename_replace(const char *src, const char *dst) {
 #ifdef _WIN32
-    wchar_t *wsrc = cbm_path_to_wide(src);
-    wchar_t *wdst = cbm_path_to_wide(dst);
-    int ret = CBM_NOT_FOUND;
+    wchar_t *wsrc = lsm_path_to_wide(src);
+    wchar_t *wdst = lsm_path_to_wide(dst);
+    int ret = LSM_NOT_FOUND;
     if (wsrc && wdst) {
         if (MoveFileExW(wsrc, wdst, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
             ret = 0;
@@ -1085,7 +1085,7 @@ int cbm_rename_replace(const char *src, const char *dst) {
                 errno = EIO;
                 break;
             }
-            ret = CBM_NOT_FOUND;
+            ret = LSM_NOT_FOUND;
         }
     }
     free(wsrc);
@@ -1096,18 +1096,18 @@ int cbm_rename_replace(const char *src, const char *dst) {
 #endif
 }
 
-int cbm_rename_noreplace(const char *src, const char *dst) {
+int lsm_rename_noreplace(const char *src, const char *dst) {
     if (!src || !dst || !src[0] || !dst[0]) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 #ifdef _WIN32
-    wchar_t *wsrc = cbm_path_to_wide(src);
-    wchar_t *wdst = cbm_path_to_wide(dst);
-    int ret = CBM_NOT_FOUND;
+    wchar_t *wsrc = lsm_path_to_wide(src);
+    wchar_t *wdst = lsm_path_to_wide(dst);
+    int ret = LSM_NOT_FOUND;
     if (wsrc && wdst) {
         ret = MoveFileExW(wsrc, wdst, MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH)
                   ? 0
-                  : CBM_NOT_FOUND;
+                  : LSM_NOT_FOUND;
     }
     free(wsrc);
     free(wdst);
@@ -1117,13 +1117,13 @@ int cbm_rename_noreplace(const char *src, const char *dst) {
      * macOS, where renameat2(RENAME_NOREPLACE) is unavailable). Both paths
      * are adjacent database files and therefore on the same filesystem. */
     if (link(src, dst) != 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     if (unlink(src) != 0) {
         int saved_errno = errno;
         (void)unlink(dst);
         errno = saved_errno;
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     return 0;
 #endif
@@ -1135,9 +1135,9 @@ int cbm_rename_noreplace(const char *src, const char *dst) {
  * WAL purely from the sidecar's own header/checksums, so a leftover WAL
  * from a crashed session is recovered ON TOP of the freshly installed file
  * at the next open, splicing old-generation pages into it (#897). */
-int cbm_remove_db_sidecars(const char *db_path) {
+int lsm_remove_db_sidecars(const char *db_path) {
     if (!db_path || !db_path[0]) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     enum { SIDECAR_PATH_MAX = 4096 };
     char side[SIDECAR_PATH_MAX];
@@ -1145,38 +1145,38 @@ int cbm_remove_db_sidecars(const char *db_path) {
      * near-limit path can remove -wal/-shm, silently skip a truncated
      * -journal, and report success after partially mutating the generation. */
     if (strlen(db_path) > sizeof(side) - sizeof("-journal")) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     int result = 0;
     int n = snprintf(side, sizeof(side), "%s-wal", db_path);
     if (n <= 0 || (size_t)n >= sizeof(side)) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     errno = 0;
-    int unlink_rc = cbm_unlink(side);
+    int unlink_rc = lsm_unlink(side);
     int unlink_error = errno;
     if (unlink_rc != 0 && unlink_error != ENOENT) {
-        result = CBM_NOT_FOUND;
+        result = LSM_NOT_FOUND;
     }
     n = snprintf(side, sizeof(side), "%s-shm", db_path);
     if (n <= 0 || (size_t)n >= sizeof(side)) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     errno = 0;
-    unlink_rc = cbm_unlink(side);
+    unlink_rc = lsm_unlink(side);
     unlink_error = errno;
     if (unlink_rc != 0 && unlink_error != ENOENT) {
-        result = CBM_NOT_FOUND;
+        result = LSM_NOT_FOUND;
     }
     n = snprintf(side, sizeof(side), "%s-journal", db_path);
     if (n <= 0 || (size_t)n >= sizeof(side)) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     errno = 0;
-    unlink_rc = cbm_unlink(side);
+    unlink_rc = lsm_unlink(side);
     unlink_error = errno;
     if (unlink_rc != 0 && unlink_error != ENOENT) {
-        result = CBM_NOT_FOUND;
+        result = LSM_NOT_FOUND;
     }
     return result;
 }
@@ -1192,46 +1192,46 @@ int cbm_remove_db_sidecars(const char *db_path) {
 #include <fcntl.h>
 
 static int stream_copy_file(const char *src, const char *dst) {
-    FILE *in = cbm_fopen(src, "rb");
+    FILE *in = lsm_fopen(src, "rb");
     if (!in) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
-    FILE *out = cbm_fopen(dst, "wb");
+    FILE *out = lsm_fopen(dst, "wb");
     if (!out) {
         (void)fclose(in);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
-    char buf[CBM_SZ_64K];
+    char buf[LSM_SZ_64K];
     size_t n;
     int rc = 0;
     while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
         if (fwrite(buf, 1, n, out) != n) {
-            rc = CBM_NOT_FOUND;
+            rc = LSM_NOT_FOUND;
             break;
         }
     }
     if (ferror(in)) {
-        rc = CBM_NOT_FOUND;
+        rc = LSM_NOT_FOUND;
     }
     (void)fclose(in);
     if (fclose(out) != 0) {
-        rc = CBM_NOT_FOUND;
+        rc = LSM_NOT_FOUND;
     }
     if (rc != 0) {
-        (void)cbm_unlink(dst);
+        (void)lsm_unlink(dst);
     }
     return rc;
 }
 
-int cbm_clone_or_copy_file(const char *src, const char *dst) {
+int lsm_clone_or_copy_file(const char *src, const char *dst) {
     if (!src || !dst) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 #if defined(__APPLE__)
     /* clonefile refuses to overwrite; the staging name is freshly minted by
      * the caller, but clear any leftover defensively so the fast path is
      * never abandoned for a stale artifact. */
-    (void)cbm_unlink(dst);
+    (void)lsm_unlink(dst);
     if (clonefile(src, dst, 0) == 0) {
         return 0;
     }
@@ -1246,7 +1246,7 @@ int cbm_clone_or_copy_file(const char *src, const char *dst) {
             if (cloned == 0 && close_rc == 0) {
                 return 0;
             }
-            (void)cbm_unlink(dst);
+            (void)lsm_unlink(dst);
         } else {
             (void)close(in_fd);
         }

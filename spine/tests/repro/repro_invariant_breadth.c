@@ -51,31 +51,31 @@
 
 /* ---- helper: count CALLS edges by source-node label --------------------- */
 
-static int ib_calls_from_label(cbm_store_t *store, const char *project,
+static int ib_calls_from_label(lsm_store_t *store, const char *project,
                                 const char *label) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    if (cbm_store_find_edges_by_type(store, project, "CALLS",
-                                     &edges, &edge_count) != CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_type(store, project, "CALLS",
+                                     &edges, &edge_count) != LSM_STORE_OK) {
         return -1;
     }
     int total = 0;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t src = {0};
-        if (cbm_store_find_node_by_id(store, edges[i].source_id,
-                                      &src) != CBM_STORE_OK) {
+        lsm_node_t src = {0};
+        if (lsm_store_find_node_by_id(store, edges[i].source_id,
+                                      &src) != LSM_STORE_OK) {
             continue;
         }
         if (src.label && strcmp(src.label, label) == 0) {
             total++;
         }
-        cbm_node_free_fields(&src);
+        lsm_node_free_fields(&src);
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     return total;
 }
 
-static int ib_callable_calls(cbm_store_t *store, const char *project) {
+static int ib_callable_calls(lsm_store_t *store, const char *project) {
     int fn = ib_calls_from_label(store, project, "Function");
     int mt = ib_calls_from_label(store, project, "Method");
     if (fn < 0 || mt < 0) {
@@ -84,7 +84,7 @@ static int ib_callable_calls(cbm_store_t *store, const char *project) {
     return fn + mt;
 }
 
-static int ib_module_calls(cbm_store_t *store, const char *project) {
+static int ib_module_calls(lsm_store_t *store, const char *project) {
     return ib_calls_from_label(store, project, "Module");
 }
 
@@ -99,7 +99,7 @@ typedef struct {
 
 static IBMetrics ib_metrics(const char *filename, const char *content) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, content);
+    lsm_store_t *store = rh_index(&lp, filename, content);
     IBMetrics m = {0};
     if (store) {
         m.ok = 1;

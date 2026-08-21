@@ -138,7 +138,7 @@ def read_provenance(path: pathlib.Path) -> list[dict[str, str]]:
     if "\x00" in text or "\r" in text:
         raise ContractError(f"candidate provenance contains forbidden control bytes: {path}")
     lines = text.splitlines()
-    if not lines or lines[0] != "# cbm-release-candidate-provenance-v1":
+    if not lines or lines[0] != "# lsm-release-candidate-provenance-v1":
         raise ContractError(f"candidate provenance marker is missing: {path}")
     if len(lines) < 2 or lines[1].startswith("# "):
         raise ContractError(f"candidate provenance has unexpected metadata: {path}")
@@ -163,7 +163,7 @@ def read_provenance(path: pathlib.Path) -> list[dict[str, str]]:
 
 
 def expected_properties(target: str) -> tuple[str, str, str, str]:
-    binary = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+    binary = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
     file_format = "pe" if target.startswith("windows-") else "macho" if target.startswith("darwin-") else "elf"
     architecture = target.split("-")[1]
     linkage = (
@@ -438,14 +438,14 @@ def main(argv: Sequence[str]) -> None:
             )
         write_tsv(
             staged / "candidates.tsv",
-            marker="cbm-release-candidates-v1",
+            marker="lsm-release-candidates-v1",
             metadata=(("targets", len(TARGETS)), ("candidates", len(candidate_rows))),
             fields=CANDIDATE_FIELDS,
             rows=candidate_rows,
         )
         write_tsv(
             staged / "scan-set.tsv",
-            marker="cbm-release-scan-set-v2",
+            marker="lsm-release-scan-set-v2",
             metadata=(("scan_objects", len(candidate_rows)), ("associations", len(candidate_rows))),
             fields=SCAN_SET_FIELDS,
             rows=(
@@ -461,7 +461,7 @@ def main(argv: Sequence[str]) -> None:
         )
         write_tsv(
             staged / "associations.tsv",
-            marker="cbm-release-scan-associations-v3",
+            marker="lsm-release-scan-associations-v3",
             metadata=(
                 ("archives", len(TARGETS)),
                 ("associations", len(candidate_rows)),

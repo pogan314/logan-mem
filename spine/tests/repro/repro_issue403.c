@@ -2,16 +2,16 @@
  * repro_issue403.c -- Reproduce-first case for OPEN bug #403.
  *
  * Issue: #403 -- "The IDE's installation directory is unnecessarily indexed"
- * https://github.com/DeusData/codebase-memory-mcp/issues/403
+ * https://github.com/DeusData/logan-spine-mcp/issues/403
  *
  * Wrongly-indexed directory: AppData/Local/Programs/Antigravity
  *   (the Antigravity IDE install tree; reported name confirmed in issue comments)
  *
  * Root cause (src/discover/discover.c):
- *   cbm_should_skip_dir() (line 339) tests only the BARE directory name
+ *   lsm_should_skip_dir() (line 339) tests only the BARE directory name
  *   (entry->name, the last path component) against ALWAYS_SKIP_DIRS and
  *   FAST_SKIP_DIRS.  None of "AppData", "Local", "Programs", or "Antigravity"
- *   appears in either list.  Therefore cbm_discover() walks straight into the
+ *   appears in either list.  Therefore lsm_discover() walks straight into the
  *   IDE install tree and indexes every source-like file it contains.
  *
  *   There is no install-directory guard at ANY layer:
@@ -20,13 +20,13 @@
  *     - The .gitignore path is only loaded when a .git directory is present
  *       (is_git_repo gate, line 777 of discover.c).  An IDE install dir does
  *       not contain .git, so .gitignore exclusions never fire.
- *     - The cbmignore path (opts->ignore_file or .cbmignore at root) is
+ *     - The lsmignore path (opts->ignore_file or .lsmignore at root) is
  *       similarly absent from an install dir by default.
  *   Result: any source-extension file found under Antigravity/ is returned
  *   as a discovered file, bloating the graph with IDE internals.
  *
  * Expected (correct) behaviour:
- *   When cbm_discover() is called on a directory that contains an
+ *   When lsm_discover() is called on a directory that contains an
  *   "Antigravity" subdirectory (or more generally any IDE install subtree),
  *   files under that subdirectory must NOT appear in the discovered file list.
  *   The correct fix (per the issue owner's comment) is to add "Antigravity"
@@ -35,14 +35,14 @@
  *   an install dir as a project root in the first place.
  *
  * Actual (buggy) behaviour:
- *   cbm_discover() returns files under Antigravity/ as normal discovered
+ *   lsm_discover() returns files under Antigravity/ as normal discovered
  *   files because the bare dirname "Antigravity" is absent from ALWAYS_SKIP_DIRS.
  *
  * Why RED on current code:
  *   The fixture creates a temp dir with:
  *     normal.py           -- a legitimate source file (control: MUST appear)
  *     Antigravity/ide.py  -- sentinel inside the IDE install dir (MUST NOT appear)
- *   cbm_discover() is called on the temp dir.  The loop below asserts that
+ *   lsm_discover() is called on the temp dir.  The loop below asserts that
  *   ide.py is NOT in the result.  On current code "Antigravity" is not skipped,
  *   so ide.py IS discovered and the ASSERT_FALSE fires RED.
  *
@@ -55,7 +55,7 @@
  *   so directories under AppData/Local/Programs are never chosen as repo roots.
  *
  * Exclusion is NOT config-driven in the current code.  The closest knob is a
- * .cbmignore file at the repo root (loaded unconditionally, unlike .gitignore
+ * .lsmignore file at the repo root (loaded unconditionally, unlike .gitignore
  * which requires .git/).  Passing opts->ignore_file also works.  However,
  * neither is set in this test -- we assert on the default behaviour, which is
  * what the bug reporter experiences.
@@ -79,7 +79,7 @@
  *     Antigravity/
  *       ide.py            <- sentinel inside IDE install dir; must NOT appear
  *
- * cbm_discover() is called on <tmpdir> with no opts (NULL) so all default
+ * lsm_discover() is called on <tmpdir> with no opts (NULL) so all default
  * exclusions apply and no extra ignore file is consulted.
  *
  * Control assertion (expected GREEN even on buggy code):
@@ -92,8 +92,8 @@
 TEST(repro_issue403_install_dir_excluded) {
     /* --- set up temp directory --- */
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/cbm_repro403_XXXXXX", cbm_tmpdir());
-    ASSERT_NOT_NULL(cbm_mkdtemp(tmpdir));
+    snprintf(tmpdir, sizeof(tmpdir), "%s/lsm_repro403_XXXXXX", lsm_tmpdir());
+    ASSERT_NOT_NULL(lsm_mkdtemp(tmpdir));
 
     /* Control file: a normal Python source at the repo root. */
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, "normal.py"),
@@ -105,10 +105,10 @@ TEST(repro_issue403_install_dir_excluded) {
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, "Antigravity/ide.py"),
                                "# Antigravity IDE internal module\ndef _internal(): pass\n"));
 
-    /* --- Run discovery (default opts: no .git, no .cbmignore, no opts) --- */
-    cbm_file_info_t *files = NULL;
+    /* --- Run discovery (default opts: no .git, no .lsmignore, no opts) --- */
+    lsm_file_info_t *files = NULL;
     int count = 0;
-    int rc = cbm_discover(tmpdir, NULL, &files, &count);
+    int rc = lsm_discover(tmpdir, NULL, &files, &count);
     ASSERT_EQ(0, rc);
 
     /* --- Scan results --- */
@@ -127,7 +127,7 @@ TEST(repro_issue403_install_dir_excluded) {
         }
     }
 
-    cbm_discover_free(files, count);
+    lsm_discover_free(files, count);
     th_rmtree(tmpdir);
 
     /* Control: normal.py must be discovered -- discovery ran correctly. */
@@ -138,12 +138,12 @@ TEST(repro_issue403_install_dir_excluded) {
      *
      * No file under Antigravity/ may appear in the discovered set.
      * On current code, "Antigravity" is absent from ALWAYS_SKIP_DIRS so
-     * cbm_should_skip_dir("Antigravity", ...) returns false and the walk
+     * lsm_should_skip_dir("Antigravity", ...) returns false and the walk
      * descends into it.  ide.py is discovered, ide_file_found is true, and
      * this ASSERT_FALSE fires RED.
      *
      * After the fix -- "Antigravity" added to ALWAYS_SKIP_DIRS (or an
-     * equivalent install-path exclusion applied) -- cbm_should_skip_dir
+     * equivalent install-path exclusion applied) -- lsm_should_skip_dir
      * returns true, the subtree is skipped, ide_file_found stays false,
      * and this assertion passes GREEN.
      */

@@ -5,30 +5,30 @@
  * One TEST() per language so per-language RED/GREEN shows on the bug-repro
  * board. Each test runs a battery adapted to what the language actually models.
  *
- * Languages covered (15) and the CBM_LANG_* enum each uses (all verified in
- * internal/cbm/cbm.h; none missing, none skipped):
- *   Dockerfile    -> CBM_LANG_DOCKERFILE
- *   Makefile      -> CBM_LANG_MAKEFILE
- *   CMake         -> CBM_LANG_CMAKE
- *   Meson         -> CBM_LANG_MESON
- *   GN            -> CBM_LANG_GN
- *   Just          -> CBM_LANG_JUST
- *   K8s           -> CBM_LANG_K8S
- *   Kustomize     -> CBM_LANG_KUSTOMIZE
- *   GoMod         -> CBM_LANG_GOMOD
- *   Requirements  -> CBM_LANG_REQUIREMENTS
- *   Gitignore     -> CBM_LANG_GITIGNORE
- *   Gitattributes -> CBM_LANG_GITATTRIBUTES
- *   SSHConfig     -> CBM_LANG_SSHCONFIG
- *   BitBake       -> CBM_LANG_BITBAKE
- *   Puppet        -> CBM_LANG_PUPPET
+ * Languages covered (15) and the LSM_LANG_* enum each uses (all verified in
+ * internal/lsm/lsm.h; none missing, none skipped):
+ *   Dockerfile    -> LSM_LANG_DOCKERFILE
+ *   Makefile      -> LSM_LANG_MAKEFILE
+ *   CMake         -> LSM_LANG_CMAKE
+ *   Meson         -> LSM_LANG_MESON
+ *   GN            -> LSM_LANG_GN
+ *   Just          -> LSM_LANG_JUST
+ *   K8s           -> LSM_LANG_K8S
+ *   Kustomize     -> LSM_LANG_KUSTOMIZE
+ *   GoMod         -> LSM_LANG_GOMOD
+ *   Requirements  -> LSM_LANG_REQUIREMENTS
+ *   Gitignore     -> LSM_LANG_GITIGNORE
+ *   Gitattributes -> LSM_LANG_GITATTRIBUTES
+ *   SSHConfig     -> LSM_LANG_SSHCONFIG
+ *   BitBake       -> LSM_LANG_BITBAKE
+ *   Puppet        -> LSM_LANG_PUPPET
  *
- * Langs NOT in CBM_LANG_* (skipped, noted):
+ * Langs NOT in LSM_LANG_* (skipped, noted):
  *   none -- all 15 target languages are present in the enum.
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error).
  *   2. labels-valid    : inv_count_bad_labels(r) == 0
@@ -48,7 +48,7 @@
  *                        MESON (function_expression/command), GN (call_expression),
  *                        JUST (function_call), BITBAKE (call), PUPPET (function_call).
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call).
  *                          Only asserted for languages with BOTH func_types AND
  *                          call_types: JUST, BITBAKE, PUPPET.
@@ -59,7 +59,7 @@
  *   R. extract-on-malformed: the extractor must RETURN (not crash/hang) on
  *      deliberately truncated/broken input. inv_extract_clean may return 0
  *      (has_error is fine) but must not return NULL.
- *      Implemented inline at the end of each TEST via cbm_extract_file directly.
+ *      Implemented inline at the end of each TEST via lsm_extract_file directly.
  *
  * STRUCTURAL BREAKDOWN
  * --------------------
@@ -72,8 +72,8 @@
  *   STRUCTURAL WITH DEFS (dims 1-5 + R):
  *     DOCKERFILE     -- var_types = {env_instruction, arg_instruction} -> "Variable".
  *     GOMOD          -- var_types = {require_directive, replace_directive} -> "Variable".
- *     K8S            -- semantic extractor (cbm_extract_k8s); extracts kind -> "Resource".
- *     KUSTOMIZE      -- semantic extractor (cbm_extract_k8s); extracts kind -> "Resource".
+ *     K8S            -- semantic extractor (lsm_extract_k8s); extracts kind -> "Resource".
+ *     KUSTOMIZE      -- semantic extractor (lsm_extract_k8s); extracts kind -> "Resource".
  *
  *   CALLABLE (dims 1-6 + R, no pipeline):
  *     GN             -- call_types = {call_expression}; no func_types -> no Function def.
@@ -129,7 +129,7 @@
  * Returns 0 on PASS, 1 on FAIL.
  */
 static int build_base_battery(const char *lang_tag, const char *src,
-                              CBMLanguage lang, const char *file) {
+                              LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
@@ -140,7 +140,7 @@ static int build_base_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -173,7 +173,7 @@ static int build_base_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -185,7 +185,7 @@ static int build_base_battery(const char *lang_tag, const char *src,
  * Returns 0 on PASS, 1 on FAIL.
  */
 static int build_struct_battery(const char *lang_tag, const char *src,
-                                CBMLanguage lang, const char *file,
+                                LSMLanguage lang, const char *file,
                                 const char *expect_label,
                                 const char *expect_label2) {
     const char *RED = tf_red();
@@ -198,7 +198,7 @@ static int build_struct_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -245,7 +245,7 @@ static int build_struct_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -257,7 +257,7 @@ static int build_struct_battery(const char *lang_tag, const char *src,
  * Returns 0 on PASS, 1 on FAIL.
  */
 static int build_callable_battery(const char *lang_tag, const char *src,
-                                  CBMLanguage lang, const char *file,
+                                  LSMLanguage lang, const char *file,
                                   const char *expect_label,
                                   const char *callee) {
     const char *RED = tf_red();
@@ -270,7 +270,7 @@ static int build_callable_battery(const char *lang_tag, const char *src,
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -317,7 +317,7 @@ static int build_callable_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -347,7 +347,7 @@ static int build_pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -387,24 +387,24 @@ static int build_pipeline_battery(const char *lang_tag, const char *filename,
 
 /* ── Robustness helper: assert call RETURNS on malformed input ───────────────
  *
- * A truncated version of the fixture is passed through cbm_extract_file.
+ * A truncated version of the fixture is passed through lsm_extract_file.
  * has_error may be set (1) but the call must return non-NULL. If it returns
  * NULL the extractor crashed or aborted on bad input -- that is a RED
  * robustness bug. Returns 0 on PASS, 1 on FAIL.
  */
 static int build_robustness(const char *lang_tag, const char *bad_src,
-                            CBMLanguage lang, const char *file) {
+                            LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
-    CBMFileResult *r = cbm_extract_file(bad_src, (int)strlen(bad_src),
+    LSMFileResult *r = lsm_extract_file(bad_src, (int)strlen(bad_src),
                                         lang, "t", file, 0, NULL, NULL);
     if (!r) {
         printf("  %sFAIL%s  [%s] robustness: extractor returned NULL on malformed input\n",
                RED, RST, lang_tag);
         return 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 
@@ -426,19 +426,19 @@ TEST(repro_grammar_build_dockerfile) {
         "WORKDIR /app\n"
         "ARG VERSION=0.8.1\n"
         "COPY . .\n"
-        "RUN go build -o /cbm-server ./cmd/server\n"
+        "RUN go build -o /lsm-server ./cmd/server\n"
         "\n"
         "FROM debian:bookworm-slim\n"
         "ENV PORT=8080\n"
         "ENV LOG_LEVEL=info\n"
-        "COPY --from=builder /cbm-server /usr/local/bin/cbm-server\n"
+        "COPY --from=builder /lsm-server /usr/local/bin/lsm-server\n"
         "EXPOSE 8080\n"
-        "ENTRYPOINT [\"/usr/local/bin/cbm-server\"]\n";
+        "ENTRYPOINT [\"/usr/local/bin/lsm-server\"]\n";
     static const char bad[] = "FROM golang:1.22 AS\n";
-    if (build_struct_battery("Dockerfile", src, CBM_LANG_DOCKERFILE,
+    if (build_struct_battery("Dockerfile", src, LSM_LANG_DOCKERFILE,
                              "Dockerfile", "Variable", NULL) != 0)
         return 1;
-    return build_robustness("Dockerfile", bad, CBM_LANG_DOCKERFILE, "Dockerfile");
+    return build_robustness("Dockerfile", bad, LSM_LANG_DOCKERFILE, "Dockerfile");
 }
 
 /* ── Makefile ─────────────────────────────────────────────────────────────────
@@ -462,7 +462,7 @@ TEST(repro_grammar_build_dockerfile) {
 TEST(repro_grammar_build_makefile) {
     static const char src[] =
         "VERSION := 0.8.1\n"
-        "BINARY  := cbm-server\n"
+        "BINARY  := lsm-server\n"
         "\n"
         ".PHONY: all build test clean\n"
         "\n"
@@ -480,10 +480,10 @@ TEST(repro_grammar_build_makefile) {
         "\n"
         "DATE := $(shell date +%Y-%m-%d)\n";
     static const char bad[] = "build:\n\tgo build -o ";
-    if (build_callable_battery("Makefile", src, CBM_LANG_MAKEFILE, "Makefile",
+    if (build_callable_battery("Makefile", src, LSM_LANG_MAKEFILE, "Makefile",
                                "Function", "shell") != 0)
         return 1;
-    return build_robustness("Makefile", bad, CBM_LANG_MAKEFILE, "Makefile");
+    return build_robustness("Makefile", bad, LSM_LANG_MAKEFILE, "Makefile");
 }
 
 /* ── CMake ────────────────────────────────────────────────────────────────────
@@ -493,7 +493,7 @@ TEST(repro_grammar_build_makefile) {
  * "Function"), and a call to that function inside the same file.
  *
  * Dims asserted: 1-6 + R.
- * Dim 5 expected GREEN: "Function" def for the function_def "cbm_setup_target".
+ * Dim 5 expected GREEN: "Function" def for the function_def "lsm_setup_target".
  *   RED would indicate function_def->Function extraction is broken.
  * Dim 6 expected GREEN: call to "add_executable" via normal_command.
  *   RED would indicate CMake normal_command call extraction is broken.
@@ -507,23 +507,23 @@ TEST(repro_grammar_build_makefile) {
 TEST(repro_grammar_build_cmake) {
     static const char src[] =
         "cmake_minimum_required(VERSION 3.20)\n"
-        "project(cbm VERSION 0.8.1 LANGUAGES C)\n"
+        "project(lsm VERSION 0.8.1 LANGUAGES C)\n"
         "\n"
         "set(CMAKE_C_STANDARD 11)\n"
         "\n"
-        "function(cbm_setup_target target)\n"
+        "function(lsm_setup_target target)\n"
         "    target_include_directories(${target} PRIVATE include)\n"
         "    target_compile_options(${target} PRIVATE -Wall -Wextra)\n"
         "endfunction()\n"
         "\n"
-        "add_executable(cbm-server src/main.c src/server.c)\n"
-        "cbm_setup_target(cbm-server)\n"
-        "target_link_libraries(cbm-server PRIVATE sqlite3)\n";
+        "add_executable(lsm-server src/main.c src/server.c)\n"
+        "lsm_setup_target(lsm-server)\n"
+        "target_link_libraries(lsm-server PRIVATE sqlite3)\n";
     static const char bad[] = "cmake_minimum_required(VERSION 3.20\n";
-    if (build_callable_battery("CMake", src, CBM_LANG_CMAKE, "CMakeLists.txt",
+    if (build_callable_battery("CMake", src, LSM_LANG_CMAKE, "CMakeLists.txt",
                                "Function", "add_executable") != 0)
         return 1;
-    return build_robustness("CMake", bad, CBM_LANG_CMAKE, "CMakeLists.txt");
+    return build_robustness("CMake", bad, LSM_LANG_CMAKE, "CMakeLists.txt");
 }
 
 /* ── Meson ────────────────────────────────────────────────────────────────────
@@ -536,7 +536,7 @@ TEST(repro_grammar_build_cmake) {
  *
  * Dims asserted: 1-6 + R.
  * Dim 5 expected GREEN: "Function" def for the function_expression assigned to
- *   "cbm_flags". RED would indicate function_expression->Function extraction or
+ *   "lsm_flags". RED would indicate function_expression->Function extraction or
  *   name resolution (from the binding lhs) is broken.
  * Dim 6 expected GREEN: call to "executable" via function_expression or command.
  *   RED would indicate Meson call extraction is broken.
@@ -547,34 +547,34 @@ TEST(repro_grammar_build_cmake) {
  */
 TEST(repro_grammar_build_meson) {
     /* DISABLED — GRAMMAR ISSUE (maintainer-approved, 2026-06-28): the newer Meson
-     * `cbm_flags = func (target) ... endfunc` user-function syntax is not parsed
+     * `lsm_flags = func (target) ... endfunc` user-function syntax is not parsed
      * as a function_expression by tree-sitter-meson (extract_func_def is never
      * called for it; the configured meson func node type is dead for this form),
      * so no Function def is extracted. A grammar/feature-coverage limitation, not
-     * a cbm bug. Original assertions below are preserved (unreachable). */
+     * a lsm bug. Original assertions below are preserved (unreachable). */
     printf("%sSKIP%s grammar issue (meson func...endfunc unsupported)\n", tf_dim(), tf_reset());
     return -1; /* skip — not counted as pass or fail */
     static const char src[] =
-        "project('cbm', 'c',\n"
+        "project('lsm', 'c',\n"
         "    version: '0.8.1',\n"
         "    default_options: ['c_std=c11'])\n"
         "\n"
         "cc = meson.get_compiler('c')\n"
         "\n"
-        "cbm_flags = func (target)\n"
+        "lsm_flags = func (target)\n"
         "    return ['-DVERSION=\"' + target + '\"']\n"
         "endfunc\n"
         "\n"
         "sqlite = dependency('sqlite3')\n"
-        "executable('cbm-server',\n"
+        "executable('lsm-server',\n"
         "    sources: ['src/main.c', 'src/server.c'],\n"
         "    dependencies: [sqlite],\n"
         "    install: true)\n";
-    static const char bad[] = "project('cbm', 'c',\n    version: '0.8.1'";
-    if (build_callable_battery("Meson", src, CBM_LANG_MESON, "meson.build",
+    static const char bad[] = "project('lsm', 'c',\n    version: '0.8.1'";
+    if (build_callable_battery("Meson", src, LSM_LANG_MESON, "meson.build",
                                "Function", "executable") != 0)
         return 1;
-    return build_robustness("Meson", bad, CBM_LANG_MESON, "meson.build");
+    return build_robustness("Meson", bad, LSM_LANG_MESON, "meson.build");
 }
 
 /* ── GN (Generate Ninja) ──────────────────────────────────────────────────────
@@ -591,25 +591,25 @@ TEST(repro_grammar_build_meson) {
  */
 TEST(repro_grammar_build_gn) {
     static const char src[] =
-        "config(\"cbm_config\") {\n"
+        "config(\"lsm_config\") {\n"
         "  include_dirs = [ \"include\" ]\n"
         "  cflags = [ \"-Wall\", \"-Wextra\" ]\n"
         "  defines = [ \"VERSION=\\\"0.8.1\\\"\" ]\n"
         "}\n"
         "\n"
-        "executable(\"cbm-server\") {\n"
+        "executable(\"lsm-server\") {\n"
         "  sources = [\n"
         "    \"src/main.c\",\n"
         "    \"src/server.c\",\n"
         "  ]\n"
-        "  configs += [ \":cbm_config\" ]\n"
+        "  configs += [ \":lsm_config\" ]\n"
         "  deps = [ \"//third_party/sqlite3\" ]\n"
         "}\n";
-    static const char bad[] = "executable(\"cbm-server\") {\n  sources = [";
-    if (build_callable_battery("GN", src, CBM_LANG_GN, "BUILD.gn",
+    static const char bad[] = "executable(\"lsm-server\") {\n  sources = [";
+    if (build_callable_battery("GN", src, LSM_LANG_GN, "BUILD.gn",
                                NULL, "executable") != 0)
         return 1;
-    return build_robustness("GN", bad, CBM_LANG_GN, "BUILD.gn");
+    return build_robustness("GN", bad, LSM_LANG_GN, "BUILD.gn");
 }
 
 /* ── Just ─────────────────────────────────────────────────────────────────────
@@ -636,7 +636,7 @@ TEST(repro_grammar_build_gn) {
 TEST(repro_grammar_build_just) {
     static const char src[] =
         "version := \"0.8.1\"\n"
-        "binary  := \"cbm-server\"\n"
+        "binary  := \"lsm-server\"\n"
         "\n"
         "build:\n"
         "    go build -ldflags \"-X main.version={{version}}\" -o {{binary}} ./cmd/server\n"
@@ -652,24 +652,24 @@ TEST(repro_grammar_build_just) {
         "    just build\n"
         "    just test\n";
     static const char bad[] = "build:\n    go build -o ";
-    if (build_callable_battery("Just", src, CBM_LANG_JUST, "justfile",
+    if (build_callable_battery("Just", src, LSM_LANG_JUST, "justfile",
                                "Function", "build") != 0)
         return 1;
-    if (build_robustness("Just", bad, CBM_LANG_JUST, "justfile") != 0)
+    if (build_robustness("Just", bad, LSM_LANG_JUST, "justfile") != 0)
         return 1;
     return build_pipeline_battery("Just", "justfile", src);
 }
 
 /* ── K8s ──────────────────────────────────────────────────────────────────────
  * Idiomatic Kubernetes manifest with a Deployment (apiVersion: apps/v1,
- * kind: Deployment). The K8s/Kustomize semantic extractor cbm_extract_k8s()
- * is called for CBM_LANG_K8S; it reads the kind field from the YAML tree and
+ * kind: Deployment). The K8s/Kustomize semantic extractor lsm_extract_k8s()
+ * is called for LSM_LANG_K8S; it reads the kind field from the YAML tree and
  * maps it to a def with label "Resource" and qualified_name based on the kind.
  * The grammar itself reuses yaml grammar + yaml_var_types; the semantic layer
  * adds the kind-based "Resource" def.
  *
  * Dims asserted: 1-5 + R ("Resource" for the Deployment kind).
- * Dim 5 expected GREEN: "Resource" def extracted by cbm_extract_k8s for the kind.
+ * Dim 5 expected GREEN: "Resource" def extracted by lsm_extract_k8s for the kind.
  *   RED documents that the K8s semantic extractor is not minting the kind def.
  * Dims 6-8 SKIPPED: no call_types in the K8s spec; no pipeline.
  * Expected GREEN: dims 1-5. Robustness should pass.
@@ -679,43 +679,43 @@ TEST(repro_grammar_build_k8s) {
         "apiVersion: apps/v1\n"
         "kind: Deployment\n"
         "metadata:\n"
-        "  name: cbm-server\n"
+        "  name: lsm-server\n"
         "  namespace: default\n"
         "  labels:\n"
-        "    app: cbm-server\n"
+        "    app: lsm-server\n"
         "spec:\n"
         "  replicas: 2\n"
         "  selector:\n"
         "    matchLabels:\n"
-        "      app: cbm-server\n"
+        "      app: lsm-server\n"
         "  template:\n"
         "    metadata:\n"
         "      labels:\n"
-        "        app: cbm-server\n"
+        "        app: lsm-server\n"
         "    spec:\n"
         "      containers:\n"
-        "        - name: cbm-server\n"
-        "          image: cbm-server:0.8.1\n"
+        "        - name: lsm-server\n"
+        "          image: lsm-server:0.8.1\n"
         "          ports:\n"
         "            - containerPort: 8080\n"
         "          env:\n"
         "            - name: LOG_LEVEL\n"
         "              value: info\n";
     static const char bad[] = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name:";
-    if (build_struct_battery("K8s", src, CBM_LANG_K8S, "deployment.yaml",
+    if (build_struct_battery("K8s", src, LSM_LANG_K8S, "deployment.yaml",
                              "Resource", NULL) != 0)
         return 1;
-    return build_robustness("K8s", bad, CBM_LANG_K8S, "deployment.yaml");
+    return build_robustness("K8s", bad, LSM_LANG_K8S, "deployment.yaml");
 }
 
 /* ── Kustomize ────────────────────────────────────────────────────────────────
  * Idiomatic kustomization.yaml: the Kustomize overlay tool's root file
- * (kind: Kustomization). cbm_extract_k8s() is called for CBM_LANG_KUSTOMIZE
- * just as for CBM_LANG_K8S; it should mint a "Resource" def for the
+ * (kind: Kustomization). lsm_extract_k8s() is called for LSM_LANG_KUSTOMIZE
+ * just as for LSM_LANG_K8S; it should mint a "Resource" def for the
  * "Kustomization" kind, which is the canonical Kustomize resource kind.
  *
  * Dims asserted: 1-5 + R ("Resource" for the Kustomization kind).
- * Dim 5 expected GREEN: "Resource" def for "Kustomization" from cbm_extract_k8s.
+ * Dim 5 expected GREEN: "Resource" def for "Kustomization" from lsm_extract_k8s.
  *   RED documents that the Kustomize path in the semantic extractor is broken.
  * Dims 6-8 SKIPPED: no call_types in the Kustomize spec; no pipeline.
  * Expected GREEN: dims 1-5. Robustness should pass.
@@ -732,7 +732,7 @@ TEST(repro_grammar_build_kustomize) {
         "  - base/service.yaml\n"
         "\n"
         "images:\n"
-        "  - name: cbm-server\n"
+        "  - name: lsm-server\n"
         "    newTag: 0.8.1\n"
         "\n"
         "commonLabels:\n"
@@ -740,15 +740,15 @@ TEST(repro_grammar_build_kustomize) {
         "  version: 0.8.1\n"
         "\n"
         "configMapGenerator:\n"
-        "  - name: cbm-config\n"
+        "  - name: lsm-config\n"
         "    literals:\n"
         "      - LOG_LEVEL=info\n"
         "      - PORT=8080\n";
     static const char bad[] = "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:";
-    if (build_struct_battery("Kustomize", src, CBM_LANG_KUSTOMIZE,
+    if (build_struct_battery("Kustomize", src, LSM_LANG_KUSTOMIZE,
                              "kustomization.yaml", "Resource", NULL) != 0)
         return 1;
-    return build_robustness("Kustomize", bad, CBM_LANG_KUSTOMIZE,
+    return build_robustness("Kustomize", bad, LSM_LANG_KUSTOMIZE,
                             "kustomization.yaml");
 }
 
@@ -766,7 +766,7 @@ TEST(repro_grammar_build_kustomize) {
  */
 TEST(repro_grammar_build_gomod) {
     static const char src[] =
-        "module github.com/DeusData/codebase-memory-mcp\n"
+        "module github.com/DeusData/logan-spine-mcp\n"
         "\n"
         "go 1.22\n"
         "\n"
@@ -780,11 +780,11 @@ TEST(repro_grammar_build_gomod) {
         "    github.com/google/uuid v1.6.0\n"
         "    github.com/stretchr/testify v1.9.0\n"
         ")\n";
-    static const char bad[] = "module github.com/DeusData/codebase-memory-mcp\nrequire (";
-    if (build_struct_battery("GoMod", src, CBM_LANG_GOMOD, "go.mod",
+    static const char bad[] = "module github.com/DeusData/logan-spine-mcp\nrequire (";
+    if (build_struct_battery("GoMod", src, LSM_LANG_GOMOD, "go.mod",
                              "Variable", NULL) != 0)
         return 1;
-    return build_robustness("GoMod", bad, CBM_LANG_GOMOD, "go.mod");
+    return build_robustness("GoMod", bad, LSM_LANG_GOMOD, "go.mod");
 }
 
 /* ── Requirements (pip) ───────────────────────────────────────────────────────
@@ -814,12 +814,12 @@ TEST(repro_grammar_build_requirements) {
         "ruff==0.1.6\n"
         "\n"
         "# URL requirement\n"
-        "cbm-client @ git+https://github.com/DeusData/cbm-client.git@v0.8.1\n";
+        "lsm-client @ git+https://github.com/DeusData/lsm-client.git@v0.8.1\n";
     static const char bad[] = "requests==2.31.0\nbroken>=";
-    if (build_base_battery("Requirements", src, CBM_LANG_REQUIREMENTS,
+    if (build_base_battery("Requirements", src, LSM_LANG_REQUIREMENTS,
                            "requirements.txt") != 0)
         return 1;
-    return build_robustness("Requirements", bad, CBM_LANG_REQUIREMENTS,
+    return build_robustness("Requirements", bad, LSM_LANG_REQUIREMENTS,
                             "requirements.txt");
 }
 
@@ -838,7 +838,7 @@ TEST(repro_grammar_build_requirements) {
 TEST(repro_grammar_build_gitignore) {
     static const char src[] =
         "# Compiled binaries\n"
-        "cbm-server\n"
+        "lsm-server\n"
         "*.exe\n"
         "*.dll\n"
         "\n"
@@ -858,10 +858,10 @@ TEST(repro_grammar_build_gitignore) {
         "# Test coverage\n"
         "coverage.out\n"
         "*.prof\n";
-    static const char bad[] = "cbm-server\n[invalid";
-    if (build_base_battery("Gitignore", src, CBM_LANG_GITIGNORE, ".gitignore") != 0)
+    static const char bad[] = "lsm-server\n[invalid";
+    if (build_base_battery("Gitignore", src, LSM_LANG_GITIGNORE, ".gitignore") != 0)
         return 1;
-    return build_robustness("Gitignore", bad, CBM_LANG_GITIGNORE, ".gitignore");
+    return build_robustness("Gitignore", bad, LSM_LANG_GITIGNORE, ".gitignore");
 }
 
 /* ── .gitattributes ───────────────────────────────────────────────────────────
@@ -894,12 +894,12 @@ TEST(repro_grammar_build_gitattributes) {
         "\n"
         "# Linguist overrides\n"
         "vendor/** linguist-vendored\n"
-        "internal/cbm/vendored/** linguist-vendored\n";
+        "internal/lsm/vendored/** linguist-vendored\n";
     static const char bad[] = "* text=auto eol=lf\n*.go [broken";
-    if (build_base_battery("Gitattributes", src, CBM_LANG_GITATTRIBUTES,
+    if (build_base_battery("Gitattributes", src, LSM_LANG_GITATTRIBUTES,
                            ".gitattributes") != 0)
         return 1;
-    return build_robustness("Gitattributes", bad, CBM_LANG_GITATTRIBUTES,
+    return build_robustness("Gitattributes", bad, LSM_LANG_GITATTRIBUTES,
                             ".gitattributes");
 }
 
@@ -924,7 +924,7 @@ TEST(repro_grammar_build_sshconfig) {
         "    IdentityFile ~/.ssh/id_ed25519_github\n"
         "    AddKeysToAgent yes\n"
         "\n"
-        "Host cbm-prod\n"
+        "Host lsm-prod\n"
         "    HostName 10.0.0.42\n"
         "    User deploy\n"
         "    IdentityFile ~/.ssh/id_ed25519_prod\n"
@@ -936,9 +936,9 @@ TEST(repro_grammar_build_sshconfig) {
         "    ControlMaster auto\n"
         "    ControlPath ~/.ssh/cm-%r@%h:%p\n";
     static const char bad[] = "Host github.com\n    HostName github.com\n    User git\n    IdentityFile";
-    if (build_base_battery("SSHConfig", src, CBM_LANG_SSHCONFIG, "config") != 0)
+    if (build_base_battery("SSHConfig", src, LSM_LANG_SSHCONFIG, "config") != 0)
         return 1;
-    return build_robustness("SSHConfig", bad, CBM_LANG_SSHCONFIG, "config");
+    return build_robustness("SSHConfig", bad, LSM_LANG_SSHCONFIG, "config");
 }
 
 /* ── BitBake ──────────────────────────────────────────────────────────────────
@@ -970,12 +970,12 @@ TEST(repro_grammar_build_bitbake) {
     printf("%sSKIP%s rare language (BitBake call extraction)\n", tf_dim(), tf_reset());
     return -1; /* skip — not counted as pass or fail */
     static const char src[] =
-        "DESCRIPTION = \"CBM MCP server component\"\n"
-        "HOMEPAGE    = \"https://github.com/DeusData/codebase-memory-mcp\"\n"
+        "DESCRIPTION = \"LSM MCP server component\"\n"
+        "HOMEPAGE    = \"https://github.com/DeusData/logan-spine-mcp\"\n"
         "LICENSE     = \"MIT\"\n"
         "PV          = \"0.8.1\"\n"
         "\n"
-        "SRC_URI = \"git://github.com/DeusData/codebase-memory-mcp.git;protocol=https\"\n"
+        "SRC_URI = \"git://github.com/DeusData/logan-spine-mcp.git;protocol=https\"\n"
         "\n"
         "do_fetch() {\n"
         "    git clone ${SRC_URI} ${S}\n"
@@ -988,21 +988,21 @@ TEST(repro_grammar_build_bitbake) {
         "}\n"
         "\n"
         "do_compile() {\n"
-        "    go build -o ${B}/cbm-server ./cmd/server\n"
+        "    go build -o ${B}/lsm-server ./cmd/server\n"
         "}\n"
         "\n"
         "do_install() {\n"
         "    install -d ${D}${bindir}\n"
-        "    install -m 0755 ${B}/cbm-server ${D}${bindir}/\n"
+        "    install -m 0755 ${B}/lsm-server ${D}${bindir}/\n"
         "}\n";
-    static const char bad[] = "DESCRIPTION = \"CBM\"\ndo_fetch() {\n    git clone ";
-    if (build_callable_battery("BitBake", src, CBM_LANG_BITBAKE,
-                               "cbm-server_0.8.1.bb", "Function", "subprocess") != 0)
+    static const char bad[] = "DESCRIPTION = \"LSM\"\ndo_fetch() {\n    git clone ";
+    if (build_callable_battery("BitBake", src, LSM_LANG_BITBAKE,
+                               "lsm-server_0.8.1.bb", "Function", "subprocess") != 0)
         return 1;
-    if (build_robustness("BitBake", bad, CBM_LANG_BITBAKE,
-                         "cbm-server_0.8.1.bb") != 0)
+    if (build_robustness("BitBake", bad, LSM_LANG_BITBAKE,
+                         "lsm-server_0.8.1.bb") != 0)
         return 1;
-    return build_pipeline_battery("BitBake", "cbm-server_0.8.1.bb", src);
+    return build_pipeline_battery("BitBake", "lsm-server_0.8.1.bb", src);
 }
 
 /* ── Puppet ───────────────────────────────────────────────────────────────────
@@ -1013,13 +1013,13 @@ TEST(repro_grammar_build_bitbake) {
  * (puppet_call_types = {"function_call", "resource_declaration"}).
  *
  * Dims asserted: 1-8 (full battery).
- * Dim 5 expected GREEN: "Function" def for the function_declaration "cbm_validate"
- *   AND "Class" def for the class_definition "cbm". RED for either label
+ * Dim 5 expected GREEN: "Function" def for the function_declaration "lsm_validate"
+ *   AND "Class" def for the class_definition "lsm". RED for either label
  *   documents that class_definition->Class or function_declaration->Function
  *   extraction is broken.
  * Dim 6 expected GREEN: call to "include" via function_call node.
  *   RED documents the Puppet function_call extraction gap.
- * Dim 7 expected GREEN for calls inside function_declaration "cbm_validate"
+ * Dim 7 expected GREEN for calls inside function_declaration "lsm_validate"
  *   body (the enclosing-func walk should resolve to the Function node).
  *   May be RED for resource_declaration call sites which have no enclosing
  *   function_declaration parent -- those calls will be module-sourced.
@@ -1035,35 +1035,35 @@ TEST(repro_grammar_build_puppet) {
     printf("%sSKIP%s rare language (Puppet enclosing-func)\n", tf_dim(), tf_reset());
     return -1; /* skip — not counted as pass or fail */
     static const char src[] =
-        "class cbm (\n"
+        "class lsm (\n"
         "  String $version  = '0.8.1',\n"
         "  Integer $port    = 8080,\n"
         "  String $log_level = 'info',\n"
         ") {\n"
-        "  include cbm::install\n"
-        "  include cbm::config\n"
-        "  include cbm::service\n"
+        "  include lsm::install\n"
+        "  include lsm::config\n"
+        "  include lsm::service\n"
         "}\n"
         "\n"
-        "define cbm::port_config (\n"
+        "define lsm::port_config (\n"
         "  Integer $port,\n"
         ") {\n"
-        "  file { '/etc/cbm/port.conf':\n"
+        "  file { '/etc/lsm/port.conf':\n"
         "    content => \"port=${port}\\n\",\n"
         "  }\n"
         "}\n"
         "\n"
-        "function cbm_validate(String $version) >> Boolean {\n"
+        "function lsm_validate(String $version) >> Boolean {\n"
         "  $parts = split($version, /\\./ )\n"
         "  length($parts) == 3\n"
         "}\n";
-    static const char bad[] = "class cbm (\n  String $version = '0.8.1',\n) {\n  include";
-    if (build_callable_battery("Puppet", src, CBM_LANG_PUPPET, "cbm.pp",
+    static const char bad[] = "class lsm (\n  String $version = '0.8.1',\n) {\n  include";
+    if (build_callable_battery("Puppet", src, LSM_LANG_PUPPET, "lsm.pp",
                                "Function", "include") != 0)
         return 1;
-    if (build_robustness("Puppet", bad, CBM_LANG_PUPPET, "cbm.pp") != 0)
+    if (build_robustness("Puppet", bad, LSM_LANG_PUPPET, "lsm.pp") != 0)
         return 1;
-    return build_pipeline_battery("Puppet", "cbm.pp", src);
+    return build_pipeline_battery("Puppet", "lsm.pp", src);
 }
 
 /* ── Suite ───────────────────────────────────────────────────────────────────── */

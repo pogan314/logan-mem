@@ -1,8 +1,8 @@
 /*
  * test_path_alias.c -- Tests for build-tool path alias resolution.
  *
- * Covers the in-memory resolver (cbm_path_alias_resolve), the
- * directory-scoped collection lookup (cbm_path_alias_find_for_file),
+ * Covers the in-memory resolver (lsm_path_alias_resolve), the
+ * directory-scoped collection lookup (lsm_path_alias_find_for_file),
  * and the resource-cap behaviour. Filesystem-based loading is exercised
  * indirectly via the integration test that builds a tmp tsconfig tree.
  */
@@ -19,10 +19,10 @@
 
 /* Build a path alias map programmatically (no file I/O), respecting the
  * specificity ordering invariant the loader establishes via qsort. */
-static cbm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
-    cbm_path_alias_map_t *map = calloc(1, sizeof(*map));
+static lsm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
+    lsm_path_alias_map_t *map = calloc(1, sizeof(*map));
     map->base_url = base_url ? strdup(base_url) : NULL;
-    map->entries = calloc((size_t)count, sizeof(cbm_path_alias_t));
+    map->entries = calloc((size_t)count, sizeof(lsm_path_alias_t));
     map->count = count;
 
     va_list args;
@@ -34,7 +34,7 @@ static cbm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
         if (star) {
             map->entries[i].has_wildcard = true;
             map->entries[i].alias_prefix =
-                cbm_strndup(alias_pattern, (size_t)(star - alias_pattern));
+                lsm_strndup(alias_pattern, (size_t)(star - alias_pattern));
             map->entries[i].alias_suffix = strdup(star + 1);
         } else {
             map->entries[i].has_wildcard = false;
@@ -44,7 +44,7 @@ static cbm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
         const char *tstar = strchr(target_pattern, '*');
         if (tstar) {
             map->entries[i].target_prefix =
-                cbm_strndup(target_pattern, (size_t)(tstar - target_pattern));
+                lsm_strndup(target_pattern, (size_t)(tstar - target_pattern));
             map->entries[i].target_suffix = strdup(tstar + 1);
         } else {
             map->entries[i].target_prefix = strdup(target_pattern);
@@ -59,7 +59,7 @@ static cbm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
             size_t li = strlen(map->entries[i].alias_prefix);
             size_t lj = strlen(map->entries[j].alias_prefix);
             if (lj > li) {
-                cbm_path_alias_t tmp = map->entries[i];
+                lsm_path_alias_t tmp = map->entries[i];
                 map->entries[i] = map->entries[j];
                 map->entries[j] = tmp;
             }
@@ -71,7 +71,7 @@ static cbm_path_alias_map_t *make_map(const char *base_url, int count, ...) {
 /* The map produced by make_map() owns all heap memory the same way the
  * loader does, so the public free routine on the wrapping collection
  * works equivalently — but tests build naked maps, so use this helper. */
-static void free_map(cbm_path_alias_map_t *map) {
+static void free_map(lsm_path_alias_map_t *map) {
     if (!map) {
         return;
     }
@@ -89,8 +89,8 @@ static void free_map(cbm_path_alias_map_t *map) {
 /* ── Basic wildcard alias ──────────────────────────────────────── */
 
 TEST(path_alias_at_wildcard) {
-    cbm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
-    char *r = cbm_path_alias_resolve(m, "@/lib/auth");
+    lsm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
+    char *r = lsm_path_alias_resolve(m, "@/lib/auth");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/lib/auth");
     free(r);
@@ -99,8 +99,8 @@ TEST(path_alias_at_wildcard) {
 }
 
 TEST(path_alias_at_nested) {
-    cbm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
-    char *r = cbm_path_alias_resolve(m, "@/components/Button");
+    lsm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
+    char *r = lsm_path_alias_resolve(m, "@/components/Button");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/components/Button");
     free(r);
@@ -112,14 +112,14 @@ TEST(path_alias_at_nested) {
 
 TEST(path_alias_specificity_longest_first) {
     // @/lib/* must beat @/* even though @/* would also match.
-    cbm_path_alias_map_t *m =
+    lsm_path_alias_map_t *m =
         make_map(NULL, 2, "@/*", "src/*", "@/lib/*", "src/shared/lib/*");
-    char *r = cbm_path_alias_resolve(m, "@/lib/auth");
+    char *r = lsm_path_alias_resolve(m, "@/lib/auth");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/shared/lib/auth");
     free(r);
     /* Non-/lib paths still match the broader rule. */
-    char *r2 = cbm_path_alias_resolve(m, "@/components/X");
+    char *r2 = lsm_path_alias_resolve(m, "@/components/X");
     ASSERT_NOT_NULL(r2);
     ASSERT_STR_EQ(r2, "src/components/X");
     free(r2);
@@ -130,13 +130,13 @@ TEST(path_alias_specificity_longest_first) {
 /* ── Exact match (no wildcard) ─────────────────────────────────── */
 
 TEST(path_alias_exact_match) {
-    cbm_path_alias_map_t *m = make_map(NULL, 1, "@app/config", "src/config/index");
-    char *r = cbm_path_alias_resolve(m, "@app/config");
+    lsm_path_alias_map_t *m = make_map(NULL, 1, "@app/config", "src/config/index");
+    char *r = lsm_path_alias_resolve(m, "@app/config");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/config/index");
     free(r);
     /* Anything else under @app/ should not match. */
-    char *miss = cbm_path_alias_resolve(m, "@app/other");
+    char *miss = lsm_path_alias_resolve(m, "@app/other");
     ASSERT_NULL(miss);
     free_map(m);
     PASS();
@@ -145,8 +145,8 @@ TEST(path_alias_exact_match) {
 /* ── Extension stripping ───────────────────────────────────────── */
 
 TEST(path_alias_strips_ext) {
-    cbm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*.ts");
-    char *r = cbm_path_alias_resolve(m, "@/lib/auth");
+    lsm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*.ts");
+    char *r = lsm_path_alias_resolve(m, "@/lib/auth");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/lib/auth");
     free(r);
@@ -157,14 +157,14 @@ TEST(path_alias_strips_ext) {
 /* ── baseUrl fallback for non-relative, non-package imports ────── */
 
 TEST(path_alias_baseurl_fallback) {
-    cbm_path_alias_map_t *m = make_map("src", 0);
+    lsm_path_alias_map_t *m = make_map("src", 0);
     /* Looks like a sub-path → resolve against baseUrl. */
-    char *r = cbm_path_alias_resolve(m, "lib/auth");
+    char *r = lsm_path_alias_resolve(m, "lib/auth");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "src/lib/auth");
     free(r);
     /* Bare package name → not a baseUrl candidate. */
-    char *miss = cbm_path_alias_resolve(m, "react");
+    char *miss = lsm_path_alias_resolve(m, "react");
     ASSERT_NULL(miss);
     free_map(m);
     PASS();
@@ -173,12 +173,12 @@ TEST(path_alias_baseurl_fallback) {
 /* ── NULL safety ───────────────────────────────────────────────── */
 
 TEST(path_alias_null_safety) {
-    ASSERT_NULL(cbm_path_alias_resolve(NULL, "anything"));
-    cbm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
-    ASSERT_NULL(cbm_path_alias_resolve(m, NULL));
+    ASSERT_NULL(lsm_path_alias_resolve(NULL, "anything"));
+    lsm_path_alias_map_t *m = make_map(NULL, 1, "@/*", "src/*");
+    ASSERT_NULL(lsm_path_alias_resolve(m, NULL));
     free_map(m);
     /* Free of NULL collection is a no-op, not a crash. */
-    cbm_path_alias_collection_free(NULL);
+    lsm_path_alias_collection_free(NULL);
     PASS();
 }
 
@@ -188,8 +188,8 @@ TEST(path_alias_find_for_file_nearest_ancestor) {
     /* Build a synthetic collection by hand: two scopes, "" (root) and
      * "apps/manager". A file inside apps/manager/src/... must pick the
      * deeper scope; a file under packages/utils must fall back to root. */
-    cbm_path_alias_collection_t *coll = calloc(1, sizeof(*coll));
-    coll->scopes = calloc(2, sizeof(cbm_path_alias_scope_t));
+    lsm_path_alias_collection_t *coll = calloc(1, sizeof(*coll));
+    coll->scopes = calloc(2, sizeof(lsm_path_alias_scope_t));
     coll->count = 2;
 
     /* Order matters: most specific first (loader does this via qsort). */
@@ -199,19 +199,19 @@ TEST(path_alias_find_for_file_nearest_ancestor) {
     coll->scopes[1].dir_prefix = strdup("");
     coll->scopes[1].map = make_map(NULL, 1, "@root/*", "shared/*");
 
-    const cbm_path_alias_map_t *m1 =
-        cbm_path_alias_find_for_file(coll, "apps/manager/src/lib/auth.ts");
+    const lsm_path_alias_map_t *m1 =
+        lsm_path_alias_find_for_file(coll, "apps/manager/src/lib/auth.ts");
     ASSERT_NOT_NULL(m1);
     ASSERT_EQ(m1->count, 1);
     ASSERT_STR_EQ(m1->entries[0].alias_prefix, "@/");
 
-    const cbm_path_alias_map_t *m2 =
-        cbm_path_alias_find_for_file(coll, "packages/utils/index.ts");
+    const lsm_path_alias_map_t *m2 =
+        lsm_path_alias_find_for_file(coll, "packages/utils/index.ts");
     ASSERT_NOT_NULL(m2);
     ASSERT_EQ(m2->count, 1);
     ASSERT_STR_EQ(m2->entries[0].alias_prefix, "@root/");
 
-    cbm_path_alias_collection_free(coll);
+    lsm_path_alias_collection_free(coll);
     PASS();
 }
 
@@ -230,15 +230,15 @@ static int write_file(const char *path, const char *content) {
 
 TEST(path_alias_loader_monorepo) {
     char tmpl[256];
-    snprintf(tmpl, sizeof(tmpl), "/tmp/cbm_palias_XXXXXX");
-    char *root = cbm_mkdtemp(tmpl);
+    snprintf(tmpl, sizeof(tmpl), "/tmp/lsm_palias_XXXXXX");
+    char *root = lsm_mkdtemp(tmpl);
     ASSERT_NOT_NULL(root);
 
     char sub[512];
     snprintf(sub, sizeof(sub), "%s/apps", root);
-    cbm_mkdir(sub);
+    lsm_mkdir(sub);
     snprintf(sub, sizeof(sub), "%s/apps/manager", root);
-    cbm_mkdir(sub);
+    lsm_mkdir(sub);
 
     char path[512];
     snprintf(path, sizeof(path), "%s/tsconfig.json", root);
@@ -252,29 +252,29 @@ TEST(path_alias_loader_monorepo) {
                          "    \"paths\": {\n      \"@/*\": [\"./src/*\"]\n    }\n  },\n}\n"),
               0);
 
-    cbm_path_alias_collection_t *coll = cbm_load_path_aliases(root);
+    lsm_path_alias_collection_t *coll = lsm_load_path_aliases(root);
     ASSERT_NOT_NULL(coll);
     ASSERT_EQ(coll->count, 2);
 
     /* sub-package file picks up its own tsconfig. */
-    const cbm_path_alias_map_t *m =
-        cbm_path_alias_find_for_file(coll, "apps/manager/src/feature/x.ts");
+    const lsm_path_alias_map_t *m =
+        lsm_path_alias_find_for_file(coll, "apps/manager/src/feature/x.ts");
     ASSERT_NOT_NULL(m);
-    char *r = cbm_path_alias_resolve(m, "@/lib/auth");
+    char *r = lsm_path_alias_resolve(m, "@/lib/auth");
     ASSERT_NOT_NULL(r);
     /* Target paths in the sub-tsconfig are dir_prefix-relative. */
     ASSERT_STR_EQ(r, "apps/manager/src/lib/auth");
     free(r);
 
     /* Root file falls back to the root tsconfig's aliases. */
-    const cbm_path_alias_map_t *m2 = cbm_path_alias_find_for_file(coll, "scripts/build.ts");
+    const lsm_path_alias_map_t *m2 = lsm_path_alias_find_for_file(coll, "scripts/build.ts");
     ASSERT_NOT_NULL(m2);
-    char *r2 = cbm_path_alias_resolve(m2, "@root/utils");
+    char *r2 = lsm_path_alias_resolve(m2, "@root/utils");
     ASSERT_NOT_NULL(r2);
     ASSERT_STR_EQ(r2, "shared/utils");
     free(r2);
 
-    cbm_path_alias_collection_free(coll);
+    lsm_path_alias_collection_free(coll);
 
     /* Cleanup tmp tree. */
     snprintf(path, sizeof(path), "%s/apps/manager/tsconfig.json", root);
@@ -293,15 +293,15 @@ TEST(path_alias_loader_monorepo) {
 
 TEST(path_alias_loader_monorepo_dotdot_climb) {
     char tmpl[256];
-    snprintf(tmpl, sizeof(tmpl), "/tmp/cbm_palias_climb_XXXXXX");
-    char *root = cbm_mkdtemp(tmpl);
+    snprintf(tmpl, sizeof(tmpl), "/tmp/lsm_palias_climb_XXXXXX");
+    char *root = lsm_mkdtemp(tmpl);
     ASSERT_NOT_NULL(root);
 
     char sub[512];
     snprintf(sub, sizeof(sub), "%s/apps", root);
-    cbm_mkdir(sub);
+    lsm_mkdir(sub);
     snprintf(sub, sizeof(sub), "%s/apps/web", root);
-    cbm_mkdir(sub);
+    lsm_mkdir(sub);
 
     char path[512];
     snprintf(path, sizeof(path), "%s/apps/web/tsconfig.json", root);
@@ -311,20 +311,20 @@ TEST(path_alias_loader_monorepo_dotdot_climb) {
                          "    }\n  }\n}\n"),
               0);
 
-    cbm_path_alias_collection_t *coll = cbm_load_path_aliases(root);
+    lsm_path_alias_collection_t *coll = lsm_load_path_aliases(root);
     ASSERT_NOT_NULL(coll);
 
-    const cbm_path_alias_map_t *m =
-        cbm_path_alias_find_for_file(coll, "apps/web/src/feature/x.ts");
+    const lsm_path_alias_map_t *m =
+        lsm_path_alias_find_for_file(coll, "apps/web/src/feature/x.ts");
     ASSERT_NOT_NULL(m);
-    char *r = cbm_path_alias_resolve(m, "@shared/utils");
+    char *r = lsm_path_alias_resolve(m, "@shared/utils");
     ASSERT_NOT_NULL(r);
     /* "../.." from apps/web climbs to repo root, then descends into
      * packages/shared/src — not the literal (unmatchable) "apps/web/../../..." */
     ASSERT_STR_EQ(r, "packages/shared/src/utils");
     free(r);
 
-    cbm_path_alias_collection_free(coll);
+    lsm_path_alias_collection_free(coll);
 
     snprintf(path, sizeof(path), "%s/apps/web/tsconfig.json", root);
     unlink(path);
@@ -343,13 +343,13 @@ TEST(path_alias_loader_monorepo_dotdot_climb) {
  * exclusion assertion below cannot pass vacuously. */
 TEST(path_alias_loader_honors_discovery_exclusions) {
     char tmpl[256];
-    snprintf(tmpl, sizeof(tmpl), "/tmp/cbm_palias_excl_XXXXXX");
-    char *root = cbm_mkdtemp(tmpl);
+    snprintf(tmpl, sizeof(tmpl), "/tmp/lsm_palias_excl_XXXXXX");
+    char *root = lsm_mkdtemp(tmpl);
     ASSERT_NOT_NULL(root);
 
     char sub[512];
     snprintf(sub, sizeof(sub), "%s/big_generated", root);
-    cbm_mkdir(sub);
+    lsm_mkdir(sub);
 
     char path[512];
     snprintf(path, sizeof(path), "%s/tsconfig.json", root);
@@ -364,23 +364,23 @@ TEST(path_alias_loader_honors_discovery_exclusions) {
               0);
 
     /* Control: the unexcluded loader collects BOTH configs. */
-    cbm_path_alias_collection_t *coll = cbm_load_path_aliases(root);
+    lsm_path_alias_collection_t *coll = lsm_load_path_aliases(root);
     ASSERT_NOT_NULL(coll);
     ASSERT_EQ(coll->count, 2);
-    cbm_path_alias_collection_free(coll);
+    lsm_path_alias_collection_free(coll);
 
     /* Excluding big_generated drops its config; the root one survives. */
     char *excluded[] = {(char *)"big_generated"};
-    coll = cbm_load_path_aliases_excluded(root, excluded, 1);
+    coll = lsm_load_path_aliases_excluded(root, excluded, 1);
     ASSERT_NOT_NULL(coll);
     ASSERT_EQ(coll->count, 1);
-    const cbm_path_alias_map_t *m = cbm_path_alias_find_for_file(coll, "src/x.ts");
+    const lsm_path_alias_map_t *m = lsm_path_alias_find_for_file(coll, "src/x.ts");
     ASSERT_NOT_NULL(m);
-    char *r = cbm_path_alias_resolve(m, "@root/utils");
+    char *r = lsm_path_alias_resolve(m, "@root/utils");
     ASSERT_NOT_NULL(r);
     ASSERT_STR_EQ(r, "shared/utils");
     free(r);
-    cbm_path_alias_collection_free(coll);
+    lsm_path_alias_collection_free(coll);
 
     snprintf(path, sizeof(path), "%s/big_generated/tsconfig.json", root);
     unlink(path);
@@ -396,11 +396,11 @@ TEST(path_alias_loader_honors_discovery_exclusions) {
 
 TEST(path_alias_loader_no_configs) {
     char tmpl[256];
-    snprintf(tmpl, sizeof(tmpl), "/tmp/cbm_palias_empty_XXXXXX");
-    char *root = cbm_mkdtemp(tmpl);
+    snprintf(tmpl, sizeof(tmpl), "/tmp/lsm_palias_empty_XXXXXX");
+    char *root = lsm_mkdtemp(tmpl);
     ASSERT_NOT_NULL(root);
 
-    cbm_path_alias_collection_t *coll = cbm_load_path_aliases(root);
+    lsm_path_alias_collection_t *coll = lsm_load_path_aliases(root);
     ASSERT_NULL(coll);
 
     rmdir(root);

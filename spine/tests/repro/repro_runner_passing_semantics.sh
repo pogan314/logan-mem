@@ -11,7 +11,7 @@ if [[ ! -x "$RUNNER" ]]; then
 fi
 
 set +e
-output="$(CBM_REPRO_ONLY=repro_runner_filter "$RUNNER" 2>&1)"
+output="$(LSM_REPRO_ONLY=repro_runner_filter "$RUNNER" 2>&1)"
 status=$?
 set -e
 

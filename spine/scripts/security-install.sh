@@ -21,9 +21,9 @@ echo "=== Layer 4: Install Output Audit ==="
 
 # shellcheck source=test-runtime.sh
 source "$(dirname "${BASH_SOURCE[0]}")/test-runtime.sh"
-cbm_test_runtime_init
-TMPDIR="$CBM_TEST_RUNTIME_ROOT"
-trap 'cbm_test_runtime_cleanup "$BINARY"' EXIT
+lsm_test_runtime_init
+TMPDIR="$LSM_TEST_RUNTIME_ROOT"
+trap 'lsm_test_runtime_cleanup "$BINARY"' EXIT
 
 # Set HOME to tmpdir so install writes there instead of real home
 export HOME="$TMPDIR/home"
@@ -56,7 +56,7 @@ find "$HOME" -type f > "$TMPDIR/created_files.txt" 2>/dev/null || true
 #   .claude/settings.json
 #   .continue/config.yaml
 #   .codeium/config.json
-#   .local/bin/codebase-memory-mcp
+#   .local/bin/logan-spine-mcp
 #   Various agent config dirs
 
 EXPECTED_PATTERNS=(

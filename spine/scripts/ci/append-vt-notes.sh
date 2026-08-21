@@ -9,7 +9,7 @@ set -euo pipefail
 VT_CANDIDATES="${VT_CANDIDATES:-release-candidates.tsv}"
 VT_RESULTS_PATH="${VT_RESULTS_PATH:-virustotal-candidate-results.tsv}"
 RELEASE_SELECTION="${RELEASE_SELECTION:-release-selection.tsv}"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/cbm-vt-notes.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/lsm-vt-notes.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 gh release view "$VERSION" --json body --jq '.body // ""' \
@@ -26,8 +26,8 @@ import sys
 import urllib.parse
 
 
-START = "<!-- cbm-security-verification:start -->"
-END = "<!-- cbm-security-verification:end -->"
+START = "<!-- lsm-security-verification:start -->"
+END = "<!-- lsm-security-verification:end -->"
 TARGETS = (
     "linux-amd64",
     "linux-arm64",
@@ -106,13 +106,13 @@ if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository) is None or not v
     fail("unsafe repository or version")
 
 candidate_meta, candidates = read_tsv(
-    candidates_path, "cbm-release-candidates-v1", CANDIDATE_FIELDS
+    candidates_path, "lsm-release-candidates-v1", CANDIDATE_FIELDS
 )
 result_meta, results = read_tsv(
-    results_path, "cbm-virustotal-results-v2", RESULT_FIELDS
+    results_path, "lsm-virustotal-results-v2", RESULT_FIELDS
 )
 selection_meta, selections = read_tsv(
-    selection_path, "cbm-release-selection-v1", SELECTION_FIELDS
+    selection_path, "lsm-release-selection-v1", SELECTION_FIELDS
 )
 expected_pairs = [(target, variant) for target in TARGETS for variant in VARIANTS]
 if candidate_meta != {"targets": str(len(TARGETS)), "candidates": str(len(TARGETS) * len(VARIANTS))}:
@@ -214,7 +214,7 @@ asset_base = (
 # Release notes report the SHIPPED binary and nothing else.
 #
 # Several candidates per product are scanned so the selector has an alternative
-# when an opaque classifier flags one of them, but a reader installing cbm cares
+# when an opaque classifier flags one of them, but a reader installing lsm cares
 # about the bytes they receive, not about the ones we discarded. The rejected
 # candidates' verdicts stay in the published evidence TSVs for anyone auditing
 # the selection, and they matter to US in development as a signal; they are

@@ -3,7 +3,7 @@
 This document defines how maintainer responsibility, review routing, and
 operational authority work in this project.
 
-codebase-memory-mcp is currently a user-owned repository. Because GitHub teams
+logan-spine-mcp is currently a user-owned repository. Because GitHub teams
 are not available here, all delegated ownership is expressed with individual
 GitHub handles.
 
@@ -36,14 +36,14 @@ review areas for future co-maintainers.
 | MCP protocol and tool surface | `src/mcp/`, `tests/test_mcp.c` | TBD | `@DeusData` |
 | CLI, install, update, editor integration | `src/cli/`, `src/git/`, `install.sh`, `install.ps1`, `tests/test_cli.c` | TBD | `@DeusData` |
 | Indexing pipeline and graph construction | `src/pipeline/`, `src/discover/`, `src/watcher/`, `tests/test_pipeline.c`, `tests/test_incremental.c` | TBD | `@DeusData` |
-| Language extraction and LSP resolution | `internal/cbm/`, `tools/`, `tests/test_*_lsp.c`, `tests/test_extraction.c`, `tests/test_grammar_*.c` | TBD | `@DeusData` |
+| Language extraction and LSP resolution | `internal/lsm/`, `tools/`, `tests/test_*_lsp.c`, `tests/test_extraction.c`, `tests/test_grammar_*.c` | TBD | `@DeusData` |
 | Store, query, and graph buffers | `src/store/`, `src/cypher/`, `src/graph_buffer/`, `src/simhash/`, `src/semantic/`, `tests/test_store_*.c`, `tests/test_cypher.c` | TBD | `@DeusData` |
 | Foundation/runtime portability | `src/foundation/`, `vendored/`, `tests/test_*` foundation coverage | TBD | `@DeusData` |
 | Graph UI backend and frontend | `src/ui/`, `graph-ui/`, `tests/test_ui.c`, `tests/test_httpd.c` | TBD | `@DeusData` |
 | Tests, repro, smoke, and soak infrastructure | `tests/`, `tests/repro/`, `test-infrastructure/`, `scripts/test.sh`, `scripts/smoke-test.sh`, `scripts/soak-test.sh` | TBD | `@DeusData` |
 | Packaging and distribution | `pkg/`, `install.sh`, `install.ps1`, `server.json`, `glama.json`, `flake.nix`, `flake.lock`, `THIRD_PARTY.md`, `scripts/gen-third-party-notices.sh`, `scripts/gen-ui-licenses.py`, release archive contents | TBD | `@DeusData` |
 | Security and supply chain | `SECURITY.md`, `docs/SECURITY-DISCLOSURE.md`, `scripts/security-*`, `scripts/*license*`, `scripts/*allowlist*`, `.github/workflows/codeql.yml`, `.github/workflows/scorecard.yml` | `@DeusData` only initially | `@DeusData` |
-| CI and release operations | `.github/workflows/`, `scripts/ci/`, `Makefile.cbm` | `@DeusData` only initially | `@DeusData` |
+| CI and release operations | `.github/workflows/`, `scripts/ci/`, `Makefile.lsm` | `@DeusData` only initially | `@DeusData` |
 | Governance and contribution policy | `.github/CODEOWNERS`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `DCO`, `LICENSE`, `.github/pull_request_template.md`, issue templates | `@DeusData` only initially | `@DeusData` |
 
 ## Operational Authority

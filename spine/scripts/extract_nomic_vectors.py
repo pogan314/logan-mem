@@ -280,14 +280,14 @@ def write_tokens_h(path: str, tokens: list):
     """Write C header with token string array."""
     with open(path, "w") as f:
         f.write(f"/* nomic-embed-code token vocabulary — {len(tokens)} tokens. */\n")
-        f.write("#ifndef CBM_NOMIC_TOKENS_H\n")
-        f.write("#define CBM_NOMIC_TOKENS_H\n\n")
+        f.write("#ifndef LSM_NOMIC_TOKENS_H\n")
+        f.write("#define LSM_NOMIC_TOKENS_H\n\n")
         f.write(f"static const char *PRETRAINED_TOKENS[{len(tokens)}] = {{\n")
         for t in tokens:
             escaped = t.replace("\\", "\\\\").replace('"', '\\"')
             f.write(f'"{escaped}",\n')
         f.write("};\n\n")
-        f.write("#endif /* CBM_NOMIC_TOKENS_H */\n")
+        f.write("#endif /* LSM_NOMIC_TOKENS_H */\n")
     print(f"  {path}: written")
 
 
@@ -305,8 +305,8 @@ def write_vectors_h(path: str, token_count: int, dim: int, incbin_path: str):
  * Source: https://huggingface.co/nomic-ai/nomic-embed-code
  * License: Apache 2.0
  */
-#ifndef CBM_NOMIC_VECTORS_H
-#define CBM_NOMIC_VECTORS_H
+#ifndef LSM_NOMIC_VECTORS_H
+#define LSM_NOMIC_VECTORS_H
 
 #include <stdint.h>
 
@@ -326,7 +326,7 @@ static inline const int8_t *pretrained_vec_at(int i) {{
 /* Token strings (separate header to keep this file clean). */
 #include "code_tokens.h"
 
-#endif /* CBM_NOMIC_VECTORS_H */
+#endif /* LSM_NOMIC_VECTORS_H */
 """)
     print(f"  {path}: written")
 
@@ -519,9 +519,9 @@ def main():
     print("=" * 60)
     print()
     print("next steps:")
-    print(f"  1. update Makefile.cbm: change UNIXCODER_BLOB_SRC path to vendored/nomic/")
+    print(f"  1. update Makefile.lsm: change UNIXCODER_BLOB_SRC path to vendored/nomic/")
     print(f"  2. update #include in semantic.c: \"vendored/nomic/code_vectors.h\"")
-    print(f"  3. arch -arm64 make -j12 -f Makefile.cbm clean-c && arch -arm64 make -j12 -f Makefile.cbm")
+    print(f"  3. arch -arm64 make -j12 -f Makefile.lsm clean-c && arch -arm64 make -j12 -f Makefile.lsm")
 
 
 if __name__ == "__main__":

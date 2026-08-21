@@ -30,9 +30,9 @@ Environment:
   SMOKE_ARCH      arm64 (default) | amd64 — selects the served artifact name.
                   Phase 15's "no assets" SKIP becomes a FAILURE, so a standard
                   binary cannot pass a ui run.
-  CBM_SMOKE_ARTIFACT_DIR
+  LSM_SMOKE_ARTIFACT_DIR
                   Release mode: an EXTRACTED windows release artifact
-                  (codebase-memory-mcp.exe + LICENSE + install.ps1 +
+                  (logan-spine-mcp.exe + LICENSE + install.ps1 +
                   THIRD_PARTY_NOTICES.md). All four are required and served
                   verbatim — an incomplete archive fails the smoke.
                   Unset (default): stages the freshly built binary out of
@@ -54,17 +54,17 @@ ROOT="$PWD"
 # venue smokes the bytes it is about to publish rather than a local rebuild of
 # them. Requiring the sidecars here also makes an incomplete archive a smoke
 # failure instead of a discovery made after publishing.
-ARTIFACT_DIR="${CBM_SMOKE_ARTIFACT_DIR:-}"
+ARTIFACT_DIR="${LSM_SMOKE_ARTIFACT_DIR:-}"
 if [ -n "$ARTIFACT_DIR" ]; then
     ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd)"
-    for required in codebase-memory-mcp.exe \
+    for required in logan-spine-mcp.exe \
         LICENSE install.ps1 THIRD_PARTY_NOTICES.md; do
         [ -s "$ARTIFACT_DIR/$required" ] ||
             { echo "vm-smoke: release artifact is missing $required" >&2; exit 2; }
     done
-    BINARY_SRC="$ARTIFACT_DIR/codebase-memory-mcp.exe"
+    BINARY_SRC="$ARTIFACT_DIR/logan-spine-mcp.exe"
 else
-    BINARY_SRC="build/c/codebase-memory-mcp.exe"
+    BINARY_SRC="build/c/logan-spine-mcp.exe"
     [ -x "$BINARY_SRC" ] || { echo "build first; missing $BINARY_SRC" >&2; exit 2; }
 fi
 
@@ -81,7 +81,7 @@ esac
 REQUIRE_UI="${SMOKE_REQUIRE_UI:-0}"
 
 PROFILE_ROOT="$(cygpath -u "$USERPROFILE")"
-SMOKE_DIR="$(mktemp -d "$PROFILE_ROOT/cbm-vm-smoke.XXXXXX")"
+SMOKE_DIR="$(mktemp -d "$PROFILE_ROOT/lsm-vm-smoke.XXXXXX")"
 FIXTURE_DIR="$SMOKE_DIR/artifacts"
 SMOKE_HOME="$SMOKE_DIR/home"
 SMOKE_XDG_CONFIG="$SMOKE_DIR/xdg-config"
@@ -139,8 +139,8 @@ MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -ExecutionPolicy Bypass \
     -RunId "$PATH_RUN_ID" \
     -SnapshotPath "$(cygpath -w "$PATH_SNAPSHOT")" \
     -SmokeRoot "$(cygpath -w "$SMOKE_DIR")"
-cp "$BINARY_SRC" "$SMOKE_DIR/codebase-memory-mcp.exe"
-cp "$SMOKE_DIR/codebase-memory-mcp.exe" "$FIXTURE_DIR/"
+cp "$BINARY_SRC" "$SMOKE_DIR/logan-spine-mcp.exe"
+cp "$SMOKE_DIR/logan-spine-mcp.exe" "$FIXTURE_DIR/"
 # The install/update phases fetch these out of the served archive, so they must
 # be the artifact's own copies whenever one was supplied — regenerating them
 # here would smoke a sidecar the release never ships.
@@ -153,11 +153,11 @@ else
 fi
 
 # Member set + ORDER mirror scripts/package-release.sh (Windows).
-EXPECTED_ARTIFACT="codebase-memory-mcp-windows-${SMOKE_ARCH}.zip"
+EXPECTED_ARTIFACT="logan-spine-mcp-windows-${SMOKE_ARCH}.zip"
 (
     cd "$FIXTURE_DIR"
     zip -q "$EXPECTED_ARTIFACT" \
-        codebase-memory-mcp.exe LICENSE install.ps1 THIRD_PARTY_NOTICES.md
+        logan-spine-mcp.exe LICENSE install.ps1 THIRD_PARTY_NOTICES.md
     sha256sum *.zip > checksums.txt
 )
 
@@ -217,11 +217,11 @@ env \
     -u VIBE_HOME \
     -u GLAB_CONFIG_DIR \
     -u KIMI_CODE_HOME \
-    -u CBM_CONTINUE_CONFIG_PATH \
-    -u CBM_TRAE_CONFIG_PATH \
-    -u CBM_ROO_CONFIG_PATH \
-    -u CBM_CODY_CONFIG_PATH \
-    -u CBM_TEST_WINDOWS_USER_PATH_RUN_ID \
+    -u LSM_CONTINUE_CONFIG_PATH \
+    -u LSM_TRAE_CONFIG_PATH \
+    -u LSM_ROO_CONFIG_PATH \
+    -u LSM_CODY_CONFIG_PATH \
+    -u LSM_TEST_WINDOWS_USER_PATH_RUN_ID \
     HOME="$(cygpath -m "$SMOKE_HOME")" \
     USERPROFILE="$(cygpath -m "$SMOKE_HOME")" \
     XDG_CONFIG_HOME="$(cygpath -m "$SMOKE_XDG_CONFIG")" \
@@ -231,14 +231,14 @@ env \
     TEMP="$(cygpath -m "$SMOKE_TEMP_DIR")" \
     TMP="$(cygpath -m "$SMOKE_TEMP_DIR")" \
     SHELL="/usr/bin/bash" \
-    CBM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")" \
-    CBM_TEST_WINDOWS_USER_PATH_RUN_ID="$PATH_RUN_ID" \
+    LSM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")" \
+    LSM_TEST_WINDOWS_USER_PATH_RUN_ID="$PATH_RUN_ID" \
     SMOKE_TEMP_ROOT="$SMOKE_DIR" \
     SMOKE_DOWNLOAD_URL="http://127.0.0.1:$PORT" \
     SMOKE_UPDATE_FIXTURE_DIR="$FIXTURE_DIR" \
     SMOKE_ARCH="$SMOKE_ARCH" \
     SMOKE_REQUIRE_UI="$REQUIRE_UI" \
-    scripts/smoke-test.sh "$SMOKE_DIR/codebase-memory-mcp.exe"
+    scripts/smoke-test.sh "$SMOKE_DIR/logan-spine-mcp.exe"
 
 MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile -ExecutionPolicy Bypass \
     -File "$(cygpath -w "$PATH_GUARD")" \

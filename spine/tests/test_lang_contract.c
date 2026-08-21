@@ -18,7 +18,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "grammar_cases.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
@@ -40,7 +40,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } LangProj;
 
 typedef struct {
@@ -53,7 +53,7 @@ typedef struct {
  * Split out of lang_index_files so a caller can interpose between writing files
  * and indexing (e.g. the FILE_CHANGES_WITH test git-inits + commits first). */
 
-/* Normalize backslashes to forward slashes in place. cbm_mkdtemp on Windows
+/* Normalize backslashes to forward slashes in place. lsm_mkdtemp on Windows
  * (msys2) yields a native path with backslashes (e.g. D:\a\_temp\...); those
  * break the JSON repo_path ("\a"/"\t" are invalid JSON escapes → index fails →
  * count=-1) and produce mixed-separator paths in git -C args. Forward slashes
@@ -66,17 +66,17 @@ static void lc_to_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *lang_open_indexed(LangProj *lp) {
+static lsm_store_t *lang_open_indexed(LangProj *lp) {
     /* Freed before reassigning: a fixture that indexes more than once would
      * otherwise drop the previous heap name on the floor. Teardown frees the
      * last one. */
     free(lp->project);
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) {
         return NULL;
     }
     char cache_dir[512];
-    const char *configured_cache = getenv("CBM_CACHE_DIR");
+    const char *configured_cache = getenv("LSM_CACHE_DIR");
     if (configured_cache && configured_cache[0]) {
         snprintf(cache_dir, sizeof(cache_dir), "%s", configured_cache);
     } else {
@@ -84,31 +84,31 @@ static cbm_store_t *lang_open_indexed(LangProj *lp) {
         if (!home) {
             home = "/tmp";
         }
-        snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
+        snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
     }
-    cbm_mkdir_p(cache_dir, 0755);
+    lsm_mkdir_p(cache_dir, 0755);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) {
         return NULL;
     }
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) {
         free(resp);
     }
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
 /* Write each fixture file into a fresh temp project, index it via the MCP
  * production flow (discover -> extract -> registry -> resolve -> dump), and open
  * the resulting graph DB. Returns the store (NULL on any failure). */
-static cbm_store_t *lang_index_files(LangProj *lp, const LangFile *files, int nfiles) {
+static lsm_store_t *lang_index_files(LangProj *lp, const LangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_lc_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) {
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_lc_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) {
         return NULL;
     }
     lc_to_fwd_slashes(lp->tmpdir);
@@ -121,7 +121,7 @@ static cbm_store_t *lang_index_files(LangProj *lp, const LangFile *files, int nf
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         /* Binary mode: keep fixture line endings exactly as written ("\n").
@@ -139,17 +139,17 @@ static cbm_store_t *lang_index_files(LangProj *lp, const LangFile *files, int nf
 }
 
 /* Convenience: index a single fixture file. */
-static cbm_store_t *lang_index(LangProj *lp, const char *filename, const char *content) {
+static lsm_store_t *lang_index(LangProj *lp, const char *filename, const char *content) {
     LangFile f = {filename, content};
     return lang_index_files(lp, &f, 1);
 }
 
-static void lang_cleanup(LangProj *lp, cbm_store_t *store) {
+static void lang_cleanup(LangProj *lp, lsm_store_t *store) {
     if (store) {
-        cbm_store_close(store);
+        lsm_store_close(store);
     }
     if (lp->srv) {
-        cbm_mcp_server_free(lp->srv);
+        lsm_mcp_server_free(lp->srv);
         lp->srv = NULL;
     }
     free(lp->project);
@@ -165,46 +165,46 @@ static void lang_cleanup(LangProj *lp, cbm_store_t *store) {
 }
 
 /* Count nodes of `label` with >=1 outbound edge. Returns -1 on query error. */
-static int label_with_outbound(cbm_store_t *store, const char *project, const char *label) {
-    cbm_search_params_t p = {0};
+static int label_with_outbound(lsm_store_t *store, const char *project, const char *label) {
+    lsm_search_params_t p = {0};
     p.project = project;
     p.label = label;
     p.min_degree = 1;
     p.max_degree = -1;
     p.limit = 50;
-    cbm_search_output_t out = {0};
+    lsm_search_output_t out = {0};
     int n = -1;
-    if (cbm_store_search(store, &p, &out) == CBM_STORE_OK) {
+    if (lsm_store_search(store, &p, &out) == LSM_STORE_OK) {
         n = out.count;
     }
-    cbm_store_search_free(&out);
+    lsm_store_search_free(&out);
     return n;
 }
 
 /* Callables (Function OR Method) that have >=1 outbound edge — the cross-language
  * "calls are attributed to the calling routine, not lumped on the file/Module
  * node" invariant (a mis-attributed call would leave the callable at degree 0). */
-static int callables_with_outbound(cbm_store_t *store, const char *project) {
+static int callables_with_outbound(lsm_store_t *store, const char *project) {
     int fn = label_with_outbound(store, project, "Function");
     int mt = label_with_outbound(store, project, "Method");
     return (fn < 0 ? 0 : fn) + (mt < 0 ? 0 : mt);
 }
 
 /* Count nodes carrying `label`. Returns -1 on query error. */
-static int count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK) {
         return -1;
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Count "type-like" nodes across the labels different languages use for a
  * user-defined type (class/struct/interface/enum/trait/type alias). Lets a
  * contract assert "the type was modeled" without hard-coding one label. */
-static int type_like_nodes(cbm_store_t *store, const char *project) {
+static int type_like_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class", "Struct", "Interface", "Enum", "Trait", "Type", NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -216,7 +216,7 @@ static int type_like_nodes(cbm_store_t *store, const char *project) {
     return total;
 }
 
-/* Run cbm_extract_file in a forked child; return true if the child died from a
+/* Run lsm_extract_file in a forked child; return true if the child died from a
  * signal (SIGBUS/SIGSEGV/...). ASan does not install a SIGBUS handler, so an
  * in-process crash would terminate the whole test runner — forking isolates it
  * and lets us assert "extraction must not crash" deterministically.
@@ -224,12 +224,12 @@ static int type_like_nodes(cbm_store_t *store, const char *project) {
  * Windows (msys2) has no fork()/waitpid(): run in-process. A genuine crash there
  * aborts the runner (a hard, visible failure), and the fork-isolated check still
  * runs on the POSIX CI legs, so coverage is preserved. */
-static bool extract_crashes(const char *content, CBMLanguage lang, const char *relpath) {
+static bool extract_crashes(const char *content, LSMLanguage lang, const char *relpath) {
 #if defined(_WIN32)
-    CBMFileResult *r =
-        cbm_extract_file(content, (int)strlen(content), lang, "lc", relpath, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(content, (int)strlen(content), lang, "lc", relpath, 0, NULL, NULL);
     if (r) {
-        cbm_free_result(r);
+        lsm_free_result(r);
     }
     return false;
 #else
@@ -239,10 +239,10 @@ static bool extract_crashes(const char *content, CBMLanguage lang, const char *r
         return false; /* cannot fork — do not flag a crash we can't observe */
     }
     if (pid == 0) {
-        CBMFileResult *r =
-            cbm_extract_file(content, (int)strlen(content), lang, "lc", relpath, 0, NULL, NULL);
+        LSMFileResult *r =
+            lsm_extract_file(content, (int)strlen(content), lang, "lc", relpath, 0, NULL, NULL);
         if (r) {
-            cbm_free_result(r);
+            lsm_free_result(r);
         }
         _exit(0);
     }
@@ -259,7 +259,7 @@ static bool extract_crashes(const char *content, CBMLanguage lang, const char *r
 /* Kotlin 0-IMPORTS bug — ROOT CAUSE: extraction layer. The Kotlin AST nests
  * imports as source_file -> import_list -> import_header*, but the extractor
  * matched the "import" keyword token as a direct child of root -> 0 imports.
- * This probe asserts cbm_extract_file captures them; it is the precise, reliable
+ * This probe asserts lsm_extract_file captures them; it is the precise, reliable
  * reproduction + fix-verification (graph-layer IMPORTS-edge formation depends on
  * Maven/Gradle module resolution and is verified on the real ktor repo in the
  * P5 scale tier — a synthetic small fixture can't faithfully exercise it). */
@@ -273,11 +273,11 @@ static const char *KT_SRC = "import kotlin.io.path.Path\n"
                             "}\n";
 
 TEST(contract_kotlin_imports_extracted) {
-    CBMFileResult *r =
-        cbm_extract_file(KT_SRC, (int)strlen(KT_SRC), CBM_LANG_KOTLIN, "lc", "a.kt", 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(KT_SRC, (int)strlen(KT_SRC), LSM_LANG_KOTLIN, "lc", "a.kt", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* 2 imports in the fixture */
     PASS();
 }
@@ -292,8 +292,8 @@ static const char *C_SRC = "static int helper(int x) { return x + 1; }\n"
 
 TEST(contract_c_calls_attributed_to_function) {
     LangProj lp;
-    cbm_store_t *store = lang_index(&lp, "a.c", C_SRC);
-    int calls = store ? cbm_store_count_edges_by_type(store, lp.project, "CALLS") : -1;
+    lsm_store_t *store = lang_index(&lp, "a.c", C_SRC);
+    int calls = store ? lsm_store_count_edges_by_type(store, lp.project, "CALLS") : -1;
     int fn_callers = store ? callables_with_outbound(store, lp.project) : -1;
     lang_cleanup(&lp, store);
     ASSERT_TRUE(calls >= 1);      /* run() -> helper() */
@@ -325,7 +325,7 @@ static const char *JAVA_SRC = "package zip;\n"
                               "}\n";
 
 TEST(contract_java_extract_no_crash) {
-    bool crashed = extract_crashes(JAVA_SRC, CBM_LANG_JAVA, "Tracker.java");
+    bool crashed = extract_crashes(JAVA_SRC, LSM_LANG_JAVA, "Tracker.java");
     ASSERT_TRUE(!crashed); /* CURRENTLY MAY FAIL: SIGBUS in the Java LSP */
     PASS();
 }
@@ -348,14 +348,14 @@ typedef struct {
 
 static LangMetrics lang_metrics(const LangFile *files, int nfiles) {
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, files, nfiles);
+    lsm_store_t *store = lang_index_files(&lp, files, nfiles);
     LangMetrics m = {0};
     if (store) {
         m.ok = 1;
-        m.calls = cbm_store_count_edges_by_type(store, lp.project, "CALLS");
+        m.calls = lsm_store_count_edges_by_type(store, lp.project, "CALLS");
         m.callers = callables_with_outbound(store, lp.project);
         m.types = type_like_nodes(store, lp.project);
-        m.imports = cbm_store_count_edges_by_type(store, lp.project, "IMPORTS");
+        m.imports = lsm_store_count_edges_by_type(store, lp.project, "IMPORTS");
     }
     lang_cleanup(&lp, store);
     return m;
@@ -468,18 +468,18 @@ TEST(contract_python_aliased_from_import_calls) {
          "from .gate import execute as bridge_execute\n\n\n"
          "def submit_task(y):\n    return bridge_execute(y)\n"}};
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, f, 2);
+    lsm_store_t *store = lang_index_files(&lp, f, 2);
     ASSERT_TRUE(store != NULL);
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int ncount = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
+              LSM_STORE_OK);
     ASSERT_TRUE(ncount >= 1);
     char **callers = NULL;
     char **callees = NULL;
     int n_callers = 0;
     int n_callees = 0;
-    ASSERT_EQ(cbm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
+    ASSERT_EQ(lsm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
                                             &n_callees),
               0);
     int saw_execute = 0;
@@ -500,7 +500,7 @@ TEST(contract_python_aliased_from_import_calls) {
     }
     free(callers);
     free(callees);
-    cbm_store_free_nodes(nodes, ncount);
+    lsm_store_free_nodes(nodes, ncount);
     lang_cleanup(&lp, store);
     ASSERT_TRUE(saw_execute);
     ASSERT_FALSE(saw_alias_ghost);
@@ -518,18 +518,18 @@ TEST(contract_python_absolute_aliased_from_import_calls) {
          "def submit_task(y):\n    return bridge_execute(y)\n"},
         {"services/__init__.py", ""}};
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, f, 5);
+    lsm_store_t *store = lang_index_files(&lp, f, 5);
     ASSERT_TRUE(store != NULL);
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int ncount = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
+              LSM_STORE_OK);
     ASSERT_TRUE(ncount >= 1);
     char **callers = NULL;
     char **callees = NULL;
     int n_callers = 0;
     int n_callees = 0;
-    ASSERT_EQ(cbm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
+    ASSERT_EQ(lsm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
                                             &n_callees),
               0);
     int saw_execute = 0;
@@ -550,7 +550,7 @@ TEST(contract_python_absolute_aliased_from_import_calls) {
     }
     free(callers);
     free(callees);
-    cbm_store_free_nodes(nodes, ncount);
+    lsm_store_free_nodes(nodes, ncount);
     lang_cleanup(&lp, store);
     ASSERT_TRUE(saw_execute);
     ASSERT_FALSE(saw_alias_ghost);
@@ -564,18 +564,18 @@ TEST(contract_python_ghost_module_aliased_from_import_no_calls) {
          "from ghost_module import nope as alias\n\n\n"
          "def submit_task(y):\n    return alias(y)\n"}};
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, f, 1);
+    lsm_store_t *store = lang_index_files(&lp, f, 1);
     ASSERT_TRUE(store != NULL);
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int ncount = 0;
-    ASSERT_EQ(cbm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_find_nodes_by_name(store, lp.project, "submit_task", &nodes, &ncount),
+              LSM_STORE_OK);
     ASSERT_TRUE(ncount >= 1);
     char **callers = NULL;
     char **callees = NULL;
     int n_callers = 0;
     int n_callees = 0;
-    ASSERT_EQ(cbm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
+    ASSERT_EQ(lsm_store_node_neighbor_names(store, nodes[0].id, 32, &callers, &n_callers, &callees,
                                             &n_callees),
               0);
     int saw_any_callee = 0;
@@ -592,7 +592,7 @@ TEST(contract_python_ghost_module_aliased_from_import_no_calls) {
     }
     free(callers);
     free(callees);
-    cbm_store_free_nodes(nodes, ncount);
+    lsm_store_free_nodes(nodes, ncount);
     lang_cleanup(&lp, store);
     ASSERT_FALSE(saw_any_callee);
     PASS();
@@ -647,10 +647,10 @@ static bool grammar_graph_allowlisted(const char *name) {
 
 /* Non-structural node count for a file (excludes the File/Module/Folder/Package
  * wrappers the pipeline always creates) — i.e. how many defs reached the graph. */
-static int def_nodes_for_file(cbm_store_t *store, const char *project, const char *rel) {
-    cbm_node_t *nodes = NULL;
+static int def_nodes_for_file(lsm_store_t *store, const char *project, const char *rel) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_file(store, project, rel, &nodes, &count) != CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_file(store, project, rel, &nodes, &count) != LSM_STORE_OK) {
         return -1;
     }
     int defs = 0;
@@ -661,7 +661,7 @@ static int def_nodes_for_file(cbm_store_t *store, const char *project, const cha
             defs++;
         }
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count == 0 ? -1 : defs; /* -1 signals "file not indexed at all" */
 }
 
@@ -669,52 +669,52 @@ static int def_nodes_for_file(cbm_store_t *store, const char *project, const cha
  * timeout) yield defs, and what node labels did the pipeline actually create for
  * the file? Distinguishes "extraction itself broke" from "extraction works but
  * the def didn't reach the graph / got an unexpected label". */
-static void breadth_diag(cbm_store_t *store, const char *project, const char *rel,
+static void breadth_diag(lsm_store_t *store, const char *project, const char *rel,
                          const GrammarCase *c) {
-    CBMFileResult *dr =
-        cbm_extract_file(c->src, (int)strlen(c->src), c->lang, "lc", c->path, 0, NULL, NULL);
+    LSMFileResult *dr =
+        lsm_extract_file(c->src, (int)strlen(c->src), c->lang, "lc", c->path, 0, NULL, NULL);
     int direct = dr ? dr->defs.count : -1;
     const char *direct_label = (dr && dr->defs.count > 0) ? dr->defs.items[0].label : "-";
     char labels[256] = {0};
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_file(store, project, rel, &nodes, &count) == CBM_STORE_OK) {
+    if (lsm_store_find_nodes_by_file(store, project, rel, &nodes, &count) == LSM_STORE_OK) {
         for (int i = 0; i < count && strlen(labels) < sizeof(labels) - 40; i++) {
             char one[48];
             snprintf(one, sizeof(one), "%s ", nodes[i].label ? nodes[i].label : "?");
             strncat(labels, one, sizeof(labels) - strlen(labels) - 1);
         }
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     fprintf(stderr, "      └─ direct_extract_defs=%d (label0=%s)  graph_labels=[%s]\n", direct,
             direct_label ? direct_label : "(null)", labels);
     if (dr) {
-        cbm_free_result(dr);
+        lsm_free_result(dr);
     }
 }
 
 TEST(contract_all_grammars_in_graph) {
-    int n = (int)CBM_GRAMMAR_CASES_COUNT;
+    int n = (int)LSM_GRAMMAR_CASES_COUNT;
     if (n > GRAMMAR_BREADTH_MAX) {
         n = GRAMMAR_BREADTH_MAX;
     }
     static char names[GRAMMAR_BREADTH_MAX][GRAMMAR_PATH_BUF];
     LangFile files[GRAMMAR_BREADTH_MAX] = {0}; /* zero-init: GCC -Werror=maybe-uninitialized */
     for (int i = 0; i < n; i++) {
-        snprintf(names[i], sizeof(names[i]), "g%03d/%s", i, CBM_GRAMMAR_CASES[i].path);
+        snprintf(names[i], sizeof(names[i]), "g%03d/%s", i, LSM_GRAMMAR_CASES[i].path);
         files[i].name = names[i];
-        files[i].content = CBM_GRAMMAR_CASES[i].src;
+        files[i].content = LSM_GRAMMAR_CASES[i].src;
     }
 
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, files, n);
-    int total_nodes = store ? cbm_store_count_nodes(store, lp.project) : -1;
+    lsm_store_t *store = lang_index_files(&lp, files, n);
+    int total_nodes = store ? lsm_store_count_nodes(store, lp.project) : -1;
 
     int not_indexed = 0;
     int below_min = 0;
     int checked = 0;
     for (int i = 0; i < n; i++) {
-        const GrammarCase *c = &CBM_GRAMMAR_CASES[i];
+        const GrammarCase *c = &LSM_GRAMMAR_CASES[i];
         if (grammar_graph_allowlisted(c->name)) {
             continue;
         }
@@ -1023,14 +1023,14 @@ static const char *ALL_EDGE_TYPES[] = {"CALLS",
                                        "ASYNC_CALLS",
                                        NULL};
 
-static void dump_edge_histogram(cbm_store_t *store, const char *project) {
+static void dump_edge_histogram(lsm_store_t *store, const char *project) {
     if (!store) {
         fprintf(stderr, "      └─ (no graph DB)\n");
         return;
     }
     char line[640] = {0};
     for (int i = 0; ALL_EDGE_TYPES[i]; i++) {
-        int c = cbm_store_count_edges_by_type(store, project, ALL_EDGE_TYPES[i]);
+        int c = lsm_store_count_edges_by_type(store, project, ALL_EDGE_TYPES[i]);
         if (c > 0 && strlen(line) < sizeof(line) - 48) {
             char one[64];
             snprintf(one, sizeof(one), "%s=%d ", ALL_EDGE_TYPES[i], c);
@@ -1044,8 +1044,8 @@ static void dump_edge_histogram(cbm_store_t *store, const char *project) {
  * On failure, dump the full edge histogram so a regression is diagnosable. */
 static int edge_present(const LangFile *files, int nfiles, const char *edge, int floor) {
     LangProj lp;
-    cbm_store_t *store = lang_index_files(&lp, files, nfiles);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, edge) : -1;
+    lsm_store_t *store = lang_index_files(&lp, files, nfiles);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, edge) : -1;
     if (got < floor) {
         fprintf(stderr, "  [EDGE] FAIL %-20s count=%d expected>=%d\n", edge, got, floor);
         dump_edge_histogram(store, lp.project);
@@ -1342,8 +1342,8 @@ TEST(contract_edge_imports_alias_no_phantom_folder_edge_issue767) {
         {"src/lib/thing.ts", "export const Thing = {};\n"},
         {"src/consumer.ts", "import { ClientC } from '@lib/external-pkg';\n\n"
                             "export function useClient() {\n  return new ClientC();\n}\n"}};
-    cbm_store_t *store = lang_index_files(&lp, f, 3);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
+    lsm_store_t *store = lang_index_files(&lp, f, 3);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
     if (got != 0) {
         fprintf(stderr, "  [EDGE] FAIL IMPORTS count=%d expected=0 (phantom Folder edge)\n", got);
     }
@@ -1370,21 +1370,21 @@ TEST(contract_edge_imports_alias_resolves_real_file_issue767) {
 
 /* True if a CALLS edge exists whose source QN ends with `src_suffix` and
  * target QN ends with `tgt_suffix`. */
-static int calls_edge_between(cbm_store_t *store, const char *project, const char *src_suffix,
+static int calls_edge_between(lsm_store_t *store, const char *project, const char *src_suffix,
                               const char *tgt_suffix) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int n = 0;
-    if (cbm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) != CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) != LSM_STORE_OK)
         return 0;
     int found = 0;
     size_t ssl = strlen(src_suffix);
     size_t tsl = strlen(tgt_suffix);
     for (int i = 0; i < n && !found; i++) {
-        cbm_node_t s, t;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &s) != CBM_STORE_OK)
+        lsm_node_t s, t;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &s) != LSM_STORE_OK)
             continue;
-        if (cbm_store_find_node_by_id(store, edges[i].target_id, &t) != CBM_STORE_OK) {
-            cbm_node_free_fields(&s);
+        if (lsm_store_find_node_by_id(store, edges[i].target_id, &t) != LSM_STORE_OK) {
+            lsm_node_free_fields(&s);
             continue;
         }
         const char *sq = s.qualified_name;
@@ -1396,10 +1396,10 @@ static int calls_edge_between(cbm_store_t *store, const char *project, const cha
                 strcmp(tq + tql - tsl, tgt_suffix) == 0)
                 found = 1;
         }
-        cbm_node_free_fields(&s);
-        cbm_node_free_fields(&t);
+        lsm_node_free_fields(&s);
+        lsm_node_free_fields(&t);
     }
-    cbm_store_free_edges(edges, n);
+    lsm_store_free_edges(edges, n);
     return found;
 }
 
@@ -1409,11 +1409,11 @@ static int calls_edge_between(cbm_store_t *store, const char *project, const cha
  * route matcher's root-service heuristic otherwise attaches every handler
  * of an ambiguous "/" route to each junk URL (HANDLES churn on plain
  * pallets/flask). */
-static int count_infra_routes_matching(cbm_store_t *store, const char *project,
+static int count_infra_routes_matching(lsm_store_t *store, const char *project,
                                        const char *substr) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, "Route", &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, "Route", &nodes, &count) != LSM_STORE_OK)
         return -1;
     int hits = 0;
     for (int i = 0; i < count; i++) {
@@ -1422,7 +1422,7 @@ static int count_infra_routes_matching(cbm_store_t *store, const char *project,
             strstr(qn, substr))
             hits++;
     }
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return hits;
 }
 
@@ -1456,7 +1456,7 @@ TEST(contract_edge_no_infra_routes_from_ci_configs_issue999) {
                                      "    steps:\n"
                                      "      - uses: actions/checkout@v4\n"
                                      "      - run: curl https://coverage.example.io/upload\n"}};
-    cbm_store_t *store = lang_index_files(&lp, f, 3);
+    lsm_store_t *store = lang_index_files(&lp, f, 3);
     ASSERT_NOT_NULL(store);
     /* No tooling URL may materialize as an infra Route node. */
     int gh_routes = count_infra_routes_matching(store, lp.project, "github.com");
@@ -1483,7 +1483,7 @@ TEST(contract_edge_infra_routes_from_deploy_configs_still_minted) {
                            "  - name: nightly-sync\n"
                            "    schedule: \"0 3 * * *\"\n"
                            "    push_endpoint: https://sync.internal.example/api/v1/sync\n"}};
-    cbm_store_t *store = lang_index_files(&lp, f, 1);
+    lsm_store_t *store = lang_index_files(&lp, f, 1);
     ASSERT_NOT_NULL(store);
     int routes = count_infra_routes_matching(store, lp.project, "sync.internal.example");
     if (routes < 1) {
@@ -1499,17 +1499,17 @@ TEST(contract_edge_infra_routes_from_deploy_configs_still_minted) {
 
 /* True if some CALLS edge's TARGET node carries `label` and a QN ending with
  * `qn_suffix` — i.e. the call resolved to that specific definition. */
-static int calls_edge_targets(cbm_store_t *store, const char *project, const char *label,
+static int calls_edge_targets(lsm_store_t *store, const char *project, const char *label,
                               const char *qn_suffix) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int n = 0;
-    if (cbm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) != CBM_STORE_OK)
+    if (lsm_store_find_edges_by_type(store, project, "CALLS", &edges, &n) != LSM_STORE_OK)
         return 0;
     int found = 0;
     size_t sl = strlen(qn_suffix);
     for (int i = 0; i < n && !found; i++) {
-        cbm_node_t tgt;
-        if (cbm_store_find_node_by_id(store, edges[i].target_id, &tgt) != CBM_STORE_OK)
+        lsm_node_t tgt;
+        if (lsm_store_find_node_by_id(store, edges[i].target_id, &tgt) != LSM_STORE_OK)
             continue;
         const char *qn = tgt.qualified_name;
         if (qn && tgt.label && strcmp(tgt.label, label) == 0) {
@@ -1517,9 +1517,9 @@ static int calls_edge_targets(cbm_store_t *store, const char *project, const cha
             if (ql >= sl && strcmp(qn + ql - sl, qn_suffix) == 0)
                 found = 1;
         }
-        cbm_node_free_fields(&tgt);
+        lsm_node_free_fields(&tgt);
     }
-    cbm_store_free_edges(edges, n);
+    lsm_store_free_edges(edges, n);
     return found;
 }
 
@@ -1551,7 +1551,7 @@ TEST(contract_edge_python_aliased_import_call_resolves_issue988) {
                                                         "\n"
                                                         "def use_dotalias(x):\n"
                                                         "    return dz.h(x)\n"}};
-    cbm_store_t *store = lang_index_files(&lp, f, 7);
+    lsm_store_t *store = lang_index_files(&lp, f, 7);
     ASSERT_TRUE(store != NULL);
     int alias = calls_edge_between(store, lp.project, ".use_alias", ".m.f");
     int plain = calls_edge_between(store, lp.project, ".use_plain", ".m.f");
@@ -1588,7 +1588,7 @@ TEST(contract_edge_commonjs_require_call_resolves_issue871) {
         {"src/mutations/doThing.js",
          "const doThing = require(\"../bs/doThing\");\n\n"
          "module.exports = async (parent, args) => {\n  return doThing({ id: args.id });\n};\n"}};
-    cbm_store_t *store = lang_index_files(&lp, f, 2);
+    lsm_store_t *store = lang_index_files(&lp, f, 2);
     ASSERT_TRUE(store != NULL);
     /* The call resolves THROUGH the require to the exported function. */
     int resolved = calls_edge_targets(store, lp.project, "Function", ".bs.doThing.doThing");
@@ -1628,7 +1628,7 @@ TEST(contract_edge_depends_on) {
  * (the only path that emits GRAPHQL_CALLS/GRPC_CALLS/TRPC_CALLS/INFRA_MAPS). */
 enum { PARALLEL_PAD_FILES = 52 };
 
-static cbm_store_t *index_parallel_fixture(LangProj *lp, const LangFile *meaningful, int n_mean) {
+static lsm_store_t *index_parallel_fixture(LangProj *lp, const LangFile *meaningful, int n_mean) {
     static char pad_name[PARALLEL_PAD_FILES][40];
     static char pad_body[PARALLEL_PAD_FILES][64];
     LangFile files[PARALLEL_PAD_FILES + 16] = {0}; /* zero-init: GCC -Werror=maybe-uninitialized */
@@ -1691,12 +1691,12 @@ TEST(contract_edge_parallel_service_edges) {
          "    config:\n      push_endpoint: https://order-worker-abc123-uc.a.run.app/handle\n"}};
 
     LangProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         index_parallel_fixture(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int graphql = store ? cbm_store_count_edges_by_type(store, lp.project, "GRAPHQL_CALLS") : -1;
-    int grpc = store ? cbm_store_count_edges_by_type(store, lp.project, "GRPC_CALLS") : -1;
-    int trpc = store ? cbm_store_count_edges_by_type(store, lp.project, "TRPC_CALLS") : -1;
-    int infra = store ? cbm_store_count_edges_by_type(store, lp.project, "INFRA_MAPS") : -1;
+    int graphql = store ? lsm_store_count_edges_by_type(store, lp.project, "GRAPHQL_CALLS") : -1;
+    int grpc = store ? lsm_store_count_edges_by_type(store, lp.project, "GRPC_CALLS") : -1;
+    int trpc = store ? lsm_store_count_edges_by_type(store, lp.project, "TRPC_CALLS") : -1;
+    int infra = store ? lsm_store_count_edges_by_type(store, lp.project, "INFRA_MAPS") : -1;
     if (graphql < 1 || grpc < 1 || trpc < 1 || infra < 1) {
         fprintf(stderr,
                 "  [EDGE] parallel-service: GRAPHQL_CALLS=%d GRPC_CALLS=%d TRPC_CALLS=%d "
@@ -1727,8 +1727,8 @@ static int run_git(const char *dir, const char *args) {
 TEST(contract_edge_file_changes_with) {
     LangProj lp;
     memset(&lp, 0, sizeof(lp));
-    snprintf(lp.tmpdir, sizeof(lp.tmpdir), "/tmp/cbm_fcw_XXXXXX");
-    ASSERT_NOT_NULL(cbm_mkdtemp(lp.tmpdir));
+    snprintf(lp.tmpdir, sizeof(lp.tmpdir), "/tmp/lsm_fcw_XXXXXX");
+    ASSERT_NOT_NULL(lsm_mkdtemp(lp.tmpdir));
     lc_to_fwd_slashes(lp.tmpdir);
 
     char a[700];
@@ -1756,8 +1756,8 @@ TEST(contract_edge_file_changes_with) {
         run_git(lp.tmpdir, msg);
     }
 
-    cbm_store_t *store = lang_open_indexed(&lp);
-    int fcw = store ? cbm_store_count_edges_by_type(store, lp.project, "FILE_CHANGES_WITH") : -1;
+    lsm_store_t *store = lang_open_indexed(&lp);
+    int fcw = store ? lsm_store_count_edges_by_type(store, lp.project, "FILE_CHANGES_WITH") : -1;
     if (fcw < 1) {
         dump_edge_histogram(store, lp.project);
     }

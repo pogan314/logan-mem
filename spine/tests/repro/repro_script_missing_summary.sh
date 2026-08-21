@@ -4,7 +4,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/cbm-repro-missing-summary.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lsm-repro-missing-summary.XXXXXX")"
 
 cleanup() {
     rm -f "$TMP_ROOT/scripts/repro.sh" "$TMP_ROOT/scripts/env.sh"

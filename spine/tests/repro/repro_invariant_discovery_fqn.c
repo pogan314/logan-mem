@@ -36,7 +36,7 @@
  *     src/main.py               <- control — MUST be discovered
  *     <skip_dir>/stub.py        <- canary  — must NOT be discovered
  *
- * We then call cbm_discover() in CBM_MODE_FULL (NULL opts) so FAST_SKIP_DIRS
+ * We then call lsm_discover() in LSM_MODE_FULL (NULL opts) so FAST_SKIP_DIRS
  * are NOT applied, giving the most conservative (widest) surface.  A directory
  * that survives FULL mode indexing is definitely red.  A directory skipped only
  * in non-FULL modes is a softer concern and is noted separately.
@@ -49,14 +49,14 @@
  * GREEN guards (already in ALWAYS_SKIP_DIRS): all others listed in the table
  */
 
-/* Helper: create fixture, run cbm_discover, check canary. */
+/* Helper: create fixture, run lsm_discover, check canary. */
 /* Returns:  0  canary NOT discovered (correct — directory skipped)            */
 /*          >0  canary WAS discovered (bug — directory NOT in skip-list)       */
 /*          -1  setup error                                                     */
-static int check_dir_skipped(const char *dir_name, cbm_index_mode_t mode) {
+static int check_dir_skipped(const char *dir_name, lsm_index_mode_t mode) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/cbm_disc_XXXXXX", cbm_tmpdir());
-    if (!cbm_mkdtemp(tmpdir)) {
+    snprintf(tmpdir, sizeof(tmpdir), "%s/lsm_disc_XXXXXX", lsm_tmpdir());
+    if (!lsm_mkdtemp(tmpdir)) {
         return -1;
     }
 
@@ -76,13 +76,13 @@ static int check_dir_skipped(const char *dir_name, cbm_index_mode_t mode) {
         return -1;
     }
 
-    cbm_discover_opts_t opts;
+    lsm_discover_opts_t opts;
     memset(&opts, 0, sizeof(opts));
     opts.mode = mode;
 
-    cbm_file_info_t *files = NULL;
+    lsm_file_info_t *files = NULL;
     int count = 0;
-    int rc = cbm_discover(tmpdir, (mode == CBM_MODE_FULL) ? NULL : &opts, &files, &count);
+    int rc = lsm_discover(tmpdir, (mode == LSM_MODE_FULL) ? NULL : &opts, &files, &count);
     if (rc != 0) {
         th_rmtree(tmpdir);
         return -1;
@@ -100,7 +100,7 @@ static int check_dir_skipped(const char *dir_name, cbm_index_mode_t mode) {
         }
     }
 
-    cbm_discover_free(files, count);
+    lsm_discover_free(files, count);
     th_rmtree(tmpdir);
     return canary_found; /* 0 = skipped (correct), >0 = indexed (bug) */
 }
@@ -109,7 +109,7 @@ static int check_dir_skipped(const char *dir_name, cbm_index_mode_t mode) {
 
 TEST(invariant_discovery_always_skip_dirs) {
     /*
-     * Table of directory names that MUST be skipped in CBM_MODE_FULL.
+     * Table of directory names that MUST be skipped in LSM_MODE_FULL.
      * Each entry: { name, expected_skipped, is_red }
      *   expected_skipped == true  → currently in ALWAYS_SKIP_DIRS → GREEN guard
      *   is_red == true            → NOT currently in skip-list → RED today
@@ -204,7 +204,7 @@ TEST(invariant_discovery_always_skip_dirs) {
 
         /*
          * .claude-worktrees was QUALITY_ANALYSIS gap #1 (a RED reproduction): the
-         * compound name was absent from ALWAYS_SKIP_DIRS, so cbm_discover()
+         * compound name was absent from ALWAYS_SKIP_DIRS, so lsm_discover()
          * descended into it. It is now listed in src/discover/discover.c
          * ALWAYS_SKIP_DIRS (next to ".claude"), so the canary is correctly skipped
          * — the bug is fixed and this is now a GREEN guard against regressing it.
@@ -216,7 +216,7 @@ TEST(invariant_discovery_always_skip_dirs) {
     int failures = 0;
 
     for (int i = 0; i < n; i++) {
-        int result = check_dir_skipped(cases[i].name, CBM_MODE_FULL);
+        int result = check_dir_skipped(cases[i].name, LSM_MODE_FULL);
 
         if (result < 0) {
             printf("    SETUP-ERROR  %-32s (could not create fixture)\n",
@@ -261,10 +261,10 @@ TEST(invariant_discovery_always_skip_dirs) {
     PASS();
 }
 
-/* ── PART A TEST — FAST_SKIP_DIRS table (mode != CBM_MODE_FULL) ────────────
+/* ── PART A TEST — FAST_SKIP_DIRS table (mode != LSM_MODE_FULL) ────────────
  *
- * FAST_SKIP_DIRS entries are only skipped when mode != CBM_MODE_FULL.
- * We test them in CBM_MODE_MODERATE to confirm they are guarded.
+ * FAST_SKIP_DIRS entries are only skipped when mode != LSM_MODE_FULL.
+ * We test them in LSM_MODE_MODERATE to confirm they are guarded.
  * These are all GREEN (expected to be skipped in non-FULL mode).
  *
  * Also a sanity-check: the same entries are NOT skipped in FULL mode
@@ -311,7 +311,7 @@ TEST(invariant_discovery_fast_skip_dirs) {
 
     for (int i = 0; i < n; i++) {
         /* MODERATE mode: directory should be skipped */
-        int moderate = check_dir_skipped(fast_cases[i].name, CBM_MODE_MODERATE);
+        int moderate = check_dir_skipped(fast_cases[i].name, LSM_MODE_MODERATE);
         if (moderate < 0) {
             printf("    SETUP-ERROR  %-32s moderate\n", fast_cases[i].name);
             failures++;
@@ -324,7 +324,7 @@ TEST(invariant_discovery_fast_skip_dirs) {
         }
 
         /* FULL mode: directory should NOT be skipped (mode-gated) */
-        int full = check_dir_skipped(fast_cases[i].name, CBM_MODE_FULL);
+        int full = check_dir_skipped(fast_cases[i].name, LSM_MODE_FULL);
         if (full < 0) {
             printf("    SETUP-ERROR  %-32s full\n", fast_cases[i].name);
             failures++;
@@ -346,8 +346,8 @@ TEST(invariant_discovery_fast_skip_dirs) {
 
 TEST(invariant_discovery_control_always_found) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/cbm_ctrl_XXXXXX", cbm_tmpdir());
-    ASSERT_NOT_NULL(cbm_mkdtemp(tmpdir));
+    snprintf(tmpdir, sizeof(tmpdir), "%s/lsm_ctrl_XXXXXX", lsm_tmpdir());
+    ASSERT_NOT_NULL(lsm_mkdtemp(tmpdir));
 
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, "src/main.py"),
                                "def main(): pass\n"));
@@ -360,9 +360,9 @@ TEST(invariant_discovery_control_always_found) {
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, "vendor/dep/lib.c"),
                                "int x = 0;\n"));
 
-    cbm_file_info_t *files = NULL;
+    lsm_file_info_t *files = NULL;
     int count = 0;
-    int rc = cbm_discover(tmpdir, NULL, &files, &count);
+    int rc = lsm_discover(tmpdir, NULL, &files, &count);
     ASSERT_EQ(0, rc);
 
     bool main_found = false;
@@ -371,7 +371,7 @@ TEST(invariant_discovery_control_always_found) {
             main_found = true;
         }
     }
-    cbm_discover_free(files, count);
+    lsm_discover_free(files, count);
     th_rmtree(tmpdir);
 
     /* Control: must always be found regardless of neighbouring skip-dirs. */
@@ -384,8 +384,8 @@ TEST(invariant_discovery_control_always_found) {
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Root cause (fqn.c / helpers.c):
- *   cbm_pipeline_fqn_compute() calls strip_file_extension() which removes
- *   everything from the last '.' in the basename.  cbm_fqn_compute() in
+ *   lsm_pipeline_fqn_compute() calls strip_file_extension() which removes
+ *   everything from the last '.' in the basename.  lsm_fqn_compute() in
  *   helpers.c calls strip_ext_len() which scans backwards to find the LAST
  *   dot.  Both functions are extension-blind: "api.h" and "api.c" both strip
  *   to "api", producing the same module QN "<project>.api".  Two symbols
@@ -403,7 +403,7 @@ TEST(invariant_discovery_control_always_found) {
  *                               DISTINCT module QNs          → GREEN (guard)
  *   5. pkg_a/mod.py + pkg_b/mod.py → different path prefixes → GREEN (guard)
  *
- * Assertion for RED cases: after indexing, cbm_store_find_nodes_by_name()
+ * Assertion for RED cases: after indexing, lsm_store_find_nodes_by_name()
  * for the shared symbol name returns only 1 node (collapse detected).
  * The ASSERT_GTE(distinct, 2) then fires RED, proving the bug.
  *
@@ -414,29 +414,29 @@ TEST(invariant_discovery_control_always_found) {
  */
 
 /* ── Helper: count distinct nodes by name for a project ─────────────────── */
-static int count_nodes_by_name(cbm_store_t *store, const char *project,
+static int count_nodes_by_name(lsm_store_t *store, const char *project,
                                const char *sym_name) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
-    int rc = cbm_store_find_nodes_by_name(store, project, sym_name,
+    int rc = lsm_store_find_nodes_by_name(store, project, sym_name,
                                           &nodes, &node_count);
-    if (rc != CBM_STORE_OK) {
+    if (rc != LSM_STORE_OK) {
         return -1;
     }
-    cbm_store_free_nodes(nodes, node_count);
+    lsm_store_free_nodes(nodes, node_count);
     return node_count;
 }
 
 /* ── Helper: count distinct qualified_names among nodes by name ─────────── */
 /* Returns the number of DISTINCT qualified_name strings found. */
 /* This catches the case where node_count > 1 but QNs collapsed to the same. */
-static int count_distinct_qns(cbm_store_t *store, const char *project,
+static int count_distinct_qns(lsm_store_t *store, const char *project,
                                const char *sym_name) {
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
-    int rc = cbm_store_find_nodes_by_name(store, project, sym_name,
+    int rc = lsm_store_find_nodes_by_name(store, project, sym_name,
                                           &nodes, &node_count);
-    if (rc != CBM_STORE_OK) {
+    if (rc != LSM_STORE_OK) {
         return -1;
     }
 
@@ -463,7 +463,7 @@ static int count_distinct_qns(cbm_store_t *store, const char *project,
         }
     }
 
-    cbm_store_free_nodes(nodes, node_count);
+    lsm_store_free_nodes(nodes, node_count);
     return distinct;
 }
 
@@ -480,7 +480,7 @@ static int count_distinct_qns(cbm_store_t *store, const char *project,
  *   components.
  */
 TEST(invariant_fqn_api_h_api_c) {
-    /* PARKED for release: api.h and api.c share a module QN because cbm_fqn
+    /* PARKED for release: api.h and api.c share a module QN because lsm_fqn
      * strips the file extension, so the api_init declaration and definition
      * collapse to one node. Making same-stem files distinct requires baking the
      * extension (or a disambiguator) into the FQN — a high-blast-radius change to
@@ -504,7 +504,7 @@ TEST(invariant_fqn_api_h_api_c) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int distinct = count_distinct_qns(store, lp.project, "api_init");
@@ -555,7 +555,7 @@ TEST(invariant_fqn_svc_h_svc_cpp) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int distinct = count_distinct_qns(store, lp.project, "svc_start");
@@ -599,7 +599,7 @@ TEST(invariant_fqn_different_dirs_same_stem) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int n = count_nodes_by_name(store, lp.project, "util_init");
@@ -656,15 +656,15 @@ TEST(invariant_fqn_ts_vs_dts) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
-    int rc = cbm_store_find_nodes_by_name(store, lp.project, "widget_fn",
+    int rc = lsm_store_find_nodes_by_name(store, lp.project, "widget_fn",
                                           &nodes, &node_count);
     int distinct = 0;
-    if (rc == CBM_STORE_OK && node_count > 1) {
+    if (rc == LSM_STORE_OK && node_count > 1) {
         /* Verify all found nodes have DISTINCT qualified_names */
         const char *first_qn = nodes[0].qualified_name;
         for (int i = 1; i < node_count; i++) {
@@ -677,7 +677,7 @@ TEST(invariant_fqn_ts_vs_dts) {
     }
     int total = node_count;
     if (nodes) {
-        cbm_store_free_nodes(nodes, node_count);
+        lsm_store_free_nodes(nodes, node_count);
     }
 
     rh_cleanup(&lp, store);
@@ -722,7 +722,7 @@ TEST(invariant_fqn_python_same_module_different_packages) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int n = count_nodes_by_name(store, lp.project, "process");
@@ -764,7 +764,7 @@ TEST(invariant_fqn_go_test_file_stem) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int distinct = count_distinct_qns(store, lp.project, "Setup");

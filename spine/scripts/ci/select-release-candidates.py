@@ -171,7 +171,7 @@ def parse_tsv(
 
 
 def expected_properties(target: str) -> tuple[str, str, str, str]:
-    binary = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+    binary = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
     file_format = "pe" if target.startswith("windows-") else "macho" if target.startswith("darwin-") else "elf"
     architecture = target.split("-")[1]
     linkage = (
@@ -250,7 +250,7 @@ def load_candidates(
 ) -> tuple[list[dict[str, str]], dict[str, pathlib.Path]]:
     metadata, rows = parse_tsv(
         manifest,
-        marker="cbm-release-candidates-v1",
+        marker="lsm-release-candidates-v1",
         fields=CANDIDATE_FIELDS,
     )
     if metadata != {"targets": str(len(TARGETS)), "candidates": str(len(TARGETS) * len(VARIANTS))}:
@@ -371,7 +371,7 @@ def load_results(
 ) -> dict[str, dict[str, str]]:
     metadata, rows = parse_tsv(
         path,
-        marker="cbm-virustotal-results-v2",
+        marker="lsm-virustotal-results-v2",
         fields=RESULT_FIELDS,
     )
     expected_count = len(candidates)
@@ -427,7 +427,7 @@ def write_tsv(
     rows: Iterable[dict[str, object]],
 ) -> None:
     with path.open("x", encoding="utf-8", newline="") as handle:
-        handle.write("# cbm-release-selection-v1\n")
+        handle.write("# lsm-release-selection-v1\n")
         for key, value in metadata:
             handle.write(f"# {key}={value}\n")
         writer = csv.DictWriter(

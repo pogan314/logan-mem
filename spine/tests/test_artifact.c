@@ -19,37 +19,37 @@ static char g_repo[1024];
 static char g_db[1024];
 enum { ART_TEST_LOG_BUF = 32768 };
 static char g_log_capture[ART_TEST_LOG_BUF];
-static CBMLogLevel g_prev_log_level;
+static LSMLogLevel g_prev_log_level;
 
 static void setup_artifact_test(void) {
-    snprintf(g_tmpdir, sizeof(g_tmpdir), "%s/cbm_test_artifact_XXXXXX", cbm_tmpdir());
-    cbm_mkdtemp(g_tmpdir);
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "%s/lsm_test_artifact_XXXXXX", lsm_tmpdir());
+    lsm_mkdtemp(g_tmpdir);
 
     snprintf(g_repo, sizeof(g_repo), "%s/repo", g_tmpdir);
-    cbm_mkdir_p(g_repo, 0755);
+    lsm_mkdir_p(g_repo, 0755);
 
     snprintf(g_db, sizeof(g_db), "%s/test.db", g_tmpdir);
 }
 
 /* Create a minimal but valid DB with some nodes and edges. */
 static void create_test_db(const char *path) {
-    cbm_store_t *s = cbm_store_open_path(path);
+    lsm_store_t *s = lsm_store_open_path(path);
     if (!s) {
         return;
     }
 
-    cbm_store_exec(s, "INSERT OR IGNORE INTO projects(name, indexed_at, root_path) "
+    lsm_store_exec(s, "INSERT OR IGNORE INTO projects(name, indexed_at, root_path) "
                       "VALUES('test-proj', '2026-01-01', '/tmp/test');");
 
-    cbm_store_exec(s, "INSERT INTO nodes(project, label, name, qualified_name, file_path) "
+    lsm_store_exec(s, "INSERT INTO nodes(project, label, name, qualified_name, file_path) "
                       "VALUES('test-proj', 'Function', 'foo', 'test-proj.foo', 'main.c');");
-    cbm_store_exec(s, "INSERT INTO nodes(project, label, name, qualified_name, file_path) "
+    lsm_store_exec(s, "INSERT INTO nodes(project, label, name, qualified_name, file_path) "
                       "VALUES('test-proj', 'Function', 'bar', 'test-proj.bar', 'main.c');");
 
-    cbm_store_exec(s, "INSERT INTO edges(project, source_id, target_id, type) "
+    lsm_store_exec(s, "INSERT INTO edges(project, source_id, target_id, type) "
                       "VALUES('test-proj', 1, 2, 'CALLS');");
 
-    cbm_store_close(s);
+    lsm_store_close(s);
 }
 
 static void cleanup_dir(const char *path) {
@@ -81,14 +81,14 @@ static void capture_log_sink(const char *line) {
 
 static void capture_logs_start(void) {
     g_log_capture[0] = '\0';
-    g_prev_log_level = cbm_log_get_level();
-    cbm_log_set_level(CBM_LOG_DEBUG);
-    cbm_log_set_sink(capture_log_sink);
+    g_prev_log_level = lsm_log_get_level();
+    lsm_log_set_level(LSM_LOG_DEBUG);
+    lsm_log_set_sink(capture_log_sink);
 }
 
 static const char *capture_logs_end(void) {
-    cbm_log_set_sink(NULL);
-    cbm_log_set_level(g_prev_log_level);
+    lsm_log_set_sink(NULL);
+    lsm_log_set_level(g_prev_log_level);
     return g_log_capture;
 }
 
@@ -146,16 +146,16 @@ static bool bump_artifact_original_size(const char *meta_path, long delta) {
 TEST(artifact_import_rejects_size_mismatch) {
     setup_artifact_test();
     create_test_db(g_db);
-    ASSERT_EQ(cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST), 0);
+    ASSERT_EQ(lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST), 0);
 
     char meta[1024];
-    snprintf(meta, sizeof(meta), "%s/.codebase-memory/artifact.json", g_repo);
+    snprintf(meta, sizeof(meta), "%s/.logan-spine/artifact.json", g_repo);
     ASSERT_TRUE(
         bump_artifact_original_size(meta, 4096)); /* claim 4 KiB more than the frame holds */
 
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported.db", g_tmpdir);
-    int rc = cbm_artifact_import(g_repo, import_db);
+    int rc = lsm_artifact_import(g_repo, import_db);
     ASSERT_NEQ(rc, 0); /* must reject the mismatch, not import on the doctored size */
 
     cleanup_dir(g_tmpdir);
@@ -167,34 +167,34 @@ TEST(artifact_export_fast_roundtrip) {
     create_test_db(g_db);
 
     /* Export with fast quality (zstd -3, no index stripping) */
-    int rc = cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
+    int rc = lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
     ASSERT_EQ(rc, 0);
 
     /* Verify artifact files exist */
     char zst[1024];
-    snprintf(zst, sizeof(zst), "%s/.codebase-memory/graph.db.zst", g_repo);
+    snprintf(zst, sizeof(zst), "%s/.logan-spine/graph.db.zst", g_repo);
     struct stat st;
     ASSERT_EQ(stat(zst, &st), 0);
     ASSERT_GT((int)st.st_size, 0);
 
     char meta[1024];
-    snprintf(meta, sizeof(meta), "%s/.codebase-memory/artifact.json", g_repo);
+    snprintf(meta, sizeof(meta), "%s/.logan-spine/artifact.json", g_repo);
     ASSERT_EQ(stat(meta, &st), 0);
 
     /* Import to a new path */
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported.db", g_tmpdir);
-    rc = cbm_artifact_import(g_repo, import_db);
+    rc = lsm_artifact_import(g_repo, import_db);
     ASSERT_EQ(rc, 0);
 
     /* Verify imported DB has correct data */
-    cbm_store_t *s = cbm_store_open_path(import_db);
+    lsm_store_t *s = lsm_store_open_path(import_db);
     ASSERT_NOT_NULL(s);
-    int nodes = cbm_store_count_nodes(s, "test-proj");
-    int edges = cbm_store_count_edges(s, "test-proj");
+    int nodes = lsm_store_count_nodes(s, "test-proj");
+    int edges = lsm_store_count_edges(s, "test-proj");
     ASSERT_EQ(nodes, 2);
     ASSERT_EQ(edges, 1);
-    cbm_store_close(s);
+    lsm_store_close(s);
 
     cleanup_dir(g_tmpdir);
     PASS();
@@ -205,26 +205,26 @@ TEST(artifact_export_best_roundtrip) {
     create_test_db(g_db);
 
     /* Export with best quality (zstd -9, index stripping + VACUUM) */
-    int rc = cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_BEST);
+    int rc = lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_BEST);
     ASSERT_EQ(rc, 0);
 
     /* Source DB should be untouched (VACUUM INTO doesn't modify source) */
-    cbm_store_t *src = cbm_store_open_path(g_db);
+    lsm_store_t *src = lsm_store_open_path(g_db);
     ASSERT_NOT_NULL(src);
-    ASSERT_EQ(cbm_store_count_nodes(src, "test-proj"), 2);
-    cbm_store_close(src);
+    ASSERT_EQ(lsm_store_count_nodes(src, "test-proj"), 2);
+    lsm_store_close(src);
 
     /* Import and verify */
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported.db", g_tmpdir);
-    rc = cbm_artifact_import(g_repo, import_db);
+    rc = lsm_artifact_import(g_repo, import_db);
     ASSERT_EQ(rc, 0);
 
-    cbm_store_t *s = cbm_store_open_path(import_db);
+    lsm_store_t *s = lsm_store_open_path(import_db);
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_count_nodes(s, "test-proj"), 2);
-    ASSERT_EQ(cbm_store_count_edges(s, "test-proj"), 1);
-    cbm_store_close(s);
+    ASSERT_EQ(lsm_store_count_nodes(s, "test-proj"), 2);
+    ASSERT_EQ(lsm_store_count_edges(s, "test-proj"), 1);
+    lsm_store_close(s);
 
     cleanup_dir(g_tmpdir);
     PASS();
@@ -235,11 +235,11 @@ TEST(artifact_exists_check) {
     create_test_db(g_db);
 
     /* No artifact yet */
-    ASSERT_FALSE(cbm_artifact_exists(g_repo));
+    ASSERT_FALSE(lsm_artifact_exists(g_repo));
 
     /* Export creates the artifact */
-    cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
-    ASSERT_TRUE(cbm_artifact_exists(g_repo));
+    lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
+    ASSERT_TRUE(lsm_artifact_exists(g_repo));
 
     cleanup_dir(g_tmpdir);
     PASS();
@@ -249,10 +249,10 @@ TEST(artifact_commit_hash) {
     setup_artifact_test();
     create_test_db(g_db);
 
-    cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
+    lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
 
     /* commit hash may be empty if repo is not a git repo, but should not crash */
-    char *commit = cbm_artifact_commit(g_repo);
+    char *commit = lsm_artifact_commit(g_repo);
     /* For a non-git directory, commit will be NULL (git rev-parse HEAD fails) */
     free(commit);
 
@@ -263,23 +263,23 @@ TEST(artifact_commit_hash) {
 TEST(artifact_schema_version_mismatch) {
     setup_artifact_test();
     create_test_db(g_db);
-    cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
+    lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
 
     /* Overwrite artifact.json with incompatible schema version */
     char meta[1024];
-    snprintf(meta, sizeof(meta), "%s/.codebase-memory/artifact.json", g_repo);
+    snprintf(meta, sizeof(meta), "%s/.logan-spine/artifact.json", g_repo);
     FILE *fp = fopen(meta, "w");
     ASSERT_NOT_NULL(fp);
     fprintf(fp, "{\"schema_version\": 999, \"original_size\": 1000}");
     fclose(fp);
 
     /* exists should return false for incompatible version */
-    ASSERT_FALSE(cbm_artifact_exists(g_repo));
+    ASSERT_FALSE(lsm_artifact_exists(g_repo));
 
     /* Import should fail */
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported.db", g_tmpdir);
-    int rc = cbm_artifact_import(g_repo, import_db);
+    int rc = lsm_artifact_import(g_repo, import_db);
     ASSERT_NEQ(rc, 0);
 
     cleanup_dir(g_tmpdir);
@@ -292,7 +292,7 @@ TEST(artifact_import_missing) {
     /* Import from repo without artifact should fail gracefully */
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported.db", g_tmpdir);
-    int rc = cbm_artifact_import(g_repo, import_db);
+    int rc = lsm_artifact_import(g_repo, import_db);
     ASSERT_NEQ(rc, 0);
 
     cleanup_dir(g_tmpdir);
@@ -303,10 +303,10 @@ TEST(artifact_gitattributes_created) {
     setup_artifact_test();
     create_test_db(g_db);
 
-    cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
+    lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
 
     char ga[1024];
-    snprintf(ga, sizeof(ga), "%s/.codebase-memory/.gitattributes", g_repo);
+    snprintf(ga, sizeof(ga), "%s/.logan-spine/.gitattributes", g_repo);
     struct stat st;
     ASSERT_EQ(stat(ga, &st), 0);
 
@@ -321,7 +321,7 @@ TEST(artifact_gitattributes_created) {
     size_t rd = fread(content, 1, sizeof(content) - 1, gaf);
     (void)fclose(gaf);
     ASSERT_TRUE(rd > 0);
-    ASSERT_NOT_NULL(strstr(content, CBM_ARTIFACT_FILENAME " binary merge=ours"));
+    ASSERT_NOT_NULL(strstr(content, LSM_ARTIFACT_FILENAME " binary merge=ours"));
     ASSERT_TRUE(strstr(content, "merge=ours binary") == NULL);
 
     cleanup_dir(g_tmpdir);
@@ -333,22 +333,22 @@ TEST(artifact_export_rename_failure_logs_specific_error) {
     create_test_db(g_db);
 
     char art_dir[1024];
-    snprintf(art_dir, sizeof(art_dir), "%s/.codebase-memory", g_repo);
-    cbm_mkdir_p(art_dir, 0755);
+    snprintf(art_dir, sizeof(art_dir), "%s/.logan-spine", g_repo);
+    lsm_mkdir_p(art_dir, 0755);
 
     char zst[1024];
     snprintf(zst, sizeof(zst), "%s/graph.db.zst", art_dir);
-    cbm_mkdir_p(zst, 0755);
+    lsm_mkdir_p(zst, 0755);
 
     capture_logs_start();
-    int rc = cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST);
+    int rc = lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST);
     const char *logs = capture_logs_end();
 
     ASSERT_NEQ(rc, 0);
-    ASSERT_FALSE(cbm_artifact_exists(g_repo));
-    ASSERT_NOT_NULL(cbm_artifact_export_last_error());
-    ASSERT(strstr(cbm_artifact_export_last_error(), "write_artifact") != NULL);
-    ASSERT(strstr(cbm_artifact_export_last_error(), "rename_temp") != NULL);
+    ASSERT_FALSE(lsm_artifact_exists(g_repo));
+    ASSERT_NOT_NULL(lsm_artifact_export_last_error());
+    ASSERT(strstr(lsm_artifact_export_last_error(), "write_artifact") != NULL);
+    ASSERT(strstr(lsm_artifact_export_last_error(), "rename_temp") != NULL);
     ASSERT(strstr(logs, "msg=artifact.export") != NULL);
     ASSERT(strstr(logs, "stage=write_artifact") != NULL);
     ASSERT(strstr(logs, "err=rename_temp") != NULL);
@@ -365,24 +365,24 @@ TEST(pipeline_persistence_export_failure_returns_error) {
     write_text_file(src, "int main(void) { return 0; }\n");
 
     char art_dir[1024];
-    snprintf(art_dir, sizeof(art_dir), "%s/.codebase-memory", g_repo);
-    cbm_mkdir_p(art_dir, 0755);
+    snprintf(art_dir, sizeof(art_dir), "%s/.logan-spine", g_repo);
+    lsm_mkdir_p(art_dir, 0755);
 
     char zst[1024];
     snprintf(zst, sizeof(zst), "%s/graph.db.zst", art_dir);
-    cbm_mkdir_p(zst, 0755);
+    lsm_mkdir_p(zst, 0755);
 
-    cbm_pipeline_t *p = cbm_pipeline_new(g_repo, g_db, CBM_MODE_FAST);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_repo, g_db, LSM_MODE_FAST);
     ASSERT_NOT_NULL(p);
-    cbm_pipeline_set_persistence(p, true);
+    lsm_pipeline_set_persistence(p, true);
 
     capture_logs_start();
-    int rc = cbm_pipeline_run(p);
+    int rc = lsm_pipeline_run(p);
     const char *logs = capture_logs_end();
-    cbm_pipeline_free(p);
+    lsm_pipeline_free(p);
 
     ASSERT_NEQ(rc, 0);
-    ASSERT_FALSE(cbm_artifact_exists(g_repo));
+    ASSERT_FALSE(lsm_artifact_exists(g_repo));
     ASSERT(strstr(logs, "msg=pipeline.err") != NULL);
     ASSERT(strstr(logs, "phase=artifact_export") != NULL);
 
@@ -391,40 +391,40 @@ TEST(pipeline_persistence_export_failure_returns_error) {
 }
 
 TEST(artifact_null_safety) {
-    ASSERT_NEQ(cbm_artifact_export(NULL, "/tmp", "p", 0), 0);
-    ASSERT_NEQ(cbm_artifact_export("/tmp/x.db", NULL, "p", 0), 0);
-    ASSERT_NEQ(cbm_artifact_import(NULL, "/tmp/x.db"), 0);
-    ASSERT_NEQ(cbm_artifact_import("/tmp", NULL), 0);
-    ASSERT_FALSE(cbm_artifact_exists(NULL));
-    ASSERT_NULL(cbm_artifact_commit(NULL));
+    ASSERT_NEQ(lsm_artifact_export(NULL, "/tmp", "p", 0), 0);
+    ASSERT_NEQ(lsm_artifact_export("/tmp/x.db", NULL, "p", 0), 0);
+    ASSERT_NEQ(lsm_artifact_import(NULL, "/tmp/x.db"), 0);
+    ASSERT_NEQ(lsm_artifact_import("/tmp", NULL), 0);
+    ASSERT_FALSE(lsm_artifact_exists(NULL));
+    ASSERT_NULL(lsm_artifact_commit(NULL));
     PASS();
 }
 
 /* ── git shell-out path safety ────────────────────────────────────────────────
  *
- * artifact.c shells out to git via cbm_popen with the repo path interpolated into
+ * artifact.c shells out to git via lsm_popen with the repo path interpolated into
  * the command. It previously used single quotes (`git -C '%s'`) with NO validation
  * — but cmd.exe does not honor single quotes, so on Windows a repo path with a space
  * broke argument grouping, and an embedded quote/metacharacter could break out of the
  * intended argument entirely. The hardening validates the path and switches to double
- * quotes; cbm_artifact_repo_path_is_shell_safe() is the guard. Rejecting quotes and
+ * quotes; lsm_artifact_repo_path_is_shell_safe() is the guard. Rejecting quotes and
  * shell/cmd.exe metacharacters is the contract; spaces must stay allowed (double
  * quotes handle them) — that is the concrete regression the single-quote form caused. */
 TEST(artifact_repo_path_shell_safe_accepts_plain_and_spaced) {
-    ASSERT_TRUE(cbm_artifact_repo_path_is_shell_safe("/home/user/repo"));
-    ASSERT_TRUE(cbm_artifact_repo_path_is_shell_safe("C:/Users/me/repo"));
-    ASSERT_TRUE(cbm_artifact_repo_path_is_shell_safe("/home/user/my repo")); /* space OK */
+    ASSERT_TRUE(lsm_artifact_repo_path_is_shell_safe("/home/user/repo"));
+    ASSERT_TRUE(lsm_artifact_repo_path_is_shell_safe("C:/Users/me/repo"));
+    ASSERT_TRUE(lsm_artifact_repo_path_is_shell_safe("/home/user/my repo")); /* space OK */
     PASS();
 }
 
 TEST(artifact_repo_path_shell_safe_rejects_injection) {
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe(NULL));
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("it's"));        /* single quote */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("a\"b"));        /* double quote */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("x; rm -rf /")); /* command sep */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("$(whoami)"));   /* substitution */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("a`id`b"));      /* backtick */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("a|b"));         /* pipe */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe(NULL));
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("it's"));        /* single quote */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("a\"b"));        /* double quote */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("x; rm -rf /")); /* command sep */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("$(whoami)"));   /* substitution */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("a`id`b"));      /* backtick */
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("a|b"));         /* pipe */
     PASS();
 }
 
@@ -432,13 +432,13 @@ TEST(artifact_repo_path_shell_safe_rejects_cmd_metachars_on_windows) {
 #ifdef _WIN32
     /* cmd.exe expands %VAR%, delayed !VAR!, and escapes with ^ even inside double
      * quotes — git_context.c rejects these on Windows and this must match. */
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("C:/a%USERPROFILE%b"));
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("C:/a!b"));
-    ASSERT_FALSE(cbm_artifact_repo_path_is_shell_safe("C:/a^b"));
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("C:/a%USERPROFILE%b"));
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("C:/a!b"));
+    ASSERT_FALSE(lsm_artifact_repo_path_is_shell_safe("C:/a^b"));
 #else
     /* POSIX shells treat % ! ^ literally inside double quotes — allowed. */
-    ASSERT_TRUE(cbm_artifact_repo_path_is_shell_safe("/a%b"));
-    ASSERT_TRUE(cbm_artifact_repo_path_is_shell_safe("/a^b"));
+    ASSERT_TRUE(lsm_artifact_repo_path_is_shell_safe("/a%b"));
+    ASSERT_TRUE(lsm_artifact_repo_path_is_shell_safe("/a^b"));
 #endif
     PASS();
 }
@@ -454,37 +454,37 @@ TEST(artifact_fast_export_snapshots_live_wal_store) {
 
     /* Live store: rows committed but NOT checkpointed into the main file —
      * exactly the state the watcher export runs against. */
-    cbm_store_t *s = cbm_store_open_path(g_db);
+    lsm_store_t *s = lsm_store_open_path(g_db);
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "test-proj", "/tmp/test");
+    lsm_store_upsert_project(s, "test-proj", "/tmp/test");
     for (int i = 0; i < WAL_NODES; i++) {
         char name[64];
         char qn[128];
         snprintf(name, sizeof(name), "walnode_%03d", i);
         snprintf(qn, sizeof(qn), "test-proj.mod.%s", name);
-        cbm_node_t n = {.project = "test-proj",
+        lsm_node_t n = {.project = "test-proj",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "mod.py",
                         .start_line = i + 1,
                         .end_line = i + 2};
-        ASSERT_TRUE(cbm_store_upsert_node(s, &n) > 0);
+        ASSERT_TRUE(lsm_store_upsert_node(s, &n) > 0);
     }
 
     /* Export WHILE the writer connection is still open. */
-    ASSERT_EQ(cbm_artifact_export(g_db, g_repo, "test-proj", CBM_ARTIFACT_FAST), 0);
-    cbm_store_close(s);
+    ASSERT_EQ(lsm_artifact_export(g_db, g_repo, "test-proj", LSM_ARTIFACT_FAST), 0);
+    lsm_store_close(s);
 
     char import_db[1024];
     snprintf(import_db, sizeof(import_db), "%s/imported_wal.db", g_tmpdir);
-    ASSERT_EQ(cbm_artifact_import(g_repo, import_db), 0);
+    ASSERT_EQ(lsm_artifact_import(g_repo, import_db), 0);
 
-    cbm_store_t *imp = cbm_store_open_path(import_db);
+    lsm_store_t *imp = lsm_store_open_path(import_db);
     ASSERT_NOT_NULL(imp);
     /* Torn snapshot = the WAL-resident rows are missing. */
-    ASSERT_EQ(cbm_store_count_nodes(imp, "test-proj"), WAL_NODES);
-    cbm_store_close(imp);
+    ASSERT_EQ(lsm_store_count_nodes(imp, "test-proj"), WAL_NODES);
+    lsm_store_close(imp);
     PASS();
 }
 
@@ -496,31 +496,31 @@ TEST(store_deep_integrity_detects_page_corruption) {
     enum { DEEP_NODES = 800, PAGE = 4096, ZERO_PAGES = 10 };
     char db2[1024];
     snprintf(db2, sizeof(db2), "%s/deep.db", g_tmpdir);
-    cbm_store_t *s = cbm_store_open_path(db2);
+    lsm_store_t *s = lsm_store_open_path(db2);
     ASSERT_NOT_NULL(s);
-    cbm_store_upsert_project(s, "deep", "/tmp/deep");
+    lsm_store_upsert_project(s, "deep", "/tmp/deep");
     for (int i = 0; i < DEEP_NODES; i++) {
         char name[64];
         char qn[192];
         snprintf(name, sizeof(name), "deep_probe_%04d", i);
         snprintf(qn, sizeof(qn), "deep.rather.long.module.path.for.page.fill.%s_pad_pad_pad",
                  name);
-        cbm_node_t n = {.project = "deep",
+        lsm_node_t n = {.project = "deep",
                         .label = "Function",
                         .name = name,
                         .qualified_name = qn,
                         .file_path = "deep.py",
                         .start_line = i + 1,
                         .end_line = i + 2};
-        ASSERT_TRUE(cbm_store_upsert_node(s, &n) > 0);
+        ASSERT_TRUE(lsm_store_upsert_node(s, &n) > 0);
     }
-    cbm_store_close(s);
+    lsm_store_close(s);
 
     /* Healthy file passes the deep check. */
-    cbm_store_t *ok = cbm_store_open_path(db2);
+    lsm_store_t *ok = lsm_store_open_path(db2);
     ASSERT_NOT_NULL(ok);
-    ASSERT_TRUE(cbm_store_check_integrity_deep(ok));
-    cbm_store_close(ok);
+    ASSERT_TRUE(lsm_store_check_integrity_deep(ok));
+    lsm_store_close(ok);
 
     /* Zero a mid-file band and the deep check must refuse. */
     FILE *f = fopen(db2, "rb+");
@@ -536,10 +536,10 @@ TEST(store_deep_integrity_detects_page_corruption) {
     }
     (void)fclose(f);
 
-    cbm_store_t *bad = cbm_store_open_path(db2);
+    lsm_store_t *bad = lsm_store_open_path(db2);
     ASSERT_NOT_NULL(bad);
-    ASSERT_FALSE(cbm_store_check_integrity_deep(bad));
-    cbm_store_close(bad);
+    ASSERT_FALSE(lsm_store_check_integrity_deep(bad));
+    lsm_store_close(bad);
     PASS();
 }
 

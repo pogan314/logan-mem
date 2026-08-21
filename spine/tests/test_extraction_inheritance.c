@@ -4,7 +4,7 @@
  *
  * DESIGN INTENT
  * ─────────────
- * Every row asserts the CORRECT behaviour: that `CBMDefinition.base_classes`
+ * Every row asserts the CORRECT behaviour: that `LSMDefinition.base_classes`
  * contains real type names, not keywords or punctuation.  For the three broken
  * languages the rows are EXPECTED RED until the extractors are fixed:
  *
@@ -49,7 +49,7 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -57,9 +57,9 @@
 /* ── Shared helpers ─────────────────────────────────────────────── */
 
 /* Find a definition by label+name; returns NULL if not found. */
-static CBMDefinition *find_def(CBMFileResult *r, const char *label, const char *name) {
+static LSMDefinition *find_def(LSMFileResult *r, const char *label, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (d->label && strcmp(d->label, label) == 0 && d->name && strcmp(d->name, name) == 0)
             return d;
     }
@@ -67,9 +67,9 @@ static CBMDefinition *find_def(CBMFileResult *r, const char *label, const char *
 }
 
 /* Find a definition by name alone (any label). */
-static CBMDefinition *find_def_any(CBMFileResult *r, const char *name) {
+static LSMDefinition *find_def_any(LSMFileResult *r, const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (d->name && strcmp(d->name, name) == 0)
             return d;
     }
@@ -77,7 +77,7 @@ static CBMDefinition *find_def_any(CBMFileResult *r, const char *name) {
 }
 
 /* Return 1 if base_classes contains `want` exactly. */
-static int bases_contain(CBMDefinition *d, const char *want) {
+static int bases_contain(LSMDefinition *d, const char *want) {
     if (!d->base_classes)
         return 0;
     for (const char **b = d->base_classes; *b; b++) {
@@ -90,7 +90,7 @@ static int bases_contain(CBMDefinition *d, const char *want) {
 /* Return 1 if ANY base_classes entry contains `substr` as a substring.
  * Used to assert that keywords like "extends" / "implements" / ":" do NOT
  * appear inside any captured base name. */
-static int bases_contain_substr(CBMDefinition *d, const char *substr) {
+static int bases_contain_substr(LSMDefinition *d, const char *substr) {
     if (!d->base_classes)
         return 0;
     for (const char **b = d->base_classes; *b; b++) {
@@ -101,7 +101,7 @@ static int bases_contain_substr(CBMDefinition *d, const char *substr) {
 }
 
 /* Count entries in a NULL-terminated base_classes array. */
-static int bases_count(CBMDefinition *d) {
+static int bases_count(LSMDefinition *d) {
     if (!d->base_classes)
         return 0;
     int n = 0;
@@ -116,7 +116,7 @@ static int bases_count(CBMDefinition *d) {
  * The extractor uses "Class", "Interface", "Struct" — we try all three in
  * find_def_flex() below. */
 typedef struct {
-    CBMLanguage lang;
+    LSMLanguage lang;
     const char *path;              /* file path hint (sets language via extension too) */
     const char *src;               /* source snippet */
     const char *class_name;        /* name to look up */
@@ -128,8 +128,8 @@ typedef struct {
 } inherit_case_t;
 
 /* Find def trying Class / Interface / Struct / any-label fallback. */
-static CBMDefinition *find_def_flex(CBMFileResult *r, const char *name) {
-    CBMDefinition *d;
+static LSMDefinition *find_def_flex(LSMFileResult *r, const char *name) {
+    LSMDefinition *d;
     if ((d = find_def(r, "Class", name)))
         return d;
     if ((d = find_def(r, "Interface", name)))
@@ -148,31 +148,31 @@ static CBMDefinition *find_def_flex(CBMFileResult *r, const char *name) {
  * can include the case description in the failure message.
  */
 static int run_inherit_case(const inherit_case_t *tc) {
-    CBMFileResult *r =
-        cbm_extract_file(tc->src, (int)strlen(tc->src), tc->lang, "t", tc->path, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(tc->src, (int)strlen(tc->src), tc->lang, "t", tc->path, 0, NULL, NULL);
     if (!r) {
-        printf("  FAIL  [%s] cbm_extract_file returned NULL\n", tc->class_name);
+        printf("  FAIL  [%s] lsm_extract_file returned NULL\n", tc->class_name);
         return 1;
     }
 
-    CBMDefinition *cls = find_def_flex(r, tc->class_name);
+    LSMDefinition *cls = find_def_flex(r, tc->class_name);
     if (!cls) {
         printf("  FAIL  [%s] definition not found in extraction result\n", tc->class_name);
-        cbm_free_result(r);
+        lsm_free_result(r);
         return 1;
     }
 
     /* When no bases are expected and no min count is set, this is a
      * no-crash / sanity row — skip the rest of the checks. */
     if (!tc->expected_bases[0] && tc->min_base_count == 0) {
-        cbm_free_result(r);
+        lsm_free_result(r);
         return 0;
     }
 
     /* Assert base_classes is non-NULL (at least one base expected). */
     if (!cls->base_classes) {
         printf("  FAIL  [%s] base_classes is NULL (expected non-empty)\n", tc->class_name);
-        cbm_free_result(r);
+        lsm_free_result(r);
         return 1;
     }
 
@@ -205,7 +205,7 @@ static int run_inherit_case(const inherit_case_t *tc) {
         }
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return ok ? 0 : 1;
 }
 
@@ -235,7 +235,7 @@ static int run_inherit_case(const inherit_case_t *tc) {
 
 static const inherit_case_t python_cases[] = {
     /* ── single base (bare identifier) ────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class Animal:\n    pass\n\nclass Dog(Animal):\n    pass\n",
      "Dog",
@@ -243,7 +243,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── multiple bases ─────────────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class A: pass\nclass B: pass\nclass C(A, B): pass\n",
      "C",
@@ -251,7 +251,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      2},
     /* ── base + mixin ───────────────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class Base: pass\nclass Mixin: pass\nclass Service(Base, Mixin): pass\n",
      "Service",
@@ -259,7 +259,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      2},
     /* ── generic base (subscript, e.g. Generic[T]) ──────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "from typing import Generic, TypeVar\nT = TypeVar('T')\n"
      "class Stack(Generic[T]):\n    pass\n",
@@ -268,7 +268,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── qualified base (dotted: module.Base) ───────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "import django.db\nclass MyModel(django.db.Model):\n    pass\n",
      "MyModel",
@@ -276,7 +276,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── abstract base (abc.ABC) ────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "from abc import ABC, abstractmethod\nclass Shape(ABC):\n    @abstractmethod\n    def "
      "area(self): pass\n",
@@ -285,7 +285,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── dataclass with base ────────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "from dataclasses import dataclass\n@dataclass\nclass Point:\n    x: float\n\n"
      "@dataclass\nclass Point3D(Point):\n    z: float\n",
@@ -294,7 +294,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── exception subclass ─────────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class AppError(Exception): pass\n",
      "AppError",
@@ -302,7 +302,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      1},
     /* ── three bases ────────────────────────────────────────────── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class X: pass\nclass Y: pass\nclass Z: pass\nclass Multi(X, Y, Z): pass\n",
      "Multi",
@@ -310,7 +310,7 @@ static const inherit_case_t python_cases[] = {
      {"(", ")", NULL},
      3},
     /* ── base with keyword argument (metaclass=) should not bleed ── */
-    {CBM_LANG_PYTHON,
+    {LSM_LANG_PYTHON,
      "m.py",
      "class Meta: pass\nclass MyClass(object, metaclass=Meta): pass\n",
      "MyClass",
@@ -330,7 +330,7 @@ TEST(inherit_python) {
 
 static const inherit_case_t java_cases[] = {
     /* ── extends only ───────────────────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Dog extends Animal { }",
      "Dog",
@@ -338,7 +338,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── implements single interface ─────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class ConcreteList implements List { }",
      "ConcreteList",
@@ -346,7 +346,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── extends + implements one ────────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class MyThread extends Thread implements Runnable { }",
      "MyThread",
@@ -354,7 +354,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── extends + implements two (regression for #279) ─────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class DefaultLinkTool extends DefaultDiagramTool implements ILinkTool, Closeable { }",
      "DefaultLinkTool",
@@ -362,7 +362,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── implements three interfaces ─────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Svc implements A, B, C { }",
      "Svc",
@@ -370,7 +370,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── generic base (extends List<String>) ─────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "import java.util.*; public class MyList extends ArrayList<String> { }",
      "MyList",
@@ -378,7 +378,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── generic implements (Comparable<T>) ──────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Box<T> implements Comparable<Box<T>> { public int compareTo(Box<T> o) { return "
      "0; } }",
@@ -387,7 +387,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── abstract class extends ──────────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public abstract class AbstractSvc extends BaseService { protected abstract void run(); }",
      "AbstractSvc",
@@ -395,7 +395,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── interface extends interface ─────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public interface ReadWriteRepo extends ReadRepo, WriteRepo { }",
      "ReadWriteRepo",
@@ -403,7 +403,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── enum implements interface ───────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public enum Status implements Displayable { OPEN, CLOSED; public String display() { return "
      "name(); } }",
@@ -412,7 +412,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── qualified (imported) type name ─────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Handler extends java.net.ServerSocket { }",
      "Handler",
@@ -420,7 +420,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── extends + implements four ───────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Mega extends Base implements A, B, C, D { }",
      "Mega",
@@ -428,7 +428,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      5},
     /* ── nested class with base ──────────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Outer { public static class Inner extends Outer { } }",
      "Inner",
@@ -436,7 +436,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── record implements interface (Java 16+) ──────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public record Point(int x, int y) implements Comparable<Point> { "
      "public int compareTo(Point o) { return Integer.compare(x, o.x); } }",
@@ -445,7 +445,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── sealed class (Java 17+) ─────────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public sealed class Shape permits Circle, Rectangle { }",
      "Shape",
@@ -453,7 +453,7 @@ static const inherit_case_t java_cases[] = {
      {NULL},
      0},
     /* ── class implements Serializable ──────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "import java.io.*; public class Data extends BaseData implements Serializable, Cloneable { }",
      "Data",
@@ -461,7 +461,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── generic class extends generic base ──────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Pair<A, B> extends AbstractPair<A, B> implements Iterable<A> { "
      "public java.util.Iterator<A> iterator() { return null; } }",
@@ -470,7 +470,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── class extending Exception ───────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class AppException extends RuntimeException { "
      "public AppException(String msg) { super(msg); } }",
@@ -479,7 +479,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── multiple interfaces no extends ──────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "public class Codec implements Encoder, Decoder, Closeable { }",
      "Codec",
@@ -487,7 +487,7 @@ static const inherit_case_t java_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── annotated class with base ───────────────────────────────── */
-    {CBM_LANG_JAVA,
+    {LSM_LANG_JAVA,
      "Svc.java",
      "@Override public class AnnotatedSvc extends BaseSvc { }",
      "AnnotatedSvc",
@@ -507,7 +507,7 @@ TEST(inherit_java) {
 
 static const inherit_case_t csharp_cases[] = {
     /* ── single base class ──────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Dog : Animal { }",
      "Dog",
@@ -515,7 +515,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── implements single interface ─────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Repo : IRepository { }",
      "Repo",
@@ -523,7 +523,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── base + interface ────────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Service : BaseService, IService { }",
      "Service",
@@ -531,7 +531,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── base + two interfaces ───────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Worker : BackgroundService, IWorker, IDisposable { }",
      "Worker",
@@ -539,7 +539,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      3},
     /* ── generic base ────────────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class OrderList : List<Order> { }",
      "OrderList",
@@ -547,7 +547,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── generic base + interface ────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Stack<T> : Collection<T>, IStack<T> { }",
      "Stack",
@@ -555,7 +555,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── interface extends two interfaces ────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public interface ICrud : IRead, IWrite { }",
      "ICrud",
@@ -563,7 +563,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── abstract class with base ────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public abstract class AbstractHandler : BaseHandler { protected abstract void Handle(); }",
      "AbstractHandler",
@@ -571,7 +571,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── sealed class ────────────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public sealed class SingletonService : BaseService { }",
      "SingletonService",
@@ -579,7 +579,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── namespace-qualified base ────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "namespace App { public class Handler : System.Net.Http.HttpMessageHandler { "
      "protected override System.Threading.Tasks.Task<System.Net.Http.HttpResponseMessage> "
@@ -590,7 +590,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── partial class with base ─────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public partial class PartialSvc : BaseSvc, IPartial { }",
      "PartialSvc",
@@ -598,7 +598,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── record with base ────────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public record OrderRecord(int Id) : BaseRecord(Id), IRecord { }",
      "OrderRecord",
@@ -606,7 +606,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── struct implements interface ─────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public struct Point : IEquatable<Point> { public bool Equals(Point other) => true; }",
      "Point",
@@ -614,7 +614,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── class with four interfaces ──────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Mega : Base, IA, IB, IC, ID { }",
      "Mega",
@@ -622,7 +622,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      5},
     /* ── exception subclass ─────────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class AppException : Exception { public AppException(string msg) : base(msg) {} }",
      "AppException",
@@ -630,7 +630,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── nested class with base ──────────────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Outer { public class Inner : Outer { } }",
      "Inner",
@@ -638,7 +638,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── class in namespace with base ───────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "namespace MyApp.Services { public class OrderSvc : BaseOrderSvc, IOrderSvc { } }",
      "OrderSvc",
@@ -646,7 +646,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      2},
     /* ── interface with single parent ───────────────────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public interface IAdvancedService : IBasicService { void AdvancedOp(); }",
      "IAdvancedService",
@@ -654,7 +654,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", NULL},
      1},
     /* ── generic class implements generic interface ───────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Repo<T> : BaseRepo<T>, IRepo<T> where T : class { }",
      "Repo",
@@ -662,7 +662,7 @@ static const inherit_case_t csharp_cases[] = {
      {":", "where", NULL},
      2},
     /* ── class with IDisposable + IAsyncDisposable ───────────────── */
-    {CBM_LANG_CSHARP,
+    {LSM_LANG_CSHARP,
      "Svc.cs",
      "public class Resource : IDisposable, IAsyncDisposable { "
      "public void Dispose() {} "
@@ -684,7 +684,7 @@ TEST(inherit_csharp) {
 
 static const inherit_case_t cpp_cases[] = {
     /* ── public single base ─────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Dog : public Animal { };",
      "Dog",
@@ -692,7 +692,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "private", "protected", ":", NULL},
      1},
     /* ── private base ────────────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Impl : private Base { };",
      "Impl",
@@ -700,7 +700,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "private", "protected", ":", NULL},
      1},
     /* ── multiple inheritance ────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class C : public A, public B { };",
      "C",
@@ -708,7 +708,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "private", "protected", ":", NULL},
      2},
     /* ── struct with base ────────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "struct Derived : Base { int x; };",
      "Derived",
@@ -716,7 +716,7 @@ static const inherit_case_t cpp_cases[] = {
      {":", NULL},
      1},
     /* ── virtual inheritance ─────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class D : public virtual B1, public virtual B2 { };",
      "D",
@@ -724,7 +724,7 @@ static const inherit_case_t cpp_cases[] = {
      {"virtual", "public", ":", NULL},
      2},
     /* ── template base ───────────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "template<typename T> class Stack : public std::vector<T> { };",
      "Stack",
@@ -734,7 +734,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "template", NULL},
      1},
     /* ── CRTP pattern ────────────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "template<typename Derived> class Base { };\n"
      "class Concrete : public Base<Concrete> { };",
@@ -743,7 +743,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      1},
     /* ── abstract class (pure virtual) with public base ──────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class AbstractLogger : public ILogger { public: virtual void log(const char*) = 0; };",
      "AbstractLogger",
@@ -751,7 +751,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      1},
     /* ── class in namespace ──────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "namespace net { class Socket : public BaseSocket { }; }",
      "Socket",
@@ -759,7 +759,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      1},
     /* ── three-way diamond inheritance ──────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class A { }; class B : public A { }; class C : public A { };\n"
      "class D : public B, public C { };",
@@ -768,7 +768,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      2},
     /* ── fully qualified base name ───────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class MyStream : public std::ostream { public: MyStream() : std::ostream(nullptr) {} };",
      "MyStream",
@@ -777,7 +777,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", NULL},
      1},
     /* ── protected base ──────────────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Node : protected TreeNode { };",
      "Node",
@@ -785,7 +785,7 @@ static const inherit_case_t cpp_cases[] = {
      {"protected", ":", NULL},
      1},
     /* ── multiple bases with mixed access ────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Widget : public Drawable, private EventHandler, protected Serializable { };",
      "Widget",
@@ -793,7 +793,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "private", "protected", ":", NULL},
      3},
     /* ── exception class from std::exception ─────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "#include <stdexcept>\nclass AppError : public std::runtime_error { "
      "public: AppError(const char* m) : std::runtime_error(m) {} };",
@@ -803,7 +803,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", NULL},
      1},
     /* ── template class with multiple template base types ────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "template<typename K, typename V>\n"
      "class LruCache : public Cache<K,V>, public Observable { };",
@@ -812,7 +812,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      2},
     /* ── nested class with base ──────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Outer { public: class Inner : public Base { }; };",
      "Inner",
@@ -820,7 +820,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      1},
     /* ── class using final specifier ─────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class Leaf final : public Node { };",
      "Leaf",
@@ -828,7 +828,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", "final", ":", NULL},
      1},
     /* ── struct with scoped base ─────────────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "struct MyVisitor : public boost::static_visitor<int> { int operator()(int x) { return x; } "
      "};",
@@ -838,7 +838,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", NULL},
      1},
     /* ── policy-based design (two template base policies) ────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "template<class StoragePolicy, class LogPolicy>\n"
      "class Engine : public StoragePolicy, public LogPolicy { };",
@@ -847,7 +847,7 @@ static const inherit_case_t cpp_cases[] = {
      {"public", ":", NULL},
      2},
     /* ── empty base optimization (EBO) ──────────────────────────── */
-    {CBM_LANG_CPP,
+    {LSM_LANG_CPP,
      "svc.cpp",
      "class EboContainer : private Allocator, public ContainerBase { };",
      "EboContainer",
@@ -870,7 +870,7 @@ TEST(inherit_cpp) {
 
 static const inherit_case_t typescript_cases[] = {
     /* ── extends single class ────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Dog extends Animal { bark(): void {} }",
      "Dog",
@@ -878,7 +878,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── implements single interface ─────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Repo implements IRepository { save(x: any) {} }",
      "Repo",
@@ -886,7 +886,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── extends + implements ────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Service extends BaseService implements IService { run() {} }",
      "Service",
@@ -894,7 +894,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── implements two interfaces ───────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Codec implements Encoder, Decoder { encode(x: any) {} decode(x: any) {} }",
      "Codec",
@@ -902,7 +902,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── extends + implements three ──────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Mega extends Base implements A, B, C { }",
      "Mega",
@@ -910,7 +910,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      4},
     /* ── generic base ────────────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Stack<T> extends Array<T> implements IStack<T> { push(x: T) { return 0; } }",
      "Stack",
@@ -918,7 +918,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── interface extends interface ─────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "interface ReadWriteRepo extends ReadRepo, WriteRepo { }",
      "ReadWriteRepo",
@@ -926,7 +926,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── abstract class ──────────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "abstract class AbstractSvc extends BaseService { abstract run(): void; }",
      "AbstractSvc",
@@ -934,7 +934,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── class extends Error ─────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class AppError extends Error { constructor(msg: string) { super(msg); } }",
      "AppError",
@@ -942,7 +942,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── class extends EventEmitter ──────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "import { EventEmitter } from 'events';\n"
      "class Bus extends EventEmitter { emit(ev: string) { return super.emit(ev); } }",
@@ -951,7 +951,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── generic class extends generic base ──────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Pair<A, B> extends AbstractPair<A, B> implements Iterable<A> { "
      "[Symbol.iterator]() { return this as any; } }",
@@ -960,7 +960,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── class implements multiple generic interfaces ─────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Handler implements Middleware<Request, Response>, Disposable { "
      "handle(req: Request): Response { return null as any; } dispose() {} }",
@@ -969,7 +969,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── class in module namespace ───────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "export class OrderService extends BaseOrderService implements IOrderService { }",
      "OrderService",
@@ -977,7 +977,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── mixin target class (concrete class consuming a mixin) ──────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class Loggable { log(msg: string) { console.log(msg); } }\n"
      "class Logger extends Loggable implements ILogger { info(msg: string) { this.log(msg); } }",
@@ -986,7 +986,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── decorator + extends ─────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "function Injectable() { return (c: any) => c; }\n"
      "@Injectable()\nclass UserService extends BaseUserService { }",
@@ -995,7 +995,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── class implementing multiple inferred generics ───────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class BinaryTree<T> extends Tree<T> implements Traversable<T>, Serializable { "
      "traverse() {} serialize() { return ''; } }",
@@ -1004,7 +1004,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── React component extends ──────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "import React from 'react';\n"
      "class MyComponent extends React.Component<{}, {}> { render() { return null; } }",
@@ -1013,7 +1013,7 @@ static const inherit_case_t typescript_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── exception hierarchy ─────────────────────────────────────── */
-    {CBM_LANG_TYPESCRIPT,
+    {LSM_LANG_TYPESCRIPT,
      "svc.ts",
      "class NetworkError extends AppError implements Retryable { retry() {} }",
      "NetworkError",
@@ -1033,7 +1033,7 @@ TEST(inherit_typescript) {
 
 static const inherit_case_t tsx_cases[] = {
     /* ── React.Component subclass ────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "App.tsx",
      "import React from 'react';\n"
      "class App extends React.Component<{}, {}> { render() { return <div/>; } }",
@@ -1042,7 +1042,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── PureComponent subclass ──────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "Widget.tsx",
      "import { PureComponent } from 'react';\n"
      "class Widget extends PureComponent { render() { return null; } }",
@@ -1051,7 +1051,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── component + interface ───────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "Form.tsx",
      "import { Component } from 'react';\n"
      "class Form extends Component<FormProps, FormState> implements IForm { "
@@ -1061,7 +1061,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── abstract component ──────────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "Base.tsx",
      "import { Component } from 'react';\n"
      "abstract class BaseView extends Component { abstract renderContent(): JSX.Element; }",
@@ -1070,7 +1070,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── non-React class in .tsx ─────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "store.tsx",
      "class UserStore extends BaseStore implements IStore { load() {} }",
      "UserStore",
@@ -1078,7 +1078,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── generic component ───────────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "List.tsx",
      "import { Component } from 'react';\n"
      "class List<T> extends Component<{ items: T[] }> { render() { return <ul/>; } }",
@@ -1087,7 +1087,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── interface extends in tsx file ───────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "types.tsx",
      "interface IAdvanced extends IBasic, IExtended { doAdvanced(): void; }",
      "IAdvanced",
@@ -1095,7 +1095,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── multiple interfaces + base ──────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "Mega.tsx",
      "class MegaComponent extends React.Component implements Serializable, Disposable { "
      "render() { return null; } }",
@@ -1104,7 +1104,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      3},
     /* ── error boundary component ────────────────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "ErrorBoundary.tsx",
      "import { Component, ReactNode, ErrorInfo } from 'react';\n"
      "class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> { "
@@ -1114,7 +1114,7 @@ static const inherit_case_t tsx_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── class extending custom hook class ───────────────────────── */
-    {CBM_LANG_TSX,
+    {LSM_LANG_TSX,
      "hook.tsx",
      "class AdvancedHook extends BaseHook implements IHook { use() {} }",
      "AdvancedHook",
@@ -1138,7 +1138,7 @@ TEST(inherit_tsx) {
 
 static const inherit_case_t php_cases[] = {
     /* ── extends single class ────────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Dog extends Animal { public function bark(): void {} }",
      "Dog",
@@ -1146,7 +1146,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── implements single interface ─────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Repo implements IRepository { public function save($x) {} }",
      "Repo",
@@ -1154,7 +1154,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── extends + implements ────────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Service extends BaseService implements IService { public function run() {} }",
      "Service",
@@ -1162,7 +1162,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── implements two interfaces ───────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Codec implements Encoder, Decoder { "
      "public function encode($x) {} public function decode($x) {} }",
@@ -1171,7 +1171,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── extends + implements three ──────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Mega extends Base implements A, B, C { }",
      "Mega",
@@ -1179,7 +1179,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      4},
     /* ── abstract class ──────────────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nabstract class AbstractSvc extends BaseService { abstract public function run(): "
      "void; }",
@@ -1188,7 +1188,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── final class ─────────────────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nfinal class FinalSvc extends BaseSvc { }",
      "FinalSvc",
@@ -1196,7 +1196,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      1},
     /* ── namespace-qualified base ────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nnamespace App\\Services;\nuse App\\Base\\BaseService;\n"
      "class OrderService extends BaseService implements IOrderService { }",
@@ -1205,7 +1205,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── interface extends interface ─────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\ninterface IAdvanced extends IBasic, IExtended { public function doAdvanced(): void; }",
      "IAdvanced",
@@ -1213,7 +1213,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", NULL},
      2},
     /* ── backslash-prefixed fully qualified base ──────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass MyException extends \\RuntimeException { }",
      "MyException",
@@ -1221,7 +1221,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "\\\\", NULL},
      1},
     /* ── class extending Exception ───────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass AppException extends \\Exception { "
      "public function __construct(string $msg) { parent::__construct($msg); } }",
@@ -1230,7 +1230,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", NULL},
      1},
     /* ── implements four interfaces ──────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass Adapter implements IA, IB, IC, ID { "
      "public function a() {} public function b() {} "
@@ -1240,7 +1240,7 @@ static const inherit_case_t php_cases[] = {
      {"implements", NULL},
      4},
     /* ── trait-using class also extends ──────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\ntrait Logging { public function log() {} }\n"
      "class MyService extends BaseService { use Logging; }",
@@ -1249,7 +1249,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", NULL},
      1},
     /* ── nested namespace with extends ───────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nnamespace App\\Http\\Controllers;\n"
      "class UserController extends Controller { }",
@@ -1258,7 +1258,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", NULL},
      1},
     /* ── multiple namespaced interfaces ──────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nuse Psr\\Http\\Server\\RequestHandlerInterface;\n"
      "use Psr\\Http\\Message\\ResponseInterface;\n"
@@ -1269,7 +1269,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", "implements", NULL},
      2},
     /* ── readonly class (PHP 8.2) ────────────────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nreadonly class ValueObject extends BaseValue { public function __construct("
      "public readonly string $value) {} }",
@@ -1278,7 +1278,7 @@ static const inherit_case_t php_cases[] = {
      {"extends", NULL},
      1},
     /* ── enum implements interface (PHP 8.1) ─────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\ninterface HasLabel { public function label(): string; }\n"
      "enum Status: string implements HasLabel { "
@@ -1288,7 +1288,7 @@ static const inherit_case_t php_cases[] = {
      {"implements", NULL},
      1},
     /* ── extends with constructor promotion ──────────────────────── */
-    {CBM_LANG_PHP,
+    {LSM_LANG_PHP,
      "Svc.php",
      "<?php\nclass PromotedDto extends BaseDto { "
      "public function __construct(public readonly string $name) { parent::__construct(); } }",
@@ -1312,7 +1312,7 @@ TEST(inherit_php) {
 
 static const inherit_case_t kotlin_cases[] = {
     /* ── extends single class ────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class Animal(val name: String)\nclass Dog(name: String) : Animal(name)",
      "Dog",
@@ -1320,7 +1320,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── implements single interface ─────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "interface IRepo { fun save(x: Any) }\nclass Repo : IRepo { override fun save(x: Any) {} }",
      "Repo",
@@ -1328,7 +1328,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── extends + implements ────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class BaseService\ninterface IService { fun run() }\n"
      "class Service : BaseService(), IService { override fun run() {} }",
@@ -1337,7 +1337,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      2},
     /* ── implements two interfaces ───────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "interface Encoder { fun encode(x: Any): String }\n"
      "interface Decoder { fun decode(s: String): Any }\n"
@@ -1349,7 +1349,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      2},
     /* ── abstract class ──────────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "abstract class AbstractSvc : BaseService() { abstract fun run() }",
      "AbstractSvc",
@@ -1357,7 +1357,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── data class with base ────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class BaseEntity(val id: Long)\n"
      "data class User(val name: String, override val id: Long) : BaseEntity(id)",
@@ -1366,7 +1366,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── sealed class with base ──────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "sealed class Result\nclass Success(val value: Any) : Result()\nclass Failure(val err: "
      "Throwable) : Result()",
@@ -1375,7 +1375,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── object (singleton) implementing interface ───────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "interface Logger { fun log(msg: String) }\nobject ConsoleLogger : Logger { override fun "
      "log(msg: String) = println(msg) }",
@@ -1384,7 +1384,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── generic class with bound ────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class Container<T>\nclass Box<T : Comparable<T>> : Container<T>()",
      "Box",
@@ -1392,7 +1392,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── companion object (no base — sanity check, no crash) ─────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "class MyClass { companion object : Factory<MyClass>() { override fun create() = MyClass() } "
      "}",
@@ -1401,7 +1401,7 @@ static const inherit_case_t kotlin_cases[] = {
      {NULL},
      0},
     /* ── enum class implementing interface ───────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "interface Displayable { fun display(): String }\n"
      "enum class Status : Displayable { OPEN, CLOSED; override fun display() = name }",
@@ -1410,7 +1410,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── class extending Exception ───────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "class AppException(message: String) : Exception(message)",
      "AppException",
@@ -1418,7 +1418,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── implements Comparable ───────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "class Version(val major: Int, val minor: Int) : Comparable<Version> { "
      "override fun compareTo(other: Version) = compareValuesBy(this, other, { it.major }, { "
@@ -1428,7 +1428,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── open class hierarchy ────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class Vehicle(val speed: Int)\nopen class MotorVehicle(speed: Int) : Vehicle(speed)\n"
      "class Car(speed: Int) : MotorVehicle(speed)",
@@ -1437,7 +1437,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── inner class with base ───────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class BaseNode\nclass Tree { inner class Node : BaseNode() { var value: Int = 0 } }",
      "Node",
@@ -1445,7 +1445,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── fun interface (SAM) ─────────────────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "fun interface Transformer { fun transform(input: String): String }\n"
      "class UpperTransformer : Transformer { override fun transform(input: String) = "
@@ -1455,7 +1455,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── three bases (base + two interfaces) ─────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class BaseWorker\ninterface Runnable { fun run() }\ninterface Stoppable { fun stop() }\n"
      "class Worker : BaseWorker(), Runnable, Stoppable { override fun run() {} override fun stop() "
@@ -1465,7 +1465,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      3},
     /* ── annotation class with base ─────────────────────────────────*/
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "annotation class MyAnnotation\nclass AnnotatedClass : BaseClass() { @MyAnnotation fun "
      "doWork() {} }",
@@ -1474,7 +1474,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── value class (inline, Kotlin 1.5+) ──────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "interface Printable { fun print() }\n"
      "@JvmInline value class UserId(val id: String) : Printable { override fun print() = "
@@ -1484,7 +1484,7 @@ static const inherit_case_t kotlin_cases[] = {
      {":", NULL},
      1},
     /* ── class with type-projected bound ─────────────────────────── */
-    {CBM_LANG_KOTLIN,
+    {LSM_LANG_KOTLIN,
      "Svc.kt",
      "open class Repository<T : Any>\nclass UserRepository : Repository<User>()",
      "UserRepository",
@@ -1502,14 +1502,14 @@ TEST(inherit_kotlin) {
  * RUST — impl Trait for Struct  (expected: GREEN — regression guards)
  *
  * Rust does not use `base_classes` on the Struct def.  Instead the
- * extractor populates CBMFileResult.impl_traits (CBMImplTrait array)
+ * extractor populates LSMFileResult.impl_traits (LSMImplTrait array)
  * with {trait_name, struct_name} pairs.
  * ═══════════════════════════════════════════════════════════════════ */
 
 /* Rust helper: check impl_traits array. */
-static int rust_has_impl(CBMFileResult *r, const char *trait_name, const char *struct_name) {
+static int rust_has_impl(LSMFileResult *r, const char *trait_name, const char *struct_name) {
     for (int i = 0; i < r->impl_traits.count; i++) {
-        CBMImplTrait *it = &r->impl_traits.items[i];
+        LSMImplTrait *it = &r->impl_traits.items[i];
         if (it->trait_name && strcmp(it->trait_name, trait_name) == 0 && it->struct_name &&
             strcmp(it->struct_name, struct_name) == 0)
             return 1;
@@ -1524,7 +1524,7 @@ typedef struct {
 } rust_impl_case_t;
 
 static int run_rust_impl(const rust_impl_case_t *tc) {
-    CBMFileResult *r = cbm_extract_file(tc->src, (int)strlen(tc->src), CBM_LANG_RUST, "t", "lib.rs",
+    LSMFileResult *r = lsm_extract_file(tc->src, (int)strlen(tc->src), LSM_LANG_RUST, "t", "lib.rs",
                                         0, NULL, NULL);
     if (!r) {
         printf("  FAIL  [impl %s for %s] extract returned NULL\n", tc->trait_name, tc->struct_name);
@@ -1534,10 +1534,10 @@ static int run_rust_impl(const rust_impl_case_t *tc) {
     if (!found) {
         printf("  FAIL  [impl %s for %s] not found in impl_traits\n", tc->trait_name,
                tc->struct_name);
-        cbm_free_result(r);
+        lsm_free_result(r);
         return 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 

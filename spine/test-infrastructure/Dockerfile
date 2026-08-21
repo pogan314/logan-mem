@@ -3,8 +3,8 @@
 #   - GCC (system default) with ASan + UBSan + LeakSanitizer
 #   - libsqlite3-dev + zlib1g-dev (same as CI "Install deps" step)
 #
-# Build:  docker build -t cbm-test test-infrastructure/
-# Run:    docker run --rm -v $(pwd):/src cbm-test
+# Build:  docker build -t lsm-test test-infrastructure/
+# Run:    docker run --rm -v $(pwd):/src lsm-test
 
 # Pinned by digest (supply-chain: no floating tags) — multi-arch manifest-list
 # digest of ubuntu:noble as of 2026-07-23; bump deliberately, never to a tag.

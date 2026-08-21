@@ -19,7 +19,7 @@
  *       the .d.ts STUB node    (app/types/widget-shim.d.ts)
  *
  *   trace_path resolves the symbol name to EXACTLY ONE of the two nodes (the
- *   first one returned by cbm_store_find_nodes_by_name) and BFS-traverses only
+ *   first one returned by lsm_store_find_nodes_by_name) and BFS-traverses only
  *   that node's inbound CALLS edges.  The callers whose edges point to the OTHER
  *   node are silently omitted from the result.  There is no warning that the
  *   symbol resolved to multiple nodes and the caller set is therefore partial.
@@ -62,7 +62,7 @@
  *   the right reason: incomplete caller set.
  *
  * Fix location (not implemented here):
- *   Either in cbm_store_find_nodes_by_name / cbm_store_bfs (union traversal
+ *   Either in lsm_store_find_nodes_by_name / lsm_store_bfs (union traversal
  *   across all nodes sharing name+signature), or in the pipeline dedup step
  *   where body-less .d.ts stub nodes should be merged/aliased into their
  *   implementation counterpart rather than stored as separate graph nodes.
@@ -168,7 +168,7 @@ static const RFile k_files[] = {
  * ───────────────────────────────────────────────────────────────────────── */
 TEST(repro_issue546_dts_split_caller_set) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, k_files,
+    lsm_store_t *store = rh_index_files(&lp, k_files,
                                         (int)(sizeof(k_files) / sizeof(k_files[0])));
     ASSERT_NOT_NULL(store);
 
@@ -201,7 +201,7 @@ TEST(repro_issue546_dts_split_caller_set) {
      *
      * On BUGGY code (current):
      *   trace_path resolves "alignToEdge" to ONE node (first match from
-     *   cbm_store_find_nodes_by_name).  Only callers whose CALLS edges
+     *   lsm_store_find_nodes_by_name).  Only callers whose CALLS edges
      *   point to THAT node appear.  The other caller is silently absent.
      */
     char args[512];
@@ -212,7 +212,7 @@ TEST(repro_issue546_dts_split_caller_set) {
              "\"depth\":2}",
              lp.project);
 
-    char *resp = cbm_mcp_handle_tool(lp.srv, "trace_path", args);
+    char *resp = lsm_mcp_handle_tool(lp.srv, "trace_path", args);
     ASSERT_NOT_NULL(resp);
 
     /* Symbol must be found — if "function not found" fires, the name lookup

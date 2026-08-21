@@ -46,9 +46,9 @@ function buildIssueUrl(base: string, path: string, project: string | null): stri
 function buildAgentPrompt(issuesUrl: string | null, path: string, project: string | null): string {
   const where = issuesUrl
     ? `file a GitHub issue at ${issuesUrl}`
-    : "file a GitHub issue on the codebase-memory-mcp project";
+    : "file a GitHub issue on the logan-spine-mcp project";
   return (
-    `codebase-memory-mcp could not fully index \`${path}\`` +
+    `logan-spine-mcp could not fully index \`${path}\`` +
     (project ? ` (project \`${project}\`)` : "") +
     " — best-effort coverage signal. Please: " +
     "1) call the index_status MCP tool and note this file's flagged line ranges under parse_partial; " +
@@ -118,7 +118,7 @@ export function MissedCallout({ node, project, onClose }: MissedCalloutProps) {
       </p>
       <p className="text-[12px] leading-relaxed text-foreground/70">
         Help us handle this edge case too: let your agent summarize what fails to parse
-        here and file a GitHub issue for the codebase-memory-mcp project.
+        here and file a GitHub issue for the logan-spine-mcp project.
       </p>
 
       <div className="flex flex-col gap-2 mt-1">

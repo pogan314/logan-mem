@@ -23,7 +23,7 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/java_lsp.h"
 
 #include <string.h>
@@ -31,19 +31,19 @@
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
-static CBMFileResult *extract_java(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_JAVA, "test", "Main.java", 0,
+static LSMFileResult *extract_java(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_JAVA, "test", "Main.java", 0,
                             NULL, NULL);
 }
 
-static CBMFileResult *extract_java_at(const char *source, const char *rel_path) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_JAVA, "test", rel_path, 0, NULL,
+static LSMFileResult *extract_java_at(const char *source, const char *rel_path) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_JAVA, "test", rel_path, 0, NULL,
                             NULL);
 }
 
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->confidence < 0.5f) continue;
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub)) {
@@ -53,13 +53,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
     return -1;
 }
 
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("\n  MISSING resolved call: caller~%s -> callee~%s (have %d entries)\n", callerSub,
                calleeSub, r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)",
                    rc->strategy ? rc->strategy : "(null)", rc->confidence);
@@ -68,7 +68,7 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
     return idx;
 }
 
-static int count_resolved(const CBMFileResult *r) {
+static int count_resolved(const LSMFileResult *r) {
     int n = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
         if (r->resolved_calls.items[i].confidence >= 0.5f) n++;
@@ -85,10 +85,10 @@ TEST(jlsp_string_length) {
         "    return s.length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -100,10 +100,10 @@ TEST(jlsp_string_concat_method) {
         "    return hello.toUpperCase();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "greet", "String.toUpperCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -114,11 +114,11 @@ TEST(jlsp_string_chain) {
         "    return raw.trim().toLowerCase();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "clean", "String.trim"), 0);
     ASSERT_GTE(require_resolved(r, "clean", "String.toLowerCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -129,10 +129,10 @@ TEST(jlsp_string_static) {
         "    return String.valueOf(x);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "fmt", "String.valueOf"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -143,10 +143,10 @@ TEST(jlsp_string_format) {
         "    return String.format(\"count=%d\", n);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "build", "String.format"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -159,10 +159,10 @@ TEST(jlsp_math_static) {
         "    return Math.sqrt(a * a + b * b);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "dist", "Math.sqrt"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -173,11 +173,11 @@ TEST(jlsp_math_chain) {
         "    return Math.pow(Math.abs(x), 2);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "f", "Math.pow"), 0);
     ASSERT_GTE(require_resolved(r, "f", "Math.abs"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -188,10 +188,10 @@ TEST(jlsp_system_currentTimeMillis) {
         "    return System.currentTimeMillis();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "now", "System.currentTimeMillis"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -202,10 +202,10 @@ TEST(jlsp_system_out_println) {
         "    System.out.println(\"hi\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "hi", "PrintStream.println"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -216,10 +216,10 @@ TEST(jlsp_integer_parse) {
         "    return Integer.parseInt(s);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "toInt", "Integer.parseInt"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -231,10 +231,10 @@ TEST(jlsp_local_method_call) {
         "  String greet() { return \"hi\"; }\n"
         "  void run() { greet(); }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "greet"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -244,10 +244,10 @@ TEST(jlsp_this_method_call) {
         "  String greet() { return \"hi\"; }\n"
         "  void run() { this.greet(); }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "greet"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -258,10 +258,10 @@ TEST(jlsp_super_method_call) {
         "    return super.toString();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "describe", "Object.toString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -273,10 +273,10 @@ TEST(jlsp_local_field_method) {
         "    return this.name.length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -288,10 +288,10 @@ TEST(jlsp_field_no_this_method) {
         "    return name.length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -304,10 +304,10 @@ TEST(jlsp_object_creation) {
         "    return new StringBuilder();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "build", "StringBuilder"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -319,10 +319,10 @@ TEST(jlsp_arraylist_creation) {
         "    return new ArrayList<>();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "empty", "ArrayList"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -333,11 +333,11 @@ TEST(jlsp_constructor_then_method) {
         "    return new StringBuilder().append(\"x\").toString();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "go", "StringBuilder.append"), 0);
     ASSERT_GTE(require_resolved(r, "go", "toString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -353,11 +353,11 @@ TEST(jlsp_list_add) {
         "    xs.size();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.add"), 0);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.size"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -369,12 +369,12 @@ TEST(jlsp_list_get_chain) {
         "    return xs.get(0).length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "len", "ArrayList.get"), 0);
     /* Generics: get returns String → length resolves on String */
     ASSERT_GTE(require_resolved(r, "len", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -387,11 +387,11 @@ TEST(jlsp_hashmap) {
         "    return m.size();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "HashMap.put"), 0);
     ASSERT_GTE(require_resolved(r, "run", "HashMap.size"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -403,10 +403,10 @@ TEST(jlsp_list_static_of) {
         "    return List.of(\"a\", \"b\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "ones", "List.of"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -418,10 +418,10 @@ TEST(jlsp_set_contains) {
         "    return s.contains(x);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "has", "HashSet.contains"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -437,10 +437,10 @@ TEST(jlsp_inherited_method) {
         "    public void bark(Dog d) { d.name(); }\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "bark", "name"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -453,10 +453,10 @@ TEST(jlsp_inherited_through_chain) {
         "    public String go(C c) { return c.greet(); }\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "go", "greet"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -467,10 +467,10 @@ TEST(jlsp_super_chain_object_toString) {
         "    public String describe() { return super.toString(); }\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "describe", "Object.toString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -487,10 +487,10 @@ TEST(jlsp_enhanced_for_array) {
         "    return n;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "total", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -506,10 +506,10 @@ TEST(jlsp_enhanced_for_list) {
         "    return n;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "total", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -525,10 +525,10 @@ TEST(jlsp_enhanced_for_var) {
         "    return n;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "total", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -542,10 +542,10 @@ TEST(jlsp_var_inference) {
         "    return s.length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -558,10 +558,10 @@ TEST(jlsp_var_inference_constructor) {
         "    xs.add(\"a\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.add"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -574,10 +574,10 @@ TEST(jlsp_cast_method) {
         "    return ((String) o).length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "len", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -588,10 +588,10 @@ TEST(jlsp_ternary) {
         "    return (b ? x : x).length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -602,10 +602,10 @@ TEST(jlsp_array_index) {
         "    return xs[0].length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -617,11 +617,11 @@ TEST(jlsp_array_length_field) {
         "    return n;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* `xs.length` is a field access, no method call. Just confirms parse
      * doesn't break and no spurious diagnostics fired. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -635,10 +635,10 @@ TEST(jlsp_optional_chain) {
         "    return o.orElse(\"\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Optional.orElse"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -650,12 +650,12 @@ TEST(jlsp_stream_filter_map) {
         "    return xs.stream().filter(x -> x.length() > 0).count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "stream"), 0);
     ASSERT_GTE(require_resolved(r, "run", "filter"), 0);
     ASSERT_GTE(require_resolved(r, "run", "count"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -668,10 +668,10 @@ TEST(jlsp_stream_collect_toList) {
         "    return xs.stream().collect(Collectors.toList());\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Collectors.toList"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -685,10 +685,10 @@ TEST(jlsp_predicate_test) {
         "    return p.test(s);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "ok", "Predicate.test"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -700,10 +700,10 @@ TEST(jlsp_function_apply) {
         "    return f.apply(s);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Function.apply"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -715,10 +715,10 @@ TEST(jlsp_supplier_get) {
         "    return s.get();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Supplier.get"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -736,10 +736,10 @@ TEST(jlsp_exception_message) {
         "    return \"\";\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "describe", "Throwable.getMessage"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -753,10 +753,10 @@ TEST(jlsp_static_import_method) {
         "    return sqrt(x);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Math.sqrt"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -769,10 +769,10 @@ TEST(jlsp_on_demand_import) {
         "    m.put(\"x\", 1);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "HashMap.put"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -786,14 +786,14 @@ TEST(jlsp_generic_get_method) {
         "    return m.get(\"k\").length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "HashMap.get"), 0);
     /* The chained .length() lookup depends on generic-arg substitution into
      * the return type. We cover that for List-of-String elsewhere; with
      * HashMap.get the registry signature returns Object, so the chained
      * String.length call is allowed to be unresolved here. Accept either. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -805,10 +805,10 @@ TEST(jlsp_list_of_string_chain) {
         "    return xs.get(0).length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "List.get"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -821,10 +821,10 @@ TEST(jlsp_throw_runtime) {
         "    throw new IllegalArgumentException(\"bad\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "IllegalArgumentException"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -839,11 +839,11 @@ TEST(jlsp_print_stream) {
         "    s.flush();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "PrintStream.println"), 0);
     ASSERT_GTE(require_resolved(r, "run", "PrintStream.flush"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -855,10 +855,10 @@ TEST(jlsp_buffered_reader) {
         "    return r.readLine();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "BufferedReader.readLine"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -870,11 +870,11 @@ TEST(jlsp_file_methods) {
         "    return f.exists() && f.isFile();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "File.exists"), 0);
     ASSERT_GTE(require_resolved(r, "run", "File.isFile"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -888,10 +888,10 @@ TEST(jlsp_paths_get) {
         "    return Paths.get(\"a\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Paths.get"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -904,10 +904,10 @@ TEST(jlsp_files_readString) {
         "    return Files.readString(p);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Files.readString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -921,10 +921,10 @@ TEST(jlsp_regex_pattern_compile) {
         "    return Pattern.compile(\"^x\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Pattern.compile"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -938,11 +938,11 @@ TEST(jlsp_matcher_find) {
         "    return m.find();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Pattern.compile"), 0);
     ASSERT_GTE(require_resolved(r, "run", "Matcher.find"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -956,10 +956,10 @@ TEST(jlsp_atomic_increment) {
         "    return n.incrementAndGet();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "bump", "AtomicInteger.incrementAndGet"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -973,11 +973,11 @@ TEST(jlsp_executor_submit) {
         "    es.shutdown();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Executors.newFixedThreadPool"), 0);
     ASSERT_GTE(require_resolved(r, "run", "ExecutorService.shutdown"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -989,10 +989,10 @@ TEST(jlsp_completable_future_thenApply) {
         "    return f.thenApply(x -> x.length());\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "CompletableFuture.thenApply"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1006,10 +1006,10 @@ TEST(jlsp_localdate_now) {
         "    return LocalDate.now();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "LocalDate.now"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1021,11 +1021,11 @@ TEST(jlsp_duration_chain) {
         "    return Duration.ofSeconds(60).toMillis();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Duration.ofSeconds"), 0);
     ASSERT_GTE(require_resolved(r, "run", "Duration.toMillis"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1042,10 +1042,10 @@ TEST(jlsp_user_class_method) {
         "    return g.greet(\"world\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "greet"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1064,12 +1064,12 @@ TEST(jlsp_user_enum_methods) {
                       "    return day.label() + day.isWeekend();\n"
                       "  }\n"
                       "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
 
     int enum_methods = 0;
     for (int i = 0; i < r->defs.count; i++) {
-        const CBMDefinition *definition = &r->defs.items[i];
+        const LSMDefinition *definition = &r->defs.items[i];
         if (definition->label && strcmp(definition->label, "Method") == 0 &&
             definition->parent_class && strstr(definition->parent_class, "Day") &&
             definition->name &&
@@ -1081,7 +1081,7 @@ TEST(jlsp_user_enum_methods) {
     ASSERT_EQ(enum_methods, 2);
     ASSERT_GTE(require_resolved(r, "describe", "Day.label"), 0);
     ASSERT_GTE(require_resolved(r, "describe", "Day.isWeekend"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1095,10 +1095,10 @@ TEST(jlsp_user_static_method) {
         "    return Util.twice(21);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "twice"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1113,11 +1113,11 @@ TEST(jlsp_user_chain) {
         "    return b.self().tag();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "self"), 0);
     ASSERT_GTE(require_resolved(r, "run", "tag"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1130,7 +1130,7 @@ TEST(jlsp_unknown_variable_unresolved) {
         "    return blob.size();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* Should appear as an unresolved diagnostic (confidence 0) — confirm at
      * least one entry exists. */
@@ -1139,16 +1139,16 @@ TEST(jlsp_unknown_variable_unresolved) {
         if (r->resolved_calls.items[i].confidence == 0.0f) diag++;
     }
     ASSERT_GTE(diag, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(jlsp_no_resolved_calls_for_empty_class) {
     const char *src = "public class Main {}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_EQ(count_resolved(r), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1173,7 +1173,7 @@ TEST(jlsp_lifts_treesitter_calls) {
         "    return items.size() + counts.size() + n;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* Tree-sitter alone gives us only raw call nodes; LSP should resolve at
      * least 7 of these to fully-qualified callees. */
@@ -1185,7 +1185,7 @@ TEST(jlsp_lifts_treesitter_calls) {
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.size"), 0);
     ASSERT_GTE(require_resolved(r, "run", "HashMap.size"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1198,13 +1198,13 @@ TEST(jlsp_cross_file_basic) {
         "  public String run(com.example.Greeter g) { return g.greet(\"x\"); }\n"
         "}\n";
     /* Provide a single cross-file def for Greeter.greet returning String. */
-    CBMArena arena;
-    cbm_arena_init(&arena);
+    LSMArena arena;
+    lsm_arena_init(&arena);
 
-    CBMResolvedCallArray out;
+    LSMResolvedCallArray out;
     memset(&out, 0, sizeof(out));
 
-    CBMLSPDef defs[2];
+    LSMLSPDef defs[2];
     memset(defs, 0, sizeof(defs));
     defs[0].qualified_name = "com.example.Greeter";
     defs[0].short_name = "Greeter";
@@ -1220,7 +1220,7 @@ TEST(jlsp_cross_file_basic) {
     const char *imp_names[] = {"Greeter"};
     const char *imp_qns[] = {"com.example.Greeter"};
 
-    cbm_run_java_lsp_cross(&arena, src, (int)strlen(src), "test.com.example", defs, 2, imp_names,
+    lsm_run_java_lsp_cross(&arena, src, (int)strlen(src), "test.com.example", defs, 2, imp_names,
                            imp_qns, 1, NULL, &out);
 
     int found = 0;
@@ -1242,7 +1242,7 @@ TEST(jlsp_cross_file_basic) {
         }
     }
     ASSERT_EQ(found, 1);
-    cbm_arena_destroy(&arena);
+    lsm_arena_destroy(&arena);
     PASS();
 }
 
@@ -1256,10 +1256,10 @@ TEST(jlsp_objects_requireNonNull) {
         "    return Objects.requireNonNull(x);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Objects.requireNonNull"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1270,10 +1270,10 @@ TEST(jlsp_thread_currentThread) {
         "    return Thread.currentThread();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Thread.currentThread"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1284,10 +1284,10 @@ TEST(jlsp_class_class_literal) {
         "    return String.class.getName();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Class.getName"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1298,10 +1298,10 @@ TEST(jlsp_string_join) {
         "    return String.join(\",\", xs);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.join"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1313,11 +1313,11 @@ TEST(jlsp_uuid_random) {
         "    return UUID.randomUUID().toString();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "UUID.randomUUID"), 0);
     ASSERT_GTE(require_resolved(r, "run", "toString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1328,19 +1328,19 @@ TEST(jlsp_stringbuilder_append_chain) {
         "    return new StringBuilder().append(\"a\").append(\"b\").append(\"c\").toString();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* All three .append() and final .toString() should resolve. */
     int appends = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->confidence >= 0.5f && rc->callee_qn && strstr(rc->callee_qn, "StringBuilder.append")) {
             appends++;
         }
     }
     ASSERT_GTE(appends, 3);
     ASSERT_GTE(require_resolved(r, "run", "StringBuilder.toString"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1353,10 +1353,10 @@ TEST(jlsp_arrays_aslist) {
         "    return Arrays.asList(\"a\", \"b\");\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Arrays.asList"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1369,10 +1369,10 @@ TEST(jlsp_collections_sort) {
         "    Collections.sort(xs);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "Collections.sort"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1389,17 +1389,17 @@ TEST(jlsp_deeply_nested_block) {
         "    return 0;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     int length_calls = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->confidence >= 0.5f && rc->callee_qn && strstr(rc->callee_qn, "String.length")) {
             length_calls++;
         }
     }
     ASSERT_GTE(length_calls, 2);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1411,11 +1411,11 @@ TEST(jlsp_method_reference_no_crash) {
         "    xs.forEach(System.out::println);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* forEach should still resolve even if method-ref operand isn't typed. */
     ASSERT_GTE(require_resolved(r, "run", "forEach"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1427,10 +1427,10 @@ TEST(jlsp_lambda_no_crash) {
         "    xs.forEach(x -> System.out.println(x));\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "forEach"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1442,13 +1442,13 @@ TEST(jlsp_record_call) {
         "    return p.x();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* Records create accessor methods; we don't currently model them
      * specially, but the call should at least be registered via the AST
      * walk (either resolved or as diagnostic). */
     ASSERT_GTE(r->resolved_calls.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1463,10 +1463,10 @@ TEST(jlsp_inner_class) {
         "    return i.tag();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "tag"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1480,11 +1480,11 @@ TEST(jlsp_interface_default_method) {
         "    public String run() { return hello(); }\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* Some indirection — accept any resolved call. */
     ASSERT_GTE(r->resolved_calls.count, 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1496,10 +1496,10 @@ TEST(jlsp_file_path) {
         "  }\n"
         "}\n";
     /* Use a deeper rel_path to confirm FQN compute respects the path. */
-    CBMFileResult *r = extract_java_at(src, "src/main/java/com/example/Main.java");
+    LSMFileResult *r = extract_java_at(src, "src/main/java/com/example/Main.java");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1511,13 +1511,13 @@ TEST(jlsp_deeply_nested_chain) {
         "    return xs.get(0).trim().toLowerCase().length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.get"), 0);
     ASSERT_GTE(require_resolved(r, "run", "String.trim"), 0);
     ASSERT_GTE(require_resolved(r, "run", "String.toLowerCase"), 0);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1531,12 +1531,12 @@ TEST(jlsp_lambda_param_typed_in_filter) {
         "    return xs.stream().filter(x -> x.length() > 0).count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     /* x has type String (from Predicate<String>), so x.length() must
      * resolve to String.length. This was previously unresolved. */
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1548,10 +1548,10 @@ TEST(jlsp_lambda_param_typed_in_map) {
         "    return xs.stream().map(x -> x.toUpperCase()).count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.toUpperCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1563,10 +1563,10 @@ TEST(jlsp_lambda_in_forEach) {
         "    xs.forEach(x -> { x.length(); });\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1581,10 +1581,10 @@ TEST(jlsp_lambda_in_consumer) {
         "    run(s -> s.toUpperCase());\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "go", "String.toUpperCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1599,11 +1599,11 @@ TEST(jlsp_lambda_with_block_body) {
         "    }).count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.trim"), 0);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1618,11 +1618,11 @@ TEST(jlsp_lambda_typed_in_chained_stream) {
         "      .count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
     ASSERT_GTE(require_resolved(r, "run", "String.toUpperCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1636,10 +1636,10 @@ TEST(jlsp_method_reference_static) {
         "    xs.forEach(System.out::println);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "PrintStream.println"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1651,10 +1651,10 @@ TEST(jlsp_method_reference_instance) {
         "    return xs.stream().map(String::toUpperCase).count();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.toUpperCase"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1667,10 +1667,10 @@ TEST(jlsp_method_reference_constructor) {
         "    return StringBuilder::new;\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "StringBuilder"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1686,10 +1686,10 @@ TEST(jlsp_user_field_method) {
         "    return b.label.length();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "String.length"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1704,10 +1704,10 @@ TEST(jlsp_user_field_chain) {
         "    return b.items.size();\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "run", "ArrayList.size"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1782,7 +1782,7 @@ TEST(jlsp_real_corpus_parity_90_percent) {
         "    System.out.println(n);\n"
         "  }\n"
         "}\n";
-    CBMFileResult *r = extract_java(src);
+    LSMFileResult *r = extract_java(src);
     ASSERT_NOT_NULL(r);
 
     /* Collect distinct call sites tree-sitter saw (caller, callee_name).
@@ -1802,7 +1802,7 @@ TEST(jlsp_real_corpus_parity_90_percent) {
      * inheritance, interface dispatch — so strict ≥ 0.9 * total_calls is
      * achievable when receiver types are pinned down.) */
     ASSERT_GTE(strict, (total_calls * 9) / 10);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

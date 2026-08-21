@@ -9,24 +9,24 @@
  * shared single_file_battery() + pipeline_battery() helpers keep this DRY and
  * mirror repro_grammar_core.c exactly.
  *
- * Languages covered (12) and the CBM_LANG_* enum each uses (every enum verified
- * present in internal/cbm/cbm.h; none missing, none skipped):
- *   Zig      -> CBM_LANG_ZIG
- *   Nim      -> CBM_LANG_NIM (explicitly unsupported; no grammar is vendored)
- *   Crystal  -> CBM_LANG_CRYSTAL
- *   Hare     -> CBM_LANG_HARE
- *   Odin     -> CBM_LANG_ODIN
- *   Pony     -> CBM_LANG_PONY
- *   Ada      -> CBM_LANG_ADA
- *   Fortran  -> CBM_LANG_FORTRAN
- *   COBOL    -> CBM_LANG_COBOL
- *   Pascal   -> CBM_LANG_PASCAL
- *   Solidity -> CBM_LANG_SOLIDITY
- *   Move     -> CBM_LANG_MOVE
+ * Languages covered (12) and the LSM_LANG_* enum each uses (every enum verified
+ * present in internal/lsm/lsm.h; none missing, none skipped):
+ *   Zig      -> LSM_LANG_ZIG
+ *   Nim      -> LSM_LANG_NIM (explicitly unsupported; no grammar is vendored)
+ *   Crystal  -> LSM_LANG_CRYSTAL
+ *   Hare     -> LSM_LANG_HARE
+ *   Odin     -> LSM_LANG_ODIN
+ *   Pony     -> LSM_LANG_PONY
+ *   Ada      -> LSM_LANG_ADA
+ *   Fortran  -> LSM_LANG_FORTRAN
+ *   COBOL    -> LSM_LANG_COBOL
+ *   Pascal   -> LSM_LANG_PASCAL
+ *   Solidity -> LSM_LANG_SOLIDITY
+ *   Move     -> LSM_LANG_MOVE
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean   : inv_extract_clean(src,lang,file) == 1
  *                        (parser returned a result and did not set has_error;
  *                        a hard crash would not return at all).
@@ -41,7 +41,7 @@
  *   6. calls-extracted : inv_has_call(r, "<callee>") == 1 (the in-body call was
  *                        captured).
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call);
  *                          assert mod == 0 -- every in-body call must be sourced
  *                          at a Function/Method node, NEVER at a Module node.
@@ -50,7 +50,7 @@
  *
  * KNOWN GAP (the point of this file): dimensions 6 and 7 are RED for most of the
  * systems languages on current code. The root cause for dim 7 is the same as the
- * compiled/OOP family: cbm_find_enclosing_func (helpers.c) walks the TSNode
+ * compiled/OOP family: lsm_find_enclosing_func (helpers.c) walks the TSNode
  * ancestry looking for a node whose type is in func_kinds_for_lang(lang). Only
  * ZIG has a dedicated func_kinds entry among these 12; every other systems lang
  * falls through to func_kinds_generic = {"function_declaration",
@@ -95,7 +95,7 @@
  * the in-body callee name that must appear in the extracted calls.
  */
 static int single_file_battery(const char *lang_tag, const char *src,
-                               CBMLanguage lang, const char *file,
+                               LSMLanguage lang, const char *file,
                                const char *expect_label,
                                const char *expect_label2, const char *callee) {
     const char *RED = tf_red();
@@ -109,7 +109,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -159,7 +159,7 @@ static int single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -180,7 +180,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -224,7 +224,7 @@ static int pipeline_battery(const char *lang_tag, const char *filename,
  * called strictly inside the caller body. Top-level `fn` is function_declaration
  * (zig_func_types) -> label "Function"; struct_declaration -> "Class".
  * Expected: dims 1-5 + 8 GREEN. dim 7 GREEN -- func_kinds_zig lists
- * "function_declaration", so cbm_find_enclosing_func resolves the caller and the
+ * "function_declaration", so lsm_find_enclosing_func resolves the caller and the
  * in-body call is attributed to a Function node (assuming dim 6 captures it).
  */
 TEST(repro_grammar_systems_zig) {
@@ -242,7 +242,7 @@ TEST(repro_grammar_systems_zig) {
         "fn compute(x: i32) i32 {\n"
         "    return add(x, 1);\n"
         "}\n";
-    if (single_file_battery("Zig", src, CBM_LANG_ZIG, "calc.zig",
+    if (single_file_battery("Zig", src, LSM_LANG_ZIG, "calc.zig",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Zig", "calc.zig", src);
@@ -253,8 +253,8 @@ TEST(repro_grammar_systems_zig) {
  * Unsupported must mean NULL; it must never alias the zero-initialized Go row.
  */
 TEST(repro_grammar_systems_nim) {
-    ASSERT_NULL(cbm_lang_spec(CBM_LANG_NIM));
-    ASSERT_NULL(cbm_ts_language(CBM_LANG_NIM));
+    ASSERT_NULL(lsm_lang_spec(LSM_LANG_NIM));
+    ASSERT_NULL(lsm_ts_language(LSM_LANG_NIM));
     PASS();
 }
 
@@ -264,7 +264,7 @@ TEST(repro_grammar_systems_nim) {
  * class_def -> "Class". Call appears as a `call`/`command` node (crystal_call
  * _types). Expected: dims 1-5 + 8 GREEN, dim 6 GREEN if `add(x, 1)` is captured.
  * dim 7 RED -- Crystal's function node type is "method_def", which is NOT in
- * func_kinds_generic, so cbm_find_enclosing_func cannot reach the method and
+ * func_kinds_generic, so lsm_find_enclosing_func cannot reach the method and
  * falls back to the Module QN.
  */
 TEST(repro_grammar_systems_crystal) {
@@ -280,7 +280,7 @@ TEST(repro_grammar_systems_crystal) {
         "    add(x, 1)\n"
         "  end\n"
         "end\n";
-    if (single_file_battery("Crystal", src, CBM_LANG_CRYSTAL, "calc.cr",
+    if (single_file_battery("Crystal", src, LSM_LANG_CRYSTAL, "calc.cr",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Crystal", "calc.cr", src);
@@ -306,7 +306,7 @@ TEST(repro_grammar_systems_hare) {
         "fn compute(x: int) int = {\n"
         "\treturn add(x, 1);\n"
         "};\n";
-    if (single_file_battery("Hare", src, CBM_LANG_HARE, "calc.ha",
+    if (single_file_battery("Hare", src, LSM_LANG_HARE, "calc.ha",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Hare", "calc.ha", src);
@@ -317,7 +317,7 @@ TEST(repro_grammar_systems_hare) {
  * called inside the caller body. procedure_declaration (odin_func_types) ->
  * label "Function"; struct_declaration -> "Class". Expected: dims 1-5 + 8 GREEN,
  * dim 6 GREEN if the call is captured. dim 7 RED -- "procedure_declaration" is
- * not in func_kinds_generic, so cbm_find_enclosing_func falls back to Module.
+ * not in func_kinds_generic, so lsm_find_enclosing_func falls back to Module.
  */
 TEST(repro_grammar_systems_odin) {
     static const char src[] =
@@ -336,7 +336,7 @@ TEST(repro_grammar_systems_odin) {
         "compute :: proc(x: int) -> int {\n"
         "\treturn add(x, 1)\n"
         "}\n";
-    if (single_file_battery("Odin", src, CBM_LANG_ODIN, "calc.odin",
+    if (single_file_battery("Odin", src, LSM_LANG_ODIN, "calc.odin",
                             "Function", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Odin", "calc.odin", src);
@@ -360,7 +360,7 @@ TEST(repro_grammar_systems_pony) {
         "\n"
         "  fun compute(x: I32): I32 =>\n"
         "    add(x, 1)\n";
-    if (single_file_battery("Pony", src, CBM_LANG_PONY, "calc.pony",
+    if (single_file_battery("Pony", src, LSM_LANG_PONY, "calc.pony",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Pony", "calc.pony", src);
@@ -394,7 +394,7 @@ TEST(repro_grammar_systems_ada) {
         "   end Compute;\n"
         "\n"
         "end Calc;\n";
-    if (single_file_battery("Ada", src, CBM_LANG_ADA, "calc.adb",
+    if (single_file_battery("Ada", src, LSM_LANG_ADA, "calc.adb",
                             "Function", NULL, "Add") != 0)
         return 1;
     return pipeline_battery("Ada", "calc.adb", src);
@@ -424,7 +424,7 @@ TEST(repro_grammar_systems_fortran) {
         "    compute = add(x, 1)\n"
         "  end function compute\n"
         "end module calc\n";
-    if (single_file_battery("Fortran", src, CBM_LANG_FORTRAN, "calc.f90",
+    if (single_file_battery("Fortran", src, LSM_LANG_FORTRAN, "calc.f90",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Fortran", "calc.f90", src);
@@ -456,7 +456,7 @@ TEST(repro_grammar_systems_cobol) {
         "           DISPLAY \"HELLO\".\n"
         "           EXIT PROGRAM.\n"
         "       END PROGRAM SUB.\n";
-    if (single_file_battery("COBOL", src, CBM_LANG_COBOL, "calc.cob",
+    if (single_file_battery("COBOL", src, LSM_LANG_COBOL, "calc.cob",
                             "Function", NULL, "SUB") != 0)
         return 1;
     return pipeline_battery("COBOL", "calc.cob", src);
@@ -485,7 +485,7 @@ TEST(repro_grammar_systems_pascal) {
         "\n"
         "begin\n"
         "end.\n";
-    if (single_file_battery("Pascal", src, CBM_LANG_PASCAL, "calc.pas",
+    if (single_file_battery("Pascal", src, LSM_LANG_PASCAL, "calc.pas",
                             "Function", NULL, "Add") != 0)
         return 1;
     return pipeline_battery("Pascal", "calc.pas", src);
@@ -498,7 +498,7 @@ TEST(repro_grammar_systems_pascal) {
  * solidity_call_types includes "call_expression"/"call". Expected: dims 1-5 + 8
  * GREEN, dim 6 GREEN if `add(x, 1)` is captured. dim 7 GREEN -- Solidity's
  * function node type is "function_definition", which IS in func_kinds_generic,
- * so cbm_find_enclosing_func resolves the enclosing function and attributes the
+ * so lsm_find_enclosing_func resolves the enclosing function and attributes the
  * call to it. (Regression guard: if dim 7 goes RED, Solidity callable
  * attribution has broken.)
  */
@@ -518,7 +518,7 @@ TEST(repro_grammar_systems_solidity) {
         "        return add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Solidity", src, CBM_LANG_SOLIDITY, "Calc.sol",
+    if (single_file_battery("Solidity", src, LSM_LANG_SOLIDITY, "Calc.sol",
                             "Method", "Class", "add") != 0)
         return 1;
     return pipeline_battery("Solidity", "Calc.sol", src);
@@ -549,7 +549,7 @@ TEST(repro_grammar_systems_move) {
         "        add(x, 1);\n"
         "    }\n"
         "}\n";
-    if (single_file_battery("Move", src, CBM_LANG_MOVE, "calc.move",
+    if (single_file_battery("Move", src, LSM_LANG_MOVE, "calc.move",
                             "Function", NULL, "add") != 0)
         return 1;
     return pipeline_battery("Move", "calc.move", src);

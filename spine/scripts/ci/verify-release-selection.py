@@ -68,14 +68,14 @@ MAX_MEMBERS = 128
 def archive_specs() -> dict[str, tuple[str, str]]:
     specs: dict[str, tuple[str, str]] = {}
     for target in TARGETS:
-        binary = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+        binary = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
         suffix = ".zip" if target.startswith("windows-") else ".tar.gz"
-        specs[f"codebase-memory-mcp-{target}{suffix}"] = (target, binary)
+        specs[f"logan-spine-mcp-{target}{suffix}"] = (target, binary)
         if (
             target.startswith(("darwin-", "windows-"))
             or target.endswith("-portable")
         ):
-            specs[f"codebase-memory-mcp-{target}.mcpb"] = (
+            specs[f"logan-spine-mcp-{target}.mcpb"] = (
                 target,
                 f"server/{binary}",
             )
@@ -122,7 +122,7 @@ def load_selection(
     if "\x00" in text or "\r" in text:
         raise ContractError("release selection contains forbidden control bytes")
     lines = text.splitlines()
-    if not lines or lines[0] != "# cbm-release-selection-v1":
+    if not lines or lines[0] != "# lsm-release-selection-v1":
         raise ContractError("release selection marker is missing")
     metadata: dict[str, str] = {}
     cursor = 1
@@ -167,7 +167,7 @@ def load_selection(
     analysis_ids: set[str] = set()
     for row in rows:
         target = row["target"]
-        binary = "codebase-memory-mcp.exe" if target.startswith("windows-") else "codebase-memory-mcp"
+        binary = "logan-spine-mcp.exe" if target.startswith("windows-") else "logan-spine-mcp"
         classifications = {
             variant: row[f"{FIELD_KEY[variant]}_classification"] for variant in VARIANTS
         }

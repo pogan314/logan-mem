@@ -69,7 +69,7 @@ jobs:
             WIN=$(jq -cn --argjson a "$CORE_WIN" '$a')
           fi
           # Suite sharding (opt-in via the shard_suites input): each platform's
-          # C-suite run is split across N runner jobs. CBM_TEST_SHARD="i/N"
+          # C-suite run is split across N runner jobs. LSM_TEST_SHARD="i/N"
           # slices deterministically inside run-tests-parallel.sh; each
           # shard's union guard proves it ran exactly its slice; shards are
           # minted HERE from one expansion so a missing shard cannot be
@@ -137,9 +137,9 @@ jobs:
       - name: Test
         run: scripts/test.sh CC=${{ matrix.cc }} CXX=${{ matrix.cxx }}
         env:
-          CBM_TEST_SHARD: ${{ matrix.shard }}
-          CBM_TEST_LEG: ${{ matrix.os }}-${{ matrix.cc }}
-          CBM_SKIP_PERF: ${{ inputs.skip_perf && '1' || '' }}
+          LSM_TEST_SHARD: ${{ matrix.shard }}
+          LSM_TEST_LEG: ${{ matrix.os }}-${{ matrix.cc }}
+          LSM_SKIP_PERF: ${{ inputs.skip_perf && '1' || '' }}
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 1500M
 
@@ -208,7 +208,7 @@ jobs:
   # ThreadSanitizer data-race gate. The threaded production surfaces (watcher,
   # subprocess, httpd, pipeline, mcp, worker pool, diagnostics, the runnable
   # daemon-coordination paths) plus allocator concurrency all run under TSan
-  # here — see TEST_TSAN_SUITES in Makefile.cbm. Runs on both Linux
+  # here — see TEST_TSAN_SUITES in Makefile.lsm. Runs on both Linux
   # architectures AND native ARM64 macOS: the threading code is shared, so a
   # race is usually caught on all three, but scheduler differences mean each
   # platform can surface a race the others miss. Windows has no TSan runtime on
@@ -245,7 +245,7 @@ jobs:
 
       # Also enables the ASan checks that are off by default in every other
       # lane: stack-use-after-return, stack-use-after-scope, and strict string
-      # checks. Mirrors `make -f Makefile.cbm diag`, including its reasoning
+      # checks. Mirrors `make -f Makefile.lsm diag`, including its reasoning
       # for leaving detect_invalid_pointer_pairs out.
       - name: Test (clang-22, ASan+UBSan + off-by-default ASan checks)
         env:
@@ -304,7 +304,7 @@ jobs:
   # and Apple's clang refuses to turn it on, which left an entire platform with
   # zero leak detection. Upstream (Homebrew) LLVM supports LSan on darwin/arm64,
   # so this leg is the ordinary ASan suite built with that toolchain and run
-  # with detect_leaks=1. Mirrors the local `make -f Makefile.cbm test-lsan`.
+  # with detect_leaks=1. Mirrors the local `make -f Makefile.lsm test-lsan`.
   test-lsan-macos:
     runs-on: macos-latest
     timeout-minutes: 120
@@ -434,9 +434,9 @@ jobs:
         shell: pwsh
         run: |
           $root = & scripts/ci/new-protected-temp-root.ps1 `
-            -Prefix 'cbm-ci-tmp-' `
+            -Prefix 'lsm-ci-tmp-' `
             -ProtectDir (Join-Path $env:GITHUB_WORKSPACE "build\c")
-          "CBM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LSM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Compiler cache (content-verified)
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -461,19 +461,19 @@ jobs:
         # carries the full message. x86-64 Windows keeps full ASan+UBSan; the
         # other native-ARM legs (Linux/macOS) carry ASan+LSan+TSan.
         run: |
-          # Native tests resolve temp via TEMP/TMP (cbm_tmpdir); shell tools use
+          # Native tests resolve temp via TEMP/TMP (lsm_tmpdir); shell tools use
           # TMPDIR. Route both through the protected root created above so no
           # fixture lands under a shared or ACL-inherited ancestry.
-          export TEMP="$(cygpath -m "$CBM_CI_TEMP_ROOT")"
+          export TEMP="$(cygpath -m "$LSM_CI_TEMP_ROOT")"
           export TMP="$TEMP"
-          export TMPDIR="$(cygpath -u "$CBM_CI_TEMP_ROOT")"
+          export TMPDIR="$(cygpath -u "$LSM_CI_TEMP_ROOT")"
           # No per-leg flag logic here: test.sh itself applies the CLANGARM64
           # trap-UBSan default, so local and CI build identical test binaries.
           scripts/test.sh CC=clang CXX=clang++
         env:
-          CBM_TEST_SHARD: ${{ matrix.shard }}
-          CBM_TEST_LEG: ${{ matrix.os }}-${{ matrix.msystem }}
-          CBM_SKIP_PERF: ${{ inputs.skip_perf && '1' || '' }}
+          LSM_TEST_SHARD: ${{ matrix.shard }}
+          LSM_TEST_LEG: ${{ matrix.os }}-${{ matrix.msystem }}
+          LSM_SKIP_PERF: ${{ inputs.skip_perf && '1' || '' }}
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 1500M
 
@@ -509,7 +509,7 @@ jobs:
   # Cross-shard completeness: re-proves at runtime that each leg's shards
   # agreed on the full suite list and that the union of their slices IS that
   # list. This is the guard the per-shard union checks cannot provide: a
-  # mis-plumbed CBM_TEST_SHARD (two jobs running the same slice) passes every
+  # mis-plumbed LSM_TEST_SHARD (two jobs running the same slice) passes every
   # per-shard guard while a slice runs nowhere — only a cross-shard view
   # catches it. Runs and gates on unsharded topologies too (every leg then
   # contributes one 1/1 manifest whose slice must equal the full list).
@@ -585,6 +585,6 @@ jobs:
         shell: pwsh
         # -GuardsOnly runs the four green guards and gates on them. All guards run
         # against the real supervisor->worker spawn path: under the mandatory
-        # coordination daemon, CBM_INDEX_SUPERVISOR=0 is a fail-closed refusal, so
+        # coordination daemon, LSM_INDEX_SUPERVISOR=0 is a fail-closed refusal, so
         # the driver no longer sets it anywhere.
-        run: ./scripts/test-windows.ps1 -GuardsOnly -Binary build/c/codebase-memory-mcp.exe
+        run: ./scripts/test-windows.ps1 -GuardsOnly -Binary build/c/logan-spine-mcp.exe

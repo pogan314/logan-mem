@@ -1,9 +1,9 @@
-# codebase-memory-mcp
+# logan-spine-mcp
 
-[![npm](https://img.shields.io/npm/v/codebase-memory-mcp?style=flat&color=blue)](https://www.npmjs.com/package/codebase-memory-mcp)
-[![GitHub Release](https://img.shields.io/github/v/release/DeusData/codebase-memory-mcp?style=flat&color=blue)](https://github.com/DeusData/codebase-memory-mcp/releases/latest)
-[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/DeusData/codebase-memory-mcp/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/macOS_%7C_Linux_%7C_Windows-supported-lightgrey)](https://github.com/DeusData/codebase-memory-mcp/releases/latest)
+[![npm](https://img.shields.io/npm/v/logan-spine-mcp?style=flat&color=blue)](https://www.npmjs.com/package/logan-spine-mcp)
+[![GitHub Release](https://img.shields.io/github/v/release/DeusData/logan-spine-mcp?style=flat&color=blue)](https://github.com/DeusData/logan-spine-mcp/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/DeusData/logan-spine-mcp/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/macOS_%7C_Linux_%7C_Windows-supported-lightgrey)](https://github.com/DeusData/logan-spine-mcp/releases/latest)
 
 **The fastest and most efficient code intelligence engine for AI coding agents.** Full-indexes an average repository in milliseconds, the Linux kernel (28M LOC, 75K files) in 3 minutes. Answers structural queries in under 1ms. This npm wrapper downloads, verifies, and caches the selected native runtime set: the executable, its authenticated integration asset, and—when requested—the content-addressed UI pack.
 
@@ -12,20 +12,20 @@ High-quality parsing through [tree-sitter](https://tree-sitter.github.io/tree-si
 ## Installation
 
 ```bash
-npm install -g codebase-memory-mcp
+npm install -g logan-spine-mcp
 ```
 
-The runtime set for your platform is downloaded automatically at install time. There is one composition per platform and the graph UI is always included — the former `CBM_VARIANT=ui` opt-in is obsolete.
+The runtime set for your platform is downloaded automatically at install time. There is one composition per platform and the graph UI is always included — the former `LSM_VARIANT=ui` opt-in is obsolete.
 
 Then configure your coding agents:
 
 ```bash
-codebase-memory-mcp install
+logan-spine-mcp install
 ```
 
 Restart your agent. Say **"Index this project"** — done.
 
-## Why codebase-memory-mcp
+## Why logan-spine-mcp
 
 - **Extreme indexing speed** — Linux kernel (28M LOC, 75K files) in 3 minutes. RAM-first pipeline with LZ4 compression and in-memory SQLite.
 - **Plug and play** — verified native runtime sets for macOS (arm64/amd64), Linux (arm64/amd64), and Windows (arm64/amd64). No Docker or API keys; Node.js owns package download, cache repair, and launch.
@@ -51,11 +51,11 @@ Restart your agent. Say **"Index this project"** — done.
 ## Usage
 
 ```bash
-codebase-memory-mcp install          # configure all detected coding agents
-codebase-memory-mcp --version
-codebase-memory-mcp --help
-codebase-memory-mcp update           # update to latest release
-codebase-memory-mcp uninstall        # remove agent configs
+logan-spine-mcp install          # configure all detected coding agents
+logan-spine-mcp --version
+logan-spine-mcp --help
+logan-spine-mcp update           # update to latest release
+logan-spine-mcp uninstall        # remove agent configs
 ```
 
 ### CLI Mode
@@ -63,10 +63,10 @@ codebase-memory-mcp uninstall        # remove agent configs
 Every MCP tool is also available directly from the command line:
 
 ```bash
-codebase-memory-mcp cli index_repository '{"repo_path": "/path/to/repo"}'
-codebase-memory-mcp cli search_graph '{"name_pattern": ".*Handler.*", "label": "Function"}'
-codebase-memory-mcp cli trace_call_path '{"function_name": "main", "direction": "both"}'
-codebase-memory-mcp cli get_architecture '{}'
+logan-spine-mcp cli index_repository '{"repo_path": "/path/to/repo"}'
+logan-spine-mcp cli search_graph '{"name_pattern": ".*Handler.*", "label": "Function"}'
+logan-spine-mcp cli trace_call_path '{"function_name": "main", "direction": "both"}'
+logan-spine-mcp cli get_architecture '{}'
 ```
 
 ## MCP Tools
@@ -91,7 +91,7 @@ Benchmarked on Apple M3 Pro:
 
 ## Full Documentation
 
-See [github.com/DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) for the full README including all MCP tools, configuration options, graph data model, and language support details.
+See [github.com/DeusData/logan-spine-mcp](https://github.com/DeusData/logan-spine-mcp) for the full README including all MCP tools, configuration options, graph data model, and language support details.
 
 ## License
 

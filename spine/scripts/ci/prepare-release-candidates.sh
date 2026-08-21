@@ -138,8 +138,8 @@ cleanup() {
 trap cleanup EXIT
 
 STAGE="$WORK/$TARGET"
-BINARY_NAME=codebase-memory-mcp
-[ "$GOOS" = windows ] && BINARY_NAME=codebase-memory-mcp.exe
+BINARY_NAME=logan-spine-mcp
+[ "$GOOS" = windows ] && BINARY_NAME=logan-spine-mcp.exe
 mkdir -p "$STAGE/unstripped" "$STAGE/debug-stripped" "$STAGE/stripped"
 UNSTRIPPED="$STAGE/unstripped/$BINARY_NAME"
 DEBUG_STRIPPED="$STAGE/debug-stripped/$BINARY_NAME"
@@ -249,7 +249,7 @@ DEBUG_STRIPPED_SIZE="$(wc -c < "$DEBUG_STRIPPED" | tr -d '[:space:]')"
 STRIPPED_SIZE="$(wc -c < "$STRIPPED" | tr -d '[:space:]')"
 MANIFEST="$STAGE/candidate-provenance.tsv"
 {
-    printf '# cbm-release-candidate-provenance-v1\n'
+    printf '# lsm-release-candidate-provenance-v1\n'
     printf 'target\tvariant\trelative_path\tsource_sha256\tpre_sign_sha256\tsha256\tsize\tformat\tarchitecture\tlinkage\ttransform\tsignature\tstrip_tool\tstrip_version\tpair_verification\n'
     printf '%s\tunstripped\tunstripped/%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tcopy\t%s\t%s\t%s\tsame-linker-output-v1\n' \
         "$TARGET" "$BINARY_NAME" "$SOURCE_SHA" "$UNSTRIPPED_PRE_SIGN_SHA" \

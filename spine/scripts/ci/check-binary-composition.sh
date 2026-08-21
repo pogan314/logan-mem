@@ -45,9 +45,9 @@ esac
 # processes and file placement. Their absence is a release-security boundary;
 # no claim is made about whether a third-party classifier weighs them.
 SEAM_NEEDLES=(
-    'CBM_TEST_WORKER_DESCENDANT_PID_FILE'
-    'CBM_TEST_CRASH_ON'
-    'CBM_TEST_HANG_ON'
+    'LSM_TEST_WORKER_DESCENDANT_PID_FILE'
+    'LSM_TEST_CRASH_ON'
+    'LSM_TEST_HANG_ON'
 )
 
 # The in-process updater combined network download with replacement of its own
@@ -102,7 +102,7 @@ UI_HTTP_NEEDLES=(
 # Canary: proves the needle scan can actually see this file's strings. Without
 # it, handing the gate a gzip, a stub or a 0-byte file would pass every
 # absence assertion. 168+ occurrences in a real artifact, 0 in anything else.
-CANARY_NEEDLE='codebase-memory-mcp'
+CANARY_NEEDLE='logan-spine-mcp'
 
 # ── Args ────────────────────────────────────────────────────────────
 TARGETS=()
@@ -238,7 +238,7 @@ skipped_files=0
 check_file() {
     file="$1"
     # Two path components: the binary is literally named
-    # "codebase-memory-mcp", so the parent directory disambiguates the log.
+    # "logan-spine-mcp", so the parent directory disambiguates the log.
     token=$(printf '%s' "$file" | awk -F/ '{ if (NF > 1) print $(NF - 1) "/" $NF; else print $NF }')
     fmt=$(detect_format "$file")
     if [ "$fmt" = other ]; then
@@ -313,15 +313,15 @@ check_file() {
     for needle in "${SEAM_NEEDLES[@]}"; do
         assert_absent "$file" "$token" A2-no-test-seams "$needle"
     done
-    # Sweep for seams nobody thought to pin: a new CBM_TEST_* env var added to
+    # Sweep for seams nobody thought to pin: a new LSM_TEST_* env var added to
     # production code lands here on its first release, not on the next audit.
     # One narrowly validated seam remains in Windows release artifacts by
     # decision: WINDOWS_USER_PATH_RUN_ID redirects the artifact smoke away from
     # the tester's actual user PATH. Crash/hang injectors are test-build-only and
     # are explicitly forbidden above. Anything else is novel and fails.
-    seam_allowed='CBM_TEST_WINDOWS_USER_PATH_RUN_ID'
+    seam_allowed='LSM_TEST_WINDOWS_USER_PATH_RUN_ID'
     seam_unexpected=''
-    for found in $(LC_ALL=C grep -a -o -E 'CBM_TEST_[A-Za-z0-9_]+' "$file" 2>/dev/null |
+    for found in $(LC_ALL=C grep -a -o -E 'LSM_TEST_[A-Za-z0-9_]+' "$file" 2>/dev/null |
         sort -u || true); do
         case " $seam_allowed " in
         *" $found "*) ;;
@@ -330,9 +330,9 @@ check_file() {
     done
     if [ -n "$seam_unexpected" ]; then
         report FAIL A2-no-test-seams "$token" \
-            "unexpected CBM_TEST_* seam(s):$seam_unexpected (allowlist: $seam_allowed)"
+            "unexpected LSM_TEST_* seam(s):$seam_unexpected (allowlist: $seam_allowed)"
     else
-        report PASS A2-no-test-seams "$token" 'no CBM_TEST_* seams beyond the smoke allowlist'
+        report PASS A2-no-test-seams "$token" 'no LSM_TEST_* seams beyond the smoke allowlist'
     fi
 
     # A3 — updater/release URLs.
@@ -361,8 +361,8 @@ check_file() {
 
     # A5 — UI/HTTP subsystem. One composition ships and it serves the graph UI
     # from embedded assets, so the HTTP server belongs here by construction.
-    # CBM_CHECK_UI_ABSENT=1 still enforces absence for any future headless build.
-    if [ "${CBM_CHECK_UI_ABSENT:-0}" = "1" ]; then
+    # LSM_CHECK_UI_ABSENT=1 still enforces absence for any future headless build.
+    if [ "${LSM_CHECK_UI_ABSENT:-0}" = "1" ]; then
         for needle in "${UI_HTTP_NEEDLES[@]}"; do
             assert_absent "$file" "$token" A5-no-ui-http "$needle"
         done

@@ -6,7 +6,7 @@
  */
 #include "test_framework.h"
 
-#define CBM_JSON_LIKE_ENABLE_TEST_API 1
+#define LSM_JSON_LIKE_ENABLE_TEST_API 1
 #include "../src/cli/config_json_like.h"
 #include "../src/foundation/compat.h"
 #include "../src/foundation/compat_fs.h"
@@ -28,9 +28,9 @@ typedef struct {
 } jl_fixture_t;
 
 static int jl_fixture_open(jl_fixture_t *fixture) {
-    snprintf(fixture->directory, sizeof(fixture->directory), "%s/cbm-json-like-XXXXXX",
-             cbm_tmpdir());
-    if (!cbm_mkdtemp(fixture->directory)) {
+    snprintf(fixture->directory, sizeof(fixture->directory), "%s/lsm-json-like-XXXXXX",
+             lsm_tmpdir());
+    if (!lsm_mkdtemp(fixture->directory)) {
         return -1;
     }
     int written =
@@ -39,43 +39,43 @@ static int jl_fixture_open(jl_fixture_t *fixture) {
 }
 
 static void jl_fixture_close(jl_fixture_t *fixture) {
-    cbm_dir_t *directory = cbm_opendir(fixture->directory);
+    lsm_dir_t *directory = lsm_opendir(fixture->directory);
     if (directory) {
-        cbm_dirent_t *entry = NULL;
-        while ((entry = cbm_readdir(directory)) != NULL) {
-            if (strncmp(entry->name, "config.json.cbm.tmp.", strlen("config.json.cbm.tmp.")) == 0) {
+        lsm_dirent_t *entry = NULL;
+        while ((entry = lsm_readdir(directory)) != NULL) {
+            if (strncmp(entry->name, "config.json.lsm.tmp.", strlen("config.json.lsm.tmp.")) == 0) {
                 char temp_path[sizeof(fixture->path) + 96U];
                 int written = snprintf(temp_path, sizeof(temp_path), "%s/%s", fixture->directory,
                                        entry->name);
                 if (written >= 0 && (size_t)written < sizeof(temp_path)) {
-                    (void)cbm_unlink(temp_path);
+                    (void)lsm_unlink(temp_path);
                 }
             }
         }
-        cbm_closedir(directory);
+        lsm_closedir(directory);
     }
-    (void)cbm_unlink(fixture->path);
-    (void)cbm_rmdir(fixture->directory);
+    (void)lsm_unlink(fixture->path);
+    (void)lsm_rmdir(fixture->directory);
 }
 
 static size_t jl_temp_file_count(const jl_fixture_t *fixture) {
-    cbm_dir_t *directory = cbm_opendir(fixture->directory);
+    lsm_dir_t *directory = lsm_opendir(fixture->directory);
     if (!directory) {
         return SIZE_MAX;
     }
     size_t count = 0U;
-    cbm_dirent_t *entry = NULL;
-    while ((entry = cbm_readdir(directory)) != NULL) {
-        if (strncmp(entry->name, "config.json.cbm.tmp.", strlen("config.json.cbm.tmp.")) == 0) {
+    lsm_dirent_t *entry = NULL;
+    while ((entry = lsm_readdir(directory)) != NULL) {
+        if (strncmp(entry->name, "config.json.lsm.tmp.", strlen("config.json.lsm.tmp.")) == 0) {
             count++;
         }
     }
-    cbm_closedir(directory);
+    lsm_closedir(directory);
     return count;
 }
 
 static int jl_write(const char *path, const char *content) {
-    FILE *file = cbm_fopen(path, "wb");
+    FILE *file = lsm_fopen(path, "wb");
     if (!file) {
         return -1;
     }
@@ -86,7 +86,7 @@ static int jl_write(const char *path, const char *content) {
 }
 
 static char *jl_read(const char *path) {
-    FILE *file = cbm_fopen(path, "rb");
+    FILE *file = lsm_fopen(path, "rb");
     if (!file || fseek(file, 0, SEEK_END) != 0) {
         if (file) {
             fclose(file);
@@ -120,7 +120,7 @@ static int jl_failed_unchanged(const char *path, const char *original,
     if (jl_write(path, original) != 0) {
         return 0;
     }
-    if (cbm_json_like_upsert_entry(path, object_path, path_len, key, value) == 0) {
+    if (lsm_json_like_upsert_entry(path, object_path, path_len, key, value) == 0) {
         return 0;
     }
     char *after = jl_read(path);
@@ -149,7 +149,7 @@ typedef struct {
 static void jl_change_before_commit(const char *path, void *context) {
     jl_precommit_change_t *change = context;
     if (change->replace_identity &&
-        (!change->backup_path || cbm_rename_replace(path, change->backup_path) != 0)) {
+        (!change->backup_path || lsm_rename_replace(path, change->backup_path) != 0)) {
         change->result = -1;
         return;
     }
@@ -167,9 +167,9 @@ TEST(config_json_like_rejects_stale_content_and_cleans_temp) {
         .replace_identity = false,
         .result = -1,
     };
-    cbm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &change);
-    int result = cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
-    cbm_json_like_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &change);
+    int result = lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
+    lsm_json_like_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
@@ -196,9 +196,9 @@ TEST(config_json_like_rejects_stale_identity_with_same_content) {
         .replace_identity = true,
         .result = -1,
     };
-    cbm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &change);
-    int result = cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
-    cbm_json_like_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &change);
+    int result = lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
+    lsm_json_like_set_precommit_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(change.result, 0);
     ASSERT_EQ(result, -1);
@@ -207,7 +207,7 @@ TEST(config_json_like_rejects_stale_identity_with_same_content) {
     ASSERT_STR_EQ(content, original);
     free(content);
     ASSERT_EQ(jl_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -222,9 +222,9 @@ TEST(config_json_like_missing_target_race_does_not_replace_winner) {
         .replace_identity = false,
         .result = -1,
     };
-    cbm_json_like_set_prepublish_hook_for_testing(jl_change_before_commit, &race);
-    int result = cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
-    cbm_json_like_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_json_like_set_prepublish_hook_for_testing(jl_change_before_commit, &race);
+    int result = lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
+    lsm_json_like_set_prepublish_hook_for_testing(NULL, NULL);
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
     char *content = jl_read(fixture.path);
@@ -252,9 +252,9 @@ TEST(config_json_like_existing_target_swap_after_check_preserves_winner) {
         .result = -1,
     };
 
-    cbm_json_like_set_prepublish_hook_for_testing(jl_change_before_commit, &race);
-    int result = cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
-    cbm_json_like_set_prepublish_hook_for_testing(NULL, NULL);
+    lsm_json_like_set_prepublish_hook_for_testing(jl_change_before_commit, &race);
+    int result = lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true");
+    lsm_json_like_set_prepublish_hook_for_testing(NULL, NULL);
 
     ASSERT_EQ(race.result, 0);
     ASSERT_EQ(result, -1);
@@ -263,7 +263,7 @@ TEST(config_json_like_existing_target_swap_after_check_preserves_winner) {
     ASSERT_STR_EQ(content, winner);
     free(content);
     ASSERT_EQ(jl_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -271,11 +271,11 @@ TEST(config_json_like_existing_target_swap_after_check_preserves_winner) {
 TEST(config_json_like_rejects_non_regular_path) {
     jl_fixture_t fixture;
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
-    ASSERT_EQ(cbm_mkdir(fixture.path), 0);
+    ASSERT_EQ(lsm_mkdir(fixture.path), 0);
     const char *root[] = {NULL};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
     ASSERT_EQ(jl_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_rmdir(fixture.path), 0);
+    ASSERT_EQ(lsm_rmdir(fixture.path), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -291,7 +291,7 @@ TEST(config_json_like_rejects_symlink_without_touching_target) {
     ASSERT_EQ(symlink(target, fixture.path), 0);
 
     const char *root[] = {NULL};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
     struct stat link_state;
     ASSERT_EQ(lstat(fixture.path, &link_state), 0);
     ASSERT(S_ISLNK(link_state.st_mode));
@@ -301,8 +301,8 @@ TEST(config_json_like_rejects_symlink_without_touching_target) {
     free(content);
     ASSERT_EQ(jl_temp_file_count(&fixture), 0U);
 
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
-    ASSERT_EQ(cbm_unlink(target), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(target), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -317,13 +317,13 @@ TEST(config_json_like_rejects_hard_link_without_splitting_identity) {
     ASSERT_EQ(link(fixture.path, alias), 0);
 
     const char *root[] = {NULL};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), -1);
     char *content = jl_read(alias);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, original);
     free(content);
 
-    ASSERT_EQ(cbm_unlink(alias), 0);
+    ASSERT_EQ(lsm_unlink(alias), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -337,7 +337,7 @@ TEST(config_json_like_preserves_owner_group_and_mode) {
     ASSERT_EQ(stat(fixture.path, &before), 0);
 
     const char *root[] = {NULL};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), 0);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "true"), 0);
     struct stat after;
     ASSERT_EQ(stat(fixture.path, &after), 0);
     ASSERT_EQ(after.st_uid, before.st_uid);
@@ -360,7 +360,7 @@ TEST(config_json_like_supports_bom_and_common_json5_whitespace) {
                            "}";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *path[] = {"mcp", "servers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "true"), 0);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "true"), 0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(memcmp(content, "\xEF\xBB\xBF", 3U) == 0);
@@ -387,21 +387,21 @@ TEST(config_json_like_fresh_strict_upsert_replace_remove) {
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
     const char *root[] = {NULL};
 
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "{\"command\":\"cbm\"}"),
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "{\"command\":\"lsm\"}"),
               0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
-    ASSERT_STR_EQ(content, "{\n  \"owned\": {\"command\":\"cbm\"}\n}\n");
+    ASSERT_STR_EQ(content, "{\n  \"owned\": {\"command\":\"lsm\"}\n}\n");
     free(content);
 
     ASSERT_EQ(jl_write(fixture.path, "{\"keep\":1,\"owned\":false}\n"), 0);
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "[1,2]"), 0);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "owned", "[1,2]"), 0);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, "{\"keep\":1,\"owned\":[1,2]}\n");
     free(content);
 
-    ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
+    ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "\"keep\":1") != NULL);
@@ -424,8 +424,8 @@ TEST(config_json_like_preserves_jsonc_comments) {
                            "}\n";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *path[] = {"mcpServers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 1U, "codebase-memory",
-                                         "{\"command\":\"cbm\"}"),
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 1U, "logan-spine",
+                                         "{\"command\":\"lsm\"}"),
               0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
@@ -433,7 +433,7 @@ TEST(config_json_like_preserves_jsonc_comments) {
     ASSERT(strstr(content, "/* retained server */") != NULL);
     ASSERT(strstr(content, "\"theme\": \"dark\"") != NULL);
     ASSERT(strstr(content, "\"other\": {\"command\": \"other\"}") != NULL);
-    ASSERT(strstr(content, "\"codebase-memory\": {\"command\":\"cbm\"}") != NULL);
+    ASSERT(strstr(content, "\"logan-spine\": {\"command\":\"lsm\"}") != NULL);
     free(content);
     jl_fixture_close(&fixture);
     PASS();
@@ -446,20 +446,20 @@ TEST(config_json_like_openclaw_json5_nested_servers) {
         "{ theme: 'dark', mcp: { servers: { other: { command: 'other' }, }, }, }";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *path[] = {"mcp", "servers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 2U, "codebase-memory",
-                                         "{\"command\":\"cbm\",\"args\":[]}"),
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 2U, "logan-spine",
+                                         "{\"command\":\"lsm\",\"args\":[]}"),
               0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "theme: 'dark'") != NULL);
     ASSERT(strstr(content, "other: { command: 'other' }") != NULL);
-    ASSERT(strstr(content, "\"codebase-memory\"") != NULL);
+    ASSERT(strstr(content, "\"logan-spine\"") != NULL);
     free(content);
 
-    ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, path, 2U, "codebase-memory"), 0);
+    ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, path, 2U, "logan-spine"), 0);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
-    ASSERT(strstr(content, "codebase-memory") == NULL);
+    ASSERT(strstr(content, "logan-spine") == NULL);
     ASSERT(strstr(content, "theme: 'dark'") != NULL);
     ASSERT(strstr(content, "other: { command: 'other' }") != NULL);
     free(content);
@@ -472,15 +472,15 @@ TEST(config_json_like_creates_missing_nested_path) {
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
     ASSERT_EQ(jl_write(fixture.path, "{\n  \"theme\": \"dark\"\n}\n"), 0);
     const char *path[] = {"mcp", "servers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 2U, "codebase-memory",
-                                         "{\"command\":\"cbm\"}"),
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 2U, "logan-spine",
+                                         "{\"command\":\"lsm\"}"),
               0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "\"theme\": \"dark\"") != NULL);
     ASSERT(strstr(content, "\"mcp\": {") != NULL);
     ASSERT(strstr(content, "\"servers\": {") != NULL);
-    ASSERT(strstr(content, "\"codebase-memory\": {\"command\":\"cbm\"}") != NULL);
+    ASSERT(strstr(content, "\"logan-spine\": {\"command\":\"lsm\"}") != NULL);
     free(content);
     jl_fixture_close(&fixture);
     PASS();
@@ -513,14 +513,14 @@ TEST(config_json_like_rejects_invalid_and_malformed_byte_identical) {
     const char *path[] = {"mcp"};
     ASSERT(jl_failed_unchanged(fixture.path, "{\"mcp\":false}\n", path, 1U, "owned", "true"));
     ASSERT_EQ(jl_write(fixture.path, "{\"keep\":1}\n"), 0);
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, root, 0U, "bad\nkey", "true"), -1);
-    ASSERT_EQ(cbm_json_like_upsert_entry(NULL, root, 0U, "owned", "true"), -1);
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, NULL, 0U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, root, 0U, "bad\nkey", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(NULL, root, 0U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, NULL, 0U, "owned", "true"), -1);
     const char *deep_path[64];
     for (size_t i = 0; i < sizeof(deep_path) / sizeof(deep_path[0]); i++) {
         deep_path[i] = "level";
     }
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, deep_path, 64U, "owned", "true"), -1);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, deep_path, 64U, "owned", "true"), -1);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, "{\"keep\":1}\n");
@@ -534,11 +534,11 @@ TEST(config_json_like_upsert_is_byte_idempotent) {
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
     ASSERT_EQ(jl_write(fixture.path, "{\n  \"mcp\": {}\n}\n"), 0);
     const char *path[] = {"mcp"};
-    const char *value = "{\"command\":\"cbm\",\"args\":[\"serve\"]}";
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 1U, "owned", value), 0);
+    const char *value = "{\"command\":\"lsm\",\"args\":[\"serve\"]}";
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 1U, "owned", value), 0);
     char *first = jl_read(fixture.path);
     ASSERT_NOT_NULL(first);
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 1U, "owned", value), 0);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 1U, "owned", value), 0);
     char *second = jl_read(fixture.path);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, first);
@@ -554,12 +554,12 @@ TEST(config_json_like_ignores_braces_and_comments_inside_strings) {
     const char *original = "{\"note\":\"} // text /* text */ \\\" {\",\"mcp\":{\"servers\":{}}}\n";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *path[] = {"mcp", "servers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "{\"command\":\"cbm\"}"),
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "{\"command\":\"lsm\"}"),
               0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "} // text /* text */ \\\" {") != NULL);
-    ASSERT(strstr(content, "\"owned\": {\"command\":\"cbm\"}") != NULL);
+    ASSERT(strstr(content, "\"owned\": {\"command\":\"lsm\"}") != NULL);
     free(content);
     jl_fixture_close(&fixture);
     PASS();
@@ -571,13 +571,13 @@ TEST(config_json_like_handles_trailing_commas) {
     const char *original = "{\n  mcp: {\n    servers: {\n      other: [1, 2,],\n    },\n  },\n}\n";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *path[] = {"mcp", "servers"};
-    ASSERT_EQ(cbm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "true"), 0);
+    ASSERT_EQ(lsm_json_like_upsert_entry(fixture.path, path, 2U, "owned", "true"), 0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "other: [1, 2,]") != NULL);
     ASSERT(strstr(content, "\"owned\": true,") != NULL);
     free(content);
-    ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, path, 2U, "owned"), 0);
+    ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, path, 2U, "owned"), 0);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "owned") == NULL);
@@ -601,12 +601,12 @@ TEST(config_json_like_removes_first_middle_last_and_only) {
         jl_fixture_t fixture;
         ASSERT_EQ(jl_fixture_open(&fixture), 0);
         ASSERT_EQ(jl_write(fixture.path, inputs[i]), 0);
-        ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
+        ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
         char *content = jl_read(fixture.path);
         ASSERT_NOT_NULL(content);
         ASSERT(strstr(content, "owned") == NULL);
         ASSERT(strstr(content, required[i]) != NULL);
-        ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
+        ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
         free(content);
         jl_fixture_close(&fixture);
     }
@@ -621,7 +621,7 @@ TEST(config_json_like_removal_preserves_comments_and_siblings) {
         "  \"last\": 3\n}\n";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     const char *root[] = {NULL};
-    ASSERT_EQ(cbm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
+    ASSERT_EQ(lsm_json_like_remove_entry(fixture.path, root, 0U, "owned"), 0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "owned") == NULL);
@@ -644,23 +644,23 @@ TEST(config_json_like_top_level_array_unique_string) {
                            "    // keep this user comment\n"
                            "  ],\n"
                            "}\n";
-    const char *owned = "~/.config/kilo/rules/codebase-memory-mcp.md";
+    const char *owned = "~/.config/kilo/rules/logan-spine-mcp.md";
     ASSERT_EQ(jl_write(fixture.path, original), 0);
-    ASSERT_EQ(cbm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
+    ASSERT_EQ(lsm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
     char *first = jl_read(fixture.path);
     ASSERT_NOT_NULL(first);
     ASSERT(strstr(first, "// keep this user comment") != NULL);
     ASSERT(strstr(first, "'~/rules/other.md'") != NULL);
     ASSERT_EQ(jl_occurrences(first, owned), 1U);
 
-    ASSERT_EQ(cbm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
+    ASSERT_EQ(lsm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
     char *second = jl_read(fixture.path);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, first);
     free(first);
     free(second);
 
-    ASSERT_EQ(cbm_json_like_remove_string(fixture.path, "instructions", owned), 0);
+    ASSERT_EQ(lsm_json_like_remove_string(fixture.path, "instructions", owned), 0);
     char *removed = jl_read(fixture.path);
     ASSERT_NOT_NULL(removed);
     ASSERT(strstr(removed, owned) == NULL);
@@ -675,14 +675,14 @@ TEST(config_json_like_top_level_array_create_escape_and_fail_closed) {
     jl_fixture_t fixture;
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
     const char *owned = "C:\\rules\\\"main\".md";
-    ASSERT_EQ(cbm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
+    ASSERT_EQ(lsm_json_like_add_unique_string(fixture.path, "instructions", owned), 0);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "\"instructions\": [") != NULL);
     ASSERT(strstr(content, "C:") != NULL);
     ASSERT(strstr(content, "rules") != NULL);
     free(content);
-    ASSERT_EQ(cbm_json_like_remove_string(fixture.path, "instructions", owned), 0);
+    ASSERT_EQ(lsm_json_like_remove_string(fixture.path, "instructions", owned), 0);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT(strstr(content, "rules") == NULL);
@@ -690,12 +690,12 @@ TEST(config_json_like_top_level_array_create_escape_and_fail_closed) {
 
     const char *duplicate = "{instructions:['owned', \"owned\",], keep:true}\n";
     ASSERT_EQ(jl_write(fixture.path, duplicate), 0);
-    ASSERT_EQ(cbm_json_like_add_unique_string(fixture.path, "instructions", "owned"), -1);
+    ASSERT_EQ(lsm_json_like_add_unique_string(fixture.path, "instructions", "owned"), -1);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, duplicate);
     free(content);
-    ASSERT_EQ(cbm_json_like_remove_string(fixture.path, "instructions", "owned"), -1);
+    ASSERT_EQ(lsm_json_like_remove_string(fixture.path, "instructions", "owned"), -1);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, duplicate);
@@ -703,7 +703,7 @@ TEST(config_json_like_top_level_array_create_escape_and_fail_closed) {
 
     const char *wrong_type = "{instructions:false, keep:true}\n";
     ASSERT_EQ(jl_write(fixture.path, wrong_type), 0);
-    ASSERT_EQ(cbm_json_like_add_unique_string(fixture.path, "instructions", "owned"), -1);
+    ASSERT_EQ(lsm_json_like_add_unique_string(fixture.path, "instructions", "owned"), -1);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, wrong_type);
@@ -718,7 +718,7 @@ TEST(config_json_like_nested_array_creates_missing_path_and_escapes) {
     const char *path[] = {"agents", "defaults", "compaction"};
     const char *owned = "Session \"memory\"\\path\nsection";
 
-    ASSERT_EQ(cbm_json_like_add_unique_string_at_path(fixture.path, path, 3U,
+    ASSERT_EQ(lsm_json_like_add_unique_string_at_path(fixture.path, path, 3U,
                                                       "postCompactionSections", owned),
               0);
     char *content = jl_read(fixture.path);
@@ -730,7 +730,7 @@ TEST(config_json_like_nested_array_creates_missing_path_and_escapes) {
     ASSERT(strstr(content, "Session \\\"memory\\\"\\\\path\\nsection") != NULL);
     free(content);
 
-    ASSERT_EQ(cbm_json_like_remove_string_at_path(fixture.path, path, 3U, "postCompactionSections",
+    ASSERT_EQ(lsm_json_like_remove_string_at_path(fixture.path, path, 3U, "postCompactionSections",
                                                   owned),
               0);
     content = jl_read(fixture.path);
@@ -761,7 +761,7 @@ TEST(config_json_like_nested_array_preserves_jsonc_and_is_idempotent) {
     ASSERT_EQ(jl_write(fixture.path, original), 0);
 
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", owned), 0);
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", owned), 0);
     char *first = jl_read(fixture.path);
     ASSERT_NOT_NULL(first);
     ASSERT(strstr(first, "// retain root comment") != NULL);
@@ -772,14 +772,14 @@ TEST(config_json_like_nested_array_preserves_jsonc_and_is_idempotent) {
     ASSERT_EQ(jl_occurrences(first, "\"memory.md\""), 1U);
 
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", owned), 0);
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", owned), 0);
     char *second = jl_read(fixture.path);
     ASSERT_NOT_NULL(second);
     ASSERT_STR_EQ(second, first);
     free(first);
     free(second);
 
-    ASSERT_EQ(cbm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", owned),
+    ASSERT_EQ(lsm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", owned),
               0);
     char *removed = jl_read(fixture.path);
     ASSERT_NOT_NULL(removed);
@@ -799,7 +799,7 @@ TEST(config_json_like_nested_array_fails_closed_on_ambiguous_or_invalid_paths) {
     const char *wrong_type = "{options:false, keep:true}\n";
     ASSERT_EQ(jl_write(fixture.path, wrong_type), 0);
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
         -1);
     char *content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
@@ -809,7 +809,7 @@ TEST(config_json_like_nested_array_fails_closed_on_ambiguous_or_invalid_paths) {
     const char *duplicate_path = "{options:{context_paths:[]}, options:{keep:true}}\n";
     ASSERT_EQ(jl_write(fixture.path, duplicate_path), 0);
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
         -1);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
@@ -819,7 +819,7 @@ TEST(config_json_like_nested_array_fails_closed_on_ambiguous_or_invalid_paths) {
     const char *duplicate_array =
         "{options:{context_paths:['owned'], context_paths:[]}, keep:true}\n";
     ASSERT_EQ(jl_write(fixture.path, duplicate_array), 0);
-    ASSERT_EQ(cbm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
+    ASSERT_EQ(lsm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
               -1);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
@@ -827,21 +827,21 @@ TEST(config_json_like_nested_array_fails_closed_on_ambiguous_or_invalid_paths) {
     free(content);
 
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, NULL, 1U, "context_paths", "owned"),
+        lsm_json_like_add_unique_string_at_path(fixture.path, NULL, 1U, "context_paths", "owned"),
         -1);
     const char *null_path[] = {NULL};
-    ASSERT_EQ(cbm_json_like_add_unique_string_at_path(fixture.path, null_path, 1U, "context_paths",
+    ASSERT_EQ(lsm_json_like_add_unique_string_at_path(fixture.path, null_path, 1U, "context_paths",
                                                       "owned"),
               -1);
     const char *control_path[] = {"bad\npath"};
-    ASSERT_EQ(cbm_json_like_remove_string_at_path(fixture.path, control_path, 1U, "context_paths",
+    ASSERT_EQ(lsm_json_like_remove_string_at_path(fixture.path, control_path, 1U, "context_paths",
                                                   "owned"),
               -1);
     const char *deep_path[64];
     for (size_t i = 0; i < sizeof(deep_path) / sizeof(deep_path[0]); i++) {
         deep_path[i] = "level";
     }
-    ASSERT_EQ(cbm_json_like_add_unique_string_at_path(fixture.path, deep_path, 64U, "context_paths",
+    ASSERT_EQ(lsm_json_like_add_unique_string_at_path(fixture.path, deep_path, 64U, "context_paths",
                                                       "owned"),
               -1);
     content = jl_read(fixture.path);
@@ -863,34 +863,34 @@ TEST(config_json_like_nested_array_rejects_symlink_and_hardlink) {
     ASSERT_EQ(jl_write(target, original), 0);
     ASSERT_EQ(symlink(target, fixture.path), 0);
     ASSERT_EQ(
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
         -1);
     char *workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 1U, "context_paths", &workspace),
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 1U, "context_paths", &workspace),
               -1);
     ASSERT_NULL(workspace);
     char *content = jl_read(target);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, original);
     free(content);
-    ASSERT_EQ(cbm_unlink(fixture.path), 0);
+    ASSERT_EQ(lsm_unlink(fixture.path), 0);
 
     ASSERT_EQ(jl_write(fixture.path, original), 0);
     char alias[sizeof(fixture.path) + 32U];
     ASSERT(snprintf(alias, sizeof(alias), "%s/alias.json", fixture.directory) > 0);
     ASSERT_EQ(link(fixture.path, alias), 0);
-    ASSERT_EQ(cbm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
+    ASSERT_EQ(lsm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned"),
               -1);
     workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 1U, "context_paths", &workspace),
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 1U, "context_paths", &workspace),
               -1);
     ASSERT_NULL(workspace);
     content = jl_read(fixture.path);
     ASSERT_NOT_NULL(content);
     ASSERT_STR_EQ(content, original);
     free(content);
-    ASSERT_EQ(cbm_unlink(alias), 0);
-    ASSERT_EQ(cbm_unlink(target), 0);
+    ASSERT_EQ(lsm_unlink(alias), 0);
+    ASSERT_EQ(lsm_unlink(target), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -908,10 +908,10 @@ TEST(config_json_like_nested_array_rejects_precommit_content_and_identity_races)
         .replace_identity = false,
         .result = -1,
     };
-    cbm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &content_change);
+    lsm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &content_change);
     int result =
-        cbm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "new");
-    cbm_json_like_set_precommit_hook_for_testing(NULL, NULL);
+        lsm_json_like_add_unique_string_at_path(fixture.path, path, 1U, "context_paths", "new");
+    lsm_json_like_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(content_change.result, 0);
     ASSERT_EQ(result, -1);
     char *content = jl_read(fixture.path);
@@ -929,9 +929,9 @@ TEST(config_json_like_nested_array_rejects_precommit_content_and_identity_races)
         .replace_identity = true,
         .result = -1,
     };
-    cbm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &identity_change);
-    result = cbm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned");
-    cbm_json_like_set_precommit_hook_for_testing(NULL, NULL);
+    lsm_json_like_set_precommit_hook_for_testing(jl_change_before_commit, &identity_change);
+    result = lsm_json_like_remove_string_at_path(fixture.path, path, 1U, "context_paths", "owned");
+    lsm_json_like_set_precommit_hook_for_testing(NULL, NULL);
     ASSERT_EQ(identity_change.result, 0);
     ASSERT_EQ(result, -1);
     content = jl_read(fixture.path);
@@ -939,7 +939,7 @@ TEST(config_json_like_nested_array_rejects_precommit_content_and_identity_races)
     ASSERT_STR_EQ(content, original);
     free(content);
     ASSERT_EQ(jl_temp_file_count(&fixture), 0U);
-    ASSERT_EQ(cbm_unlink(backup), 0);
+    ASSERT_EQ(lsm_unlink(backup), 0);
     jl_fixture_close(&fixture);
     PASS();
 }
@@ -953,7 +953,7 @@ TEST(config_json_like_nested_string_lookup_decodes_json5_workspace) {
     ASSERT_EQ(jl_write(fixture.path, document), 0);
 
     char *workspace = NULL;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 0);
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 0);
     ASSERT_NOT_NULL(workspace);
     ASSERT_STR_EQ(workspace, "~/OpenClaw work'space");
     free(workspace);
@@ -966,26 +966,26 @@ TEST(config_json_like_nested_string_lookup_distinguishes_missing_and_fails_close
     ASSERT_EQ(jl_fixture_open(&fixture), 0);
     const char *path[] = {"agents", "defaults"};
     char *workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 1);
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 1);
     ASSERT_NULL(workspace);
 
     const char *missing = "{agents:{defaults:{keep:true}}}\n";
     ASSERT_EQ(jl_write(fixture.path, missing), 0);
     workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 1);
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace), 1);
     ASSERT_NULL(workspace);
 
     const char *non_string = "{agents:{defaults:{workspace:false}}}\n";
     ASSERT_EQ(jl_write(fixture.path, non_string), 0);
     workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
               -1);
     ASSERT_NULL(workspace);
 
     const char *duplicate_key = "{agents:{defaults:{workspace:'one', workspace:'two'}}}\n";
     ASSERT_EQ(jl_write(fixture.path, duplicate_key), 0);
     workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
               -1);
     ASSERT_NULL(workspace);
 
@@ -993,7 +993,7 @@ TEST(config_json_like_nested_string_lookup_distinguishes_missing_and_fails_close
         "{agents:{defaults:{workspace:'one'}}, agents:{defaults:{workspace:'two'}}}\n";
     ASSERT_EQ(jl_write(fixture.path, duplicate_path), 0);
     workspace = (char *)(uintptr_t)1U;
-    ASSERT_EQ(cbm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
+    ASSERT_EQ(lsm_json_like_get_string_at_path(fixture.path, path, 2U, "workspace", &workspace),
               -1);
     ASSERT_NULL(workspace);
     jl_fixture_close(&fixture);

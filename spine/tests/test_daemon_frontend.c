@@ -30,8 +30,8 @@ enum { FRONTEND_TEST_PATH_CAP = 1024 };
 
 typedef struct {
     char parent[FRONTEND_TEST_PATH_CAP];
-    cbm_daemon_ipc_endpoint_t *endpoint;
-    cbm_version_cohort_manager_t *manager;
+    lsm_daemon_ipc_endpoint_t *endpoint;
+    lsm_version_cohort_manager_t *manager;
 } frontend_maintenance_fixture_t;
 
 static bool frontend_maintenance_fixture_start(frontend_maintenance_fixture_t *fixture,
@@ -42,17 +42,17 @@ static bool frontend_maintenance_fixture_start(frontend_maintenance_fixture_t *f
     if (!th_secure_runtime_parent_new(fixture->parent, sizeof(fixture->parent), tag)) {
         return false;
     }
-    fixture->endpoint = cbm_daemon_ipc_endpoint_new("0123456789abcdef", fixture->parent);
-    fixture->manager = fixture->endpoint ? cbm_version_cohort_manager_new(fixture->endpoint) : NULL;
+    fixture->endpoint = lsm_daemon_ipc_endpoint_new("0123456789abcdef", fixture->parent);
+    fixture->manager = fixture->endpoint ? lsm_version_cohort_manager_new(fixture->endpoint) : NULL;
     return fixture->endpoint && fixture->manager;
 }
 
 static void frontend_maintenance_fixture_finish(frontend_maintenance_fixture_t *fixture) {
     while (fixture->manager &&
-           cbm_version_cohort_manager_free(&fixture->manager) != CBM_PRIVATE_FILE_LOCK_OK) {
-        cbm_usleep(1000);
+           lsm_version_cohort_manager_free(&fixture->manager) != LSM_PRIVATE_FILE_LOCK_OK) {
+        lsm_usleep(1000);
     }
-    cbm_daemon_ipc_endpoint_free(fixture->endpoint);
+    lsm_daemon_ipc_endpoint_free(fixture->endpoint);
     if (fixture->parent[0]) {
         (void)th_rmtree(fixture->parent);
     }
@@ -116,15 +116,15 @@ typedef struct {
 
 typedef struct {
     char conflict_log[FRONTEND_TEST_PATH_CAP];
-    cbm_daemon_ipc_endpoint_t *endpoint;
-    cbm_version_cohort_manager_t *manager;
-    cbm_daemon_runtime_service_t *service;
-    cbm_daemon_runtime_client_t *client;
+    lsm_daemon_ipc_endpoint_t *endpoint;
+    lsm_version_cohort_manager_t *manager;
+    lsm_daemon_runtime_service_t *service;
+    lsm_daemon_runtime_client_t *client;
     frontend_eof_application_context_t application;
 } frontend_eof_fixture_t;
 
-static cbm_daemon_build_identity_t frontend_test_identity(void) {
-    cbm_daemon_build_identity_t identity = {
+static lsm_daemon_build_identity_t frontend_test_identity(void) {
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = "2.4.0",
         .build_fingerprint = FRONTEND_TEST_BUILD,
         .cache_fingerprint = FRONTEND_TEST_CACHE,
@@ -135,11 +135,11 @@ static cbm_daemon_build_identity_t frontend_test_identity(void) {
     return identity;
 }
 
-static cbm_daemon_runtime_application_session_t *frontend_eof_application_session_open(
-    void *opaque, cbm_daemon_client_id_t client_id, uint64_t authenticated_process_id) {
+static lsm_daemon_runtime_application_session_t *frontend_eof_application_session_open(
+    void *opaque, lsm_daemon_client_id_t client_id, uint64_t authenticated_process_id) {
     frontend_eof_application_context_t *context = opaque;
     frontend_eof_application_session_t *session = calloc(1, sizeof(*session));
-    if (!context || !session || client_id == CBM_DAEMON_CLIENT_ID_INVALID ||
+    if (!context || !session || client_id == LSM_DAEMON_CLIENT_ID_INVALID ||
         authenticated_process_id == 0) {
         free(session);
         return NULL;
@@ -148,12 +148,12 @@ static cbm_daemon_runtime_application_session_t *frontend_eof_application_sessio
     session->session_index =
         atomic_fetch_add_explicit(&context->sessions_opened, 1, memory_order_relaxed);
     atomic_init(&session->cancelled, false);
-    return (cbm_daemon_runtime_application_session_t *)session;
+    return (lsm_daemon_runtime_application_session_t *)session;
 }
 
-static cbm_daemon_runtime_application_status_t frontend_eof_application_request(
-    void *opaque, cbm_daemon_runtime_application_session_t *opaque_session,
-    cbm_daemon_runtime_application_token_t request_token, const uint8_t *request,
+static lsm_daemon_runtime_application_status_t frontend_eof_application_request(
+    void *opaque, lsm_daemon_runtime_application_session_t *opaque_session,
+    lsm_daemon_runtime_application_token_t request_token, const uint8_t *request,
     uint32_t request_length, uint8_t **response_out, uint32_t *response_length_out) {
     (void)request_token;
     frontend_eof_application_context_t *context = opaque;
@@ -161,7 +161,7 @@ static cbm_daemon_runtime_application_status_t frontend_eof_application_request(
         (frontend_eof_application_session_t *)opaque_session;
     if (!context || !session || session->context != context || !response_out ||
         !response_length_out || (request_length > 0 && !request)) {
-        return CBM_DAEMON_RUNTIME_APPLICATION_HANDLER_ERROR;
+        return LSM_DAEMON_RUNTIME_APPLICATION_HANDLER_ERROR;
     }
     *response_out = NULL;
     *response_length_out = 0;
@@ -171,19 +171,19 @@ static cbm_daemon_runtime_application_status_t frontend_eof_application_request(
         atomic_store_explicit(&context->first_request_started, true, memory_order_release);
         while (!atomic_load_explicit(&session->cancelled, memory_order_acquire) &&
                !atomic_load_explicit(&context->release_first_request, memory_order_acquire)) {
-            cbm_usleep(1000);
+            lsm_usleep(1000);
         }
         if (atomic_load_explicit(&session->cancelled, memory_order_acquire)) {
-            return CBM_DAEMON_RUNTIME_APPLICATION_CANCELLED;
+            return LSM_DAEMON_RUNTIME_APPLICATION_CANCELLED;
         }
         /* Released: fall through and answer normally like every later item. */
     }
     if (request_length == 0) {
-        return CBM_DAEMON_RUNTIME_APPLICATION_OK;
+        return LSM_DAEMON_RUNTIME_APPLICATION_OK;
     }
     uint8_t *response = malloc(request_length);
     if (!response) {
-        return CBM_DAEMON_RUNTIME_APPLICATION_HANDLER_ERROR;
+        return LSM_DAEMON_RUNTIME_APPLICATION_HANDLER_ERROR;
     }
     memcpy(response, request, request_length);
     *response_out = response;
@@ -192,12 +192,12 @@ static cbm_daemon_runtime_application_status_t frontend_eof_application_request(
         const char marker = 'Q';
         (void)write(context->request_observed_fd, &marker, 1);
     }
-    return CBM_DAEMON_RUNTIME_APPLICATION_OK;
+    return LSM_DAEMON_RUNTIME_APPLICATION_OK;
 }
 
 static void frontend_eof_application_request_cancel(
-    void *opaque, cbm_daemon_runtime_application_session_t *opaque_session,
-    cbm_daemon_runtime_application_token_t request_token) {
+    void *opaque, lsm_daemon_runtime_application_session_t *opaque_session,
+    lsm_daemon_runtime_application_token_t request_token) {
     (void)request_token;
     frontend_eof_application_context_t *context = opaque;
     frontend_eof_application_session_t *session =
@@ -208,7 +208,7 @@ static void frontend_eof_application_request_cancel(
 }
 
 static void frontend_eof_application_session_cancel(
-    void *opaque, cbm_daemon_runtime_application_session_t *opaque_session) {
+    void *opaque, lsm_daemon_runtime_application_session_t *opaque_session) {
     frontend_eof_application_context_t *context = opaque;
     frontend_eof_application_session_t *session =
         (frontend_eof_application_session_t *)opaque_session;
@@ -232,7 +232,7 @@ static void frontend_eof_application_session_cancel(
 }
 
 static void frontend_eof_application_session_close(
-    void *opaque, cbm_daemon_runtime_application_session_t *opaque_session) {
+    void *opaque, lsm_daemon_runtime_application_session_t *opaque_session) {
     frontend_eof_application_context_t *context = opaque;
     frontend_eof_application_session_t *session =
         (frontend_eof_application_session_t *)opaque_session;
@@ -261,12 +261,12 @@ static void *frontend_eof_writer(void *opaque) {
     static const char first[] =
         "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"test/block\",\"params\":{}}\n";
     bool ok = frontend_eof_write_all(writer->fd, first, sizeof(first) - 1);
-    uint64_t deadline = cbm_now_ms() + FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS;
+    uint64_t deadline = lsm_now_ms() + FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS;
     while (
         ok &&
         !atomic_load_explicit(&writer->application->first_request_started, memory_order_acquire) &&
-        cbm_now_ms() < deadline) {
-        cbm_usleep(1000);
+        lsm_now_ms() < deadline) {
+        lsm_usleep(1000);
     }
     ok = ok &&
          atomic_load_explicit(&writer->application->first_request_started, memory_order_acquire);
@@ -307,18 +307,18 @@ static bool frontend_eof_fixture_start(frontend_eof_fixture_t *fixture, const ch
     atomic_init(&fixture->application.release_first_request, false);
     fixture->application.request_observed_fd = -1;
     fixture->application.session_cancel_fd = -1;
-    char key[CBM_DAEMON_KEY_SIZE];
-    char build[CBM_DAEMON_BUILD_FINGERPRINT_SIZE];
+    char key[LSM_DAEMON_KEY_SIZE];
+    char build[LSM_DAEMON_BUILD_FINGERPRINT_SIZE];
     int log_written = snprintf(fixture->conflict_log, sizeof(fixture->conflict_log),
                                "%s/conflicts.ndjson", parent);
     if (log_written <= 0 || log_written >= (int)sizeof(fixture->conflict_log) ||
-        !cbm_daemon_rendezvous_key(key) ||
-        !cbm_daemon_runtime_process_build_fingerprint((uint64_t)getpid(), build)) {
+        !lsm_daemon_rendezvous_key(key) ||
+        !lsm_daemon_runtime_process_build_fingerprint((uint64_t)getpid(), build)) {
         return false;
     }
-    fixture->endpoint = cbm_daemon_ipc_endpoint_new(key, parent);
-    fixture->manager = fixture->endpoint ? cbm_version_cohort_manager_new(fixture->endpoint) : NULL;
-    cbm_daemon_build_identity_t identity = {
+    fixture->endpoint = lsm_daemon_ipc_endpoint_new(key, parent);
+    fixture->manager = fixture->endpoint ? lsm_version_cohort_manager_new(fixture->endpoint) : NULL;
+    lsm_daemon_build_identity_t identity = {
         .semantic_version = "2.4.0",
         .build_fingerprint = build,
         .cache_fingerprint = FRONTEND_TEST_CACHE,
@@ -326,7 +326,7 @@ static bool frontend_eof_fixture_start(frontend_eof_fixture_t *fixture, const ch
         .store_abi = 11,
         .feature_abi = 7,
     };
-    cbm_daemon_runtime_application_callbacks_t callbacks = {
+    lsm_daemon_runtime_application_callbacks_t callbacks = {
         .context = &fixture->application,
         .session_open = frontend_eof_application_session_open,
         .request = frontend_eof_application_request,
@@ -334,7 +334,7 @@ static bool frontend_eof_fixture_start(frontend_eof_fixture_t *fixture, const ch
         .session_cancel = frontend_eof_application_session_cancel,
         .session_close = frontend_eof_application_session_close,
     };
-    cbm_daemon_runtime_service_config_t config = {
+    lsm_daemon_runtime_service_config_t config = {
         .endpoint = fixture->endpoint,
         .identity = identity,
         .conflict_log_path = fixture->conflict_log,
@@ -345,38 +345,38 @@ static bool frontend_eof_fixture_start(frontend_eof_fixture_t *fixture, const ch
         .shutdown_timeout_ms = FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS,
         .application = callbacks,
     };
-    fixture->service = fixture->manager ? cbm_daemon_runtime_service_start(&config) : NULL;
-    cbm_daemon_runtime_connect_result_t connect_result = {0};
+    fixture->service = fixture->manager ? lsm_daemon_runtime_service_start(&config) : NULL;
+    lsm_daemon_runtime_connect_result_t connect_result = {0};
     fixture->client = fixture->service
-                          ? cbm_daemon_runtime_client_connect(fixture->endpoint, &identity,
+                          ? lsm_daemon_runtime_client_connect(fixture->endpoint, &identity,
                                                               FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS,
                                                               &connect_result)
                           : NULL;
-    return fixture->client && connect_result.status == CBM_DAEMON_RUNTIME_CONNECT_ACCEPTED;
+    return fixture->client && connect_result.status == LSM_DAEMON_RUNTIME_CONNECT_ACCEPTED;
 }
 
 static bool frontend_eof_fixture_finish(frontend_eof_fixture_t *fixture) {
     bool ok = true;
     if (fixture->client) {
-        ok = cbm_daemon_runtime_client_close(fixture->client,
+        ok = lsm_daemon_runtime_client_close(fixture->client,
                                              FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS) &&
              ok;
         fixture->client = NULL;
     }
     if (fixture->service) {
-        if (cbm_daemon_runtime_service_state(fixture->service) !=
-            CBM_DAEMON_RUNTIME_SERVICE_EXITED) {
-            ok = cbm_daemon_runtime_service_stop(fixture->service,
+        if (lsm_daemon_runtime_service_state(fixture->service) !=
+            LSM_DAEMON_RUNTIME_SERVICE_EXITED) {
+            ok = lsm_daemon_runtime_service_stop(fixture->service,
                                                  FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS) &&
                  ok;
         }
-        ok = cbm_daemon_runtime_service_free(fixture->service) && ok;
+        ok = lsm_daemon_runtime_service_free(fixture->service) && ok;
         fixture->service = NULL;
     }
     if (fixture->manager) {
-        ok = cbm_version_cohort_manager_free(&fixture->manager) == CBM_PRIVATE_FILE_LOCK_OK && ok;
+        ok = lsm_version_cohort_manager_free(&fixture->manager) == LSM_PRIVATE_FILE_LOCK_OK && ok;
     }
-    cbm_daemon_ipc_endpoint_free(fixture->endpoint);
+    lsm_daemon_ipc_endpoint_free(fixture->endpoint);
     fixture->endpoint = NULL;
     return ok;
 }
@@ -401,9 +401,9 @@ static int frontend_eof_child_run(const char *parent, bool overflow) {
     };
     atomic_init(&writer.finished, false);
     atomic_init(&writer.succeeded, false);
-    cbm_thread_t writer_thread;
+    lsm_thread_t writer_thread;
     bool writer_started =
-        input && output && cbm_thread_create(&writer_thread, 0, frontend_eof_writer, &writer) == 0;
+        input && output && lsm_thread_create(&writer_thread, 0, frontend_eof_writer, &writer) == 0;
     if (!writer_started) {
         if (input) {
             (void)fclose(input);
@@ -418,10 +418,10 @@ static int frontend_eof_child_run(const char *parent, bool overflow) {
         return 72;
     }
 
-    cbm_daemon_runtime_client_t *frontend_client = fixture.client;
-    fixture.client = NULL; /* cbm_daemon_frontend_mcp_run consumes it. */
-    int result = cbm_daemon_frontend_mcp_run(frontend_client, fixture.manager, input, output);
-    bool joined = cbm_thread_join(&writer_thread) == 0;
+    lsm_daemon_runtime_client_t *frontend_client = fixture.client;
+    fixture.client = NULL; /* lsm_daemon_frontend_mcp_run consumes it. */
+    int result = lsm_daemon_frontend_mcp_run(frontend_client, fixture.manager, input, output);
+    bool joined = lsm_thread_join(&writer_thread) == 0;
     bool writer_ok = atomic_load_explicit(&writer.finished, memory_order_acquire) &&
                      atomic_load_explicit(&writer.succeeded, memory_order_acquire);
     bool request_started =
@@ -460,8 +460,8 @@ static int frontend_eof_child_run(const char *parent, bool overflow) {
 static bool frontend_eof_run_isolated(const char *tag, bool overflow) {
     char parent[FRONTEND_TEST_PATH_CAP];
     int written =
-        snprintf(parent, sizeof(parent), "%s/cbm-frontend-eof-%s-XXXXXX", cbm_tmpdir(), tag);
-    if (written <= 0 || written >= (int)sizeof(parent) || !cbm_mkdtemp(parent)) {
+        snprintf(parent, sizeof(parent), "%s/lsm-frontend-eof-%s-XXXXXX", lsm_tmpdir(), tag);
+    if (written <= 0 || written >= (int)sizeof(parent) || !lsm_mkdtemp(parent)) {
         return false;
     }
     pid_t child = fork();
@@ -501,22 +501,22 @@ static bool frontend_eof_run_isolated(const char *tag, bool overflow) {
     return child_ok && cleaned;
 }
 
-static void frontend_test_release_lease(cbm_version_cohort_lease_t **lease) {
-    while (lease && *lease && cbm_version_cohort_lease_release(lease) != CBM_PRIVATE_FILE_LOCK_OK) {
-        cbm_usleep(1000);
+static void frontend_test_release_lease(lsm_version_cohort_lease_t **lease) {
+    while (lease && *lease && lsm_version_cohort_lease_release(lease) != LSM_PRIVATE_FILE_LOCK_OK) {
+        lsm_usleep(1000);
     }
 }
 
-static bool frontend_test_release_lease_until(cbm_version_cohort_lease_t **lease,
+static bool frontend_test_release_lease_until(lsm_version_cohort_lease_t **lease,
                                               uint64_t deadline_ms) {
     while (lease && *lease) {
-        if (cbm_version_cohort_lease_release(lease) == CBM_PRIVATE_FILE_LOCK_OK) {
+        if (lsm_version_cohort_lease_release(lease) == LSM_PRIVATE_FILE_LOCK_OK) {
             continue;
         }
-        if (cbm_now_ms() >= deadline_ms) {
+        if (lsm_now_ms() >= deadline_ms) {
             return false;
         }
-        cbm_usleep(1000);
+        lsm_usleep(1000);
     }
     return !lease || !*lease;
 }
@@ -538,10 +538,10 @@ static bool frontend_test_read_byte(int fd, char *observed, uint64_t deadline_ms
             return true;
         }
         if (count == 0 || (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK) ||
-            cbm_now_ms() >= deadline_ms) {
+            lsm_now_ms() >= deadline_ms) {
             return false;
         }
-        cbm_usleep(1000);
+        lsm_usleep(1000);
     }
 }
 
@@ -556,14 +556,14 @@ typedef struct {
     atomic_bool succeeded;
 } frontend_backpressure_writer_t;
 
-static cbm_version_cohort_quiesce_result_t frontend_test_quiesce_requested(void *context);
+static lsm_version_cohort_quiesce_result_t frontend_test_quiesce_requested(void *context);
 
-static bool frontend_backpressure_identity(cbm_daemon_build_identity_t *identity,
-                                           const char build[CBM_DAEMON_BUILD_FINGERPRINT_SIZE]) {
-    if (!identity || !build || strlen(build) != CBM_DAEMON_BUILD_FINGERPRINT_SIZE - 1) {
+static bool frontend_backpressure_identity(lsm_daemon_build_identity_t *identity,
+                                           const char build[LSM_DAEMON_BUILD_FINGERPRINT_SIZE]) {
+    if (!identity || !build || strlen(build) != LSM_DAEMON_BUILD_FINGERPRINT_SIZE - 1) {
         return false;
     }
-    *identity = (cbm_daemon_build_identity_t){
+    *identity = (lsm_daemon_build_identity_t){
         .semantic_version = "2.4.0",
         .build_fingerprint = build,
         .cache_fingerprint = FRONTEND_TEST_CACHE,
@@ -601,16 +601,16 @@ static void *frontend_backpressure_writer(void *opaque) {
 
 static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, int cancel_fd,
                                             int control_fd,
-                                            const char build[CBM_DAEMON_BUILD_FINGERPRINT_SIZE]) {
+                                            const char build[LSM_DAEMON_BUILD_FINGERPRINT_SIZE]) {
     (void)alarm(FRONTEND_BACKPRESSURE_DAEMON_TIMEOUT_S);
-    char key[CBM_DAEMON_KEY_SIZE];
+    char key[LSM_DAEMON_KEY_SIZE];
     char conflict_log[FRONTEND_TEST_PATH_CAP];
-    cbm_daemon_build_identity_t identity = {0};
+    lsm_daemon_build_identity_t identity = {0};
     int log_written = snprintf(conflict_log, sizeof(conflict_log), "%s/conflicts.ndjson", parent);
-    cbm_daemon_ipc_endpoint_t *endpoint =
+    lsm_daemon_ipc_endpoint_t *endpoint =
         log_written > 0 && log_written < (int)sizeof(conflict_log) &&
-                cbm_daemon_rendezvous_key(key) && frontend_backpressure_identity(&identity, build)
-            ? cbm_daemon_ipc_endpoint_new(key, parent)
+                lsm_daemon_rendezvous_key(key) && frontend_backpressure_identity(&identity, build)
+            ? lsm_daemon_ipc_endpoint_new(key, parent)
             : NULL;
     frontend_eof_application_context_t application;
     memset(&application, 0, sizeof(application));
@@ -624,7 +624,7 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
     atomic_init(&application.release_first_request, false);
     application.request_observed_fd = ready_fd;
     application.session_cancel_fd = cancel_fd;
-    cbm_daemon_runtime_application_callbacks_t callbacks = {
+    lsm_daemon_runtime_application_callbacks_t callbacks = {
         .context = &application,
         .session_open = frontend_eof_application_session_open,
         .request = frontend_eof_application_request,
@@ -632,7 +632,7 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
         .session_cancel = frontend_eof_application_session_cancel,
         .session_close = frontend_eof_application_session_close,
     };
-    cbm_daemon_runtime_service_config_t config = {
+    lsm_daemon_runtime_service_config_t config = {
         .endpoint = endpoint,
         .identity = identity,
         .conflict_log_path = conflict_log,
@@ -643,15 +643,15 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
         .shutdown_timeout_ms = FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS,
         .application = callbacks,
     };
-    cbm_daemon_runtime_service_t *service =
-        endpoint ? cbm_daemon_runtime_service_start(&config) : NULL;
+    lsm_daemon_runtime_service_t *service =
+        endpoint ? lsm_daemon_runtime_service_start(&config) : NULL;
     const char ready = 'R';
     bool announced = service && write(ready_fd, &ready, 1) == 1;
-    uint64_t cancellation_deadline = cbm_now_ms() + FRONTEND_BACKPRESSURE_RUNTIME_TIMEOUT_MS;
+    uint64_t cancellation_deadline = lsm_now_ms() + FRONTEND_BACKPRESSURE_RUNTIME_TIMEOUT_MS;
     while (announced &&
            atomic_load_explicit(&application.session_cancels, memory_order_acquire) == 0 &&
-           cbm_now_ms() < cancellation_deadline) {
-        cbm_usleep(1000);
+           lsm_now_ms() < cancellation_deadline) {
+        lsm_usleep(1000);
     }
     int target_cancellations =
         atomic_load_explicit(&application.session_cancels, memory_order_acquire);
@@ -668,7 +668,7 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
     bool shutdown_released =
         checkpoint_written &&
         frontend_test_read_byte(control_fd, &control,
-                                cbm_now_ms() + FRONTEND_BACKPRESSURE_RUNTIME_TIMEOUT_MS) &&
+                                lsm_now_ms() + FRONTEND_BACKPRESSURE_RUNTIME_TIMEOUT_MS) &&
         control == 'S';
     int final_cancellations =
         atomic_load_explicit(&application.session_cancels, memory_order_acquire);
@@ -680,10 +680,10 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
                                         sentinel_session_cancellations == 1 &&
                                         final_target_session_cancellations == 1;
     bool stopped =
-        service && cbm_daemon_runtime_service_stop(service, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
-    bool exited = stopped && cbm_daemon_runtime_service_wait_exited(service, 0);
-    bool freed = exited && cbm_daemon_runtime_service_free(service);
-    cbm_daemon_ipc_endpoint_free(endpoint);
+        service && lsm_daemon_runtime_service_stop(service, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
+    bool exited = stopped && lsm_daemon_runtime_service_wait_exited(service, 0);
+    bool freed = exited && lsm_daemon_runtime_service_free(service);
+    lsm_daemon_ipc_endpoint_free(endpoint);
     const char done = target_cancelled_exactly_once && shutdown_released &&
                               sentinel_closed_exactly_once && stopped && exited && freed
                           ? 'D'
@@ -700,27 +700,27 @@ static int frontend_backpressure_daemon_run(const char *parent, int ready_fd, in
 
 static int frontend_backpressure_frontend_run(const char *parent, int input_fd, int input_write_fd,
                                               int output_fd,
-                                              const char build[CBM_DAEMON_BUILD_FINGERPRINT_SIZE],
+                                              const char build[LSM_DAEMON_BUILD_FINGERPRINT_SIZE],
                                               bool keep_input_open) {
     (void)alarm(FRONTEND_BACKPRESSURE_FRONTEND_TIMEOUT_S);
-    char key[CBM_DAEMON_KEY_SIZE];
-    cbm_daemon_build_identity_t identity = {0};
-    cbm_daemon_ipc_endpoint_t *endpoint =
-        cbm_daemon_rendezvous_key(key) && frontend_backpressure_identity(&identity, build)
-            ? cbm_daemon_ipc_endpoint_new(key, parent)
+    char key[LSM_DAEMON_KEY_SIZE];
+    lsm_daemon_build_identity_t identity = {0};
+    lsm_daemon_ipc_endpoint_t *endpoint =
+        lsm_daemon_rendezvous_key(key) && frontend_backpressure_identity(&identity, build)
+            ? lsm_daemon_ipc_endpoint_new(key, parent)
             : NULL;
-    cbm_version_cohort_manager_t *manager =
-        endpoint ? cbm_version_cohort_manager_new(endpoint) : NULL;
-    cbm_version_cohort_lease_t *participant = NULL;
-    cbm_daemon_conflict_t conflict;
-    cbm_version_cohort_status_t admitted =
-        manager ? cbm_version_cohort_acquire(manager, &identity, cbm_now_ms() + 2000U, &participant,
+    lsm_version_cohort_manager_t *manager =
+        endpoint ? lsm_version_cohort_manager_new(endpoint) : NULL;
+    lsm_version_cohort_lease_t *participant = NULL;
+    lsm_daemon_conflict_t conflict;
+    lsm_version_cohort_status_t admitted =
+        manager ? lsm_version_cohort_acquire(manager, &identity, lsm_now_ms() + 2000U, &participant,
                                              &conflict)
-                : CBM_VERSION_COHORT_IO;
-    cbm_daemon_runtime_connect_result_t connect_result = {0};
-    cbm_daemon_runtime_client_t *client =
-        admitted == CBM_VERSION_COHORT_OK
-            ? cbm_daemon_runtime_client_connect(
+                : LSM_VERSION_COHORT_IO;
+    lsm_daemon_runtime_connect_result_t connect_result = {0};
+    lsm_daemon_runtime_client_t *client =
+        admitted == LSM_VERSION_COHORT_OK
+            ? lsm_daemon_runtime_client_connect(
                   endpoint, &identity, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS, &connect_result)
             : NULL;
     FILE *input = client ? fdopen(input_fd, "rb") : NULL;
@@ -731,13 +731,13 @@ static int frontend_backpressure_frontend_run(const char *parent, int input_fd, 
     };
     atomic_init(&writer.finished, false);
     atomic_init(&writer.succeeded, false);
-    cbm_thread_t writer_thread;
+    lsm_thread_t writer_thread;
     bool writer_started =
         output && (!keep_input_open || input_hold_fd >= 0) &&
-        cbm_thread_create(&writer_thread, 0, frontend_backpressure_writer, &writer) == 0;
+        lsm_thread_create(&writer_thread, 0, frontend_backpressure_writer, &writer) == 0;
     if (!writer_started) {
         if (client) {
-            (void)cbm_daemon_runtime_client_close(client, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
+            (void)lsm_daemon_runtime_client_close(client, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
         }
         if (input) {
             (void)fclose(input);
@@ -755,22 +755,22 @@ static int frontend_backpressure_frontend_run(const char *parent, int input_fd, 
         }
         frontend_test_release_lease(&participant);
         if (manager) {
-            (void)cbm_version_cohort_manager_free(&manager);
+            (void)lsm_version_cohort_manager_free(&manager);
         }
-        cbm_daemon_ipc_endpoint_free(endpoint);
+        lsm_daemon_ipc_endpoint_free(endpoint);
         return 81;
     }
 
-    int result = cbm_daemon_frontend_mcp_run(client, manager, input, output);
-    bool joined = cbm_thread_join(&writer_thread) == 0;
+    int result = lsm_daemon_frontend_mcp_run(client, manager, input, output);
+    bool joined = lsm_thread_join(&writer_thread) == 0;
     bool writer_ok = atomic_load_explicit(&writer.finished, memory_order_acquire) &&
                      atomic_load_explicit(&writer.succeeded, memory_order_acquire);
     bool input_closed = fclose(input) == 0;
     bool output_closed = fclose(output) == 0;
     bool input_hold_closed = input_hold_fd < 0 || close(input_hold_fd) == 0;
     frontend_test_release_lease(&participant);
-    bool manager_closed = cbm_version_cohort_manager_free(&manager) == CBM_PRIVATE_FILE_LOCK_OK;
-    cbm_daemon_ipc_endpoint_free(endpoint);
+    bool manager_closed = lsm_version_cohort_manager_free(&manager) == LSM_PRIVATE_FILE_LOCK_OK;
+    lsm_daemon_ipc_endpoint_free(endpoint);
     return result < 0 && joined && writer_ok && input_closed && output_closed &&
                    input_hold_closed && manager_closed
                ? 47
@@ -779,18 +779,18 @@ static int frontend_backpressure_frontend_run(const char *parent, int input_fd, 
 
 static bool frontend_backpressure_run_isolated(bool maintenance) {
     char parent[FRONTEND_TEST_PATH_CAP];
-    char build[CBM_DAEMON_BUILD_FINGERPRINT_SIZE] = {0};
+    char build[LSM_DAEMON_BUILD_FINGERPRINT_SIZE] = {0};
     int path_written = snprintf(parent, sizeof(parent),
-                                maintenance ? "%s/cbm-frontend-maintenance-backpressure-XXXXXX"
-                                            : "%s/cbm-frontend-backpressure-XXXXXX",
-                                cbm_tmpdir());
+                                maintenance ? "%s/lsm-frontend-maintenance-backpressure-XXXXXX"
+                                            : "%s/lsm-frontend-backpressure-XXXXXX",
+                                lsm_tmpdir());
     int ready_pipe[2] = {-1, -1};
     int cancel_pipe[2] = {-1, -1};
     int control_pipe[2] = {-1, -1};
     bool directory_ready =
-        path_written > 0 && path_written < (int)sizeof(parent) && cbm_mkdtemp(parent);
+        path_written > 0 && path_written < (int)sizeof(parent) && lsm_mkdtemp(parent);
     bool identity_ready =
-        directory_ready && cbm_daemon_runtime_process_build_fingerprint((uint64_t)getpid(), build);
+        directory_ready && lsm_daemon_runtime_process_build_fingerprint((uint64_t)getpid(), build);
     bool prepared = identity_ready && pipe(ready_pipe) == 0 && pipe(cancel_pipe) == 0 &&
                     pipe(control_pipe) == 0;
     if (!prepared) {
@@ -825,7 +825,7 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
         (void)close(control_pipe[0]);
     }
     char announced_marker = '\0';
-    /* The daemon child runs cbm_daemon_runtime_service_start before it can
+    /* The daemon child runs lsm_daemon_runtime_service_start before it can
      * announce, and that includes the cohort-claim path whose own internal
      * budget is HOST_DAEMON_CLAIM_TIMEOUT_MS (12s). An announce deadline
      * below that budget SIGKILLs a slow-but-legitimate startup — on
@@ -843,14 +843,14 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
      * MSan stayed green. Widening the backstop for sanitized builds costs
      * nothing when the daemon is healthy: a passing run returns as soon as the
      * byte arrives, whatever the ceiling is. */
-#if CBM_SANITIZED
+#if LSM_SANITIZED
     const uint64_t announce_backstop_ms = 180000U;
 #else
     const uint64_t announce_backstop_ms = 30000U;
 #endif
     bool announced_read =
         daemon > 0 && frontend_test_read_byte(ready_pipe[0], &announced_marker,
-                                              cbm_now_ms() + announce_backstop_ms);
+                                              lsm_now_ms() + announce_backstop_ms);
     bool announced = announced_read && announced_marker == 'R';
 
     /* This raw runtime client intentionally owns no cohort lease. It is a
@@ -859,21 +859,21 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
      * completed admission precedes the target fork, so the daemon fixture can
      * attribute session-cancel callbacks to sentinel index 0 and target index
      * 1 rather than relying on a global callback count. */
-    char sentinel_key[CBM_DAEMON_KEY_SIZE];
-    cbm_daemon_build_identity_t sentinel_identity = {0};
-    cbm_daemon_ipc_endpoint_t *sentinel_endpoint =
-        announced && cbm_daemon_rendezvous_key(sentinel_key) &&
+    char sentinel_key[LSM_DAEMON_KEY_SIZE];
+    lsm_daemon_build_identity_t sentinel_identity = {0};
+    lsm_daemon_ipc_endpoint_t *sentinel_endpoint =
+        announced && lsm_daemon_rendezvous_key(sentinel_key) &&
                 frontend_backpressure_identity(&sentinel_identity, build)
-            ? cbm_daemon_ipc_endpoint_new(sentinel_key, parent)
+            ? lsm_daemon_ipc_endpoint_new(sentinel_key, parent)
             : NULL;
-    cbm_daemon_runtime_connect_result_t sentinel_connect = {0};
-    cbm_daemon_runtime_client_t *sentinel =
-        sentinel_endpoint ? cbm_daemon_runtime_client_connect(sentinel_endpoint, &sentinel_identity,
+    lsm_daemon_runtime_connect_result_t sentinel_connect = {0};
+    lsm_daemon_runtime_client_t *sentinel =
+        sentinel_endpoint ? lsm_daemon_runtime_client_connect(sentinel_endpoint, &sentinel_identity,
                                                               FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS,
                                                               &sentinel_connect)
                           : NULL;
     bool sentinel_ready =
-        sentinel && sentinel_connect.status == CBM_DAEMON_RUNTIME_CONNECT_ACCEPTED;
+        sentinel && sentinel_connect.status == LSM_DAEMON_RUNTIME_CONNECT_ACCEPTED;
     if (!sentinel_ready && daemon > 0) {
         (void)kill(daemon, SIGKILL);
     }
@@ -906,31 +906,31 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
 
     char request_marker = '\0';
     bool request_read = frontend > 0 && frontend_test_read_byte(ready_pipe[0], &request_marker,
-                                                                cbm_now_ms() + 4000U);
+                                                                lsm_now_ms() + 4000U);
     bool request_observed = request_read && request_marker == 'Q';
     char output_marker = '\0';
     bool output_observed =
         !maintenance || (request_observed && frontend_test_read_byte(output_pipe[0], &output_marker,
-                                                                     cbm_now_ms() + 4000U));
+                                                                     lsm_now_ms() + 4000U));
 
-    cbm_daemon_ipc_endpoint_t *mutation_endpoint = NULL;
-    cbm_version_cohort_manager_t *mutation_manager = NULL;
-    cbm_version_cohort_lease_t *mutation = NULL;
-    cbm_version_cohort_quiesce_result_t quiesce = CBM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
-    cbm_version_cohort_status_t mutation_status = CBM_VERSION_COHORT_OK;
+    lsm_daemon_ipc_endpoint_t *mutation_endpoint = NULL;
+    lsm_version_cohort_manager_t *mutation_manager = NULL;
+    lsm_version_cohort_lease_t *mutation = NULL;
+    lsm_version_cohort_quiesce_result_t quiesce = LSM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
+    lsm_version_cohort_status_t mutation_status = LSM_VERSION_COHORT_OK;
     if (maintenance) {
-        char mutation_key[CBM_DAEMON_KEY_SIZE];
-        mutation_endpoint = output_observed && cbm_daemon_rendezvous_key(mutation_key)
-                                ? cbm_daemon_ipc_endpoint_new(mutation_key, parent)
+        char mutation_key[LSM_DAEMON_KEY_SIZE];
+        mutation_endpoint = output_observed && lsm_daemon_rendezvous_key(mutation_key)
+                                ? lsm_daemon_ipc_endpoint_new(mutation_key, parent)
                                 : NULL;
         mutation_manager =
-            mutation_endpoint ? cbm_version_cohort_manager_new(mutation_endpoint) : NULL;
+            mutation_endpoint ? lsm_version_cohort_manager_new(mutation_endpoint) : NULL;
         mutation_status = mutation_manager
-                              ? cbm_version_cohort_reserve_for_mutation(
-                                    mutation_manager, cbm_now_ms() + 8000U,
+                              ? lsm_version_cohort_reserve_for_mutation(
+                                    mutation_manager, lsm_now_ms() + 8000U,
                                     frontend_test_quiesce_requested, NULL, &quiesce, &mutation)
-                              : CBM_VERSION_COHORT_IO;
-        if (mutation_status != CBM_VERSION_COHORT_OK && frontend > 0) {
+                              : LSM_VERSION_COHORT_IO;
+        if (mutation_status != LSM_VERSION_COHORT_OK && frontend > 0) {
             (void)kill(frontend, SIGKILL);
         }
     }
@@ -946,19 +946,19 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
     }
     char cancel_marker = '\0';
     bool cancel_read = request_observed && frontend_test_read_byte(cancel_pipe[0], &cancel_marker,
-                                                                   cbm_now_ms() + 4000U);
+                                                                   lsm_now_ms() + 4000U);
     bool cancelled = cancel_read && cancel_marker == 'C';
     char checkpoint_marker = '\0';
     bool checkpoint_read =
-        frontend_test_read_byte(ready_pipe[0], &checkpoint_marker, cbm_now_ms() + 4000U);
+        frontend_test_read_byte(ready_pipe[0], &checkpoint_marker, lsm_now_ms() + 4000U);
     bool target_cancelled_exactly_once = checkpoint_read && checkpoint_marker == 'T';
     bool sentinel_usable =
         cancelled && target_cancelled_exactly_once && sentinel_ready &&
-        cbm_daemon_runtime_client_heartbeat(sentinel, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
+        lsm_daemon_runtime_client_heartbeat(sentinel, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
     bool sentinel_closed =
-        sentinel && cbm_daemon_runtime_client_close(sentinel, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
+        sentinel && lsm_daemon_runtime_client_close(sentinel, FRONTEND_EOF_TEST_REQUEST_TIMEOUT_MS);
     sentinel = NULL;
-    cbm_daemon_ipc_endpoint_free(sentinel_endpoint);
+    lsm_daemon_ipc_endpoint_free(sentinel_endpoint);
     sentinel_endpoint = NULL;
     const char shutdown = 'S';
     bool shutdown_sent = checkpoint_read && write(control_pipe[1], &shutdown, 1) == 1;
@@ -968,7 +968,7 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
     }
     char done_marker = '\0';
     bool done_read =
-        shutdown_sent && frontend_test_read_byte(ready_pipe[0], &done_marker, cbm_now_ms() + 4000U);
+        shutdown_sent && frontend_test_read_byte(ready_pipe[0], &done_marker, lsm_now_ms() + 4000U);
     bool daemon_done = done_read && done_marker == 'D';
     if (!daemon_done && daemon > 0) {
         (void)kill(daemon, SIGKILL);
@@ -979,17 +979,17 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
         daemon_waited = daemon > 0 ? waitpid(daemon, &daemon_status, 0) : -1;
     } while (daemon_waited < 0 && errno == EINTR);
 
-    uint64_t cleanup_now = cbm_now_ms();
+    uint64_t cleanup_now = lsm_now_ms();
     uint64_t cleanup_deadline = cleanup_now > UINT64_MAX - FRONTEND_BACKPRESSURE_CLEANUP_TIMEOUT_MS
                                     ? UINT64_MAX
                                     : cleanup_now + FRONTEND_BACKPRESSURE_CLEANUP_TIMEOUT_MS;
     bool mutation_released = frontend_test_release_lease_until(&mutation, cleanup_deadline);
-    while (mutation_released && mutation_manager && cbm_now_ms() < cleanup_deadline &&
-           cbm_version_cohort_manager_free(&mutation_manager) != CBM_PRIVATE_FILE_LOCK_OK) {
-        cbm_usleep(1000);
+    while (mutation_released && mutation_manager && lsm_now_ms() < cleanup_deadline &&
+           lsm_version_cohort_manager_free(&mutation_manager) != LSM_PRIVATE_FILE_LOCK_OK) {
+        lsm_usleep(1000);
     }
     bool mutation_manager_closed = mutation_manager == NULL;
-    cbm_daemon_ipc_endpoint_free(mutation_endpoint);
+    lsm_daemon_ipc_endpoint_free(mutation_endpoint);
 
     if (output_pipe[0] >= 0) {
         (void)close(output_pipe[0]);
@@ -1011,8 +1011,8 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
     bool daemon_clean =
         daemon_waited == daemon && WIFEXITED(daemon_status) && WEXITSTATUS(daemon_status) == 0;
     bool maintenance_completed =
-        !maintenance || (output_observed && mutation_status == CBM_VERSION_COHORT_OK &&
-                         quiesce == CBM_VERSION_COHORT_QUIESCE_REQUESTED);
+        !maintenance || (output_observed && mutation_status == LSM_VERSION_COHORT_OK &&
+                         quiesce == LSM_VERSION_COHORT_QUIESCE_REQUESTED);
     bool passed = prepared && announced && sentinel_ready && frontend_pipes && frontend > 0 &&
                   request_observed && maintenance_completed && frontend_exited_boundedly &&
                   cancelled && target_cancelled_exactly_once && sentinel_usable &&
@@ -1055,9 +1055,9 @@ static bool frontend_backpressure_run_isolated(bool maintenance) {
     return passed;
 }
 
-static cbm_version_cohort_quiesce_result_t frontend_test_quiesce_requested(void *context) {
+static lsm_version_cohort_quiesce_result_t frontend_test_quiesce_requested(void *context) {
     (void)context;
-    return CBM_VERSION_COHORT_QUIESCE_REQUESTED;
+    return LSM_VERSION_COHORT_QUIESCE_REQUESTED;
 }
 
 static bool frontend_test_cancel_active(void *context) {
@@ -1074,10 +1074,10 @@ static bool frontend_test_cancel_and_mark(void *context) {
 #endif
 
 TEST(daemon_frontend_recognizes_exact_cancellation_notification) {
-    ASSERT_TRUE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_TRUE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{\"requestId\":7}}"));
-    ASSERT_TRUE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_TRUE(lsm_daemon_frontend_is_cancellation_notification(
         "{ \"params\": {}, \"method\": \"notifications/cancelled\", "
         "\"jsonrpc\": \"2.0\" }"));
     PASS();
@@ -1087,28 +1087,28 @@ TEST(daemon_frontend_recognizes_exact_cancellation_notification) {
  * notification method is not authority to close a session.  The requestId
  * must match the exact numeric/string identity currently being executed. */
 TEST(daemon_frontend_correlates_cancellation_to_exact_request) {
-    ASSERT_TRUE(cbm_daemon_frontend_cancellation_matches_request(
+    ASSERT_TRUE(lsm_daemon_frontend_cancellation_matches_request(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{\"requestId\":7}}",
         7, NULL));
-    ASSERT_FALSE(cbm_daemon_frontend_cancellation_matches_request(
+    ASSERT_FALSE(lsm_daemon_frontend_cancellation_matches_request(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{\"requestId\":8}}",
         7, NULL));
-    ASSERT_TRUE(cbm_daemon_frontend_cancellation_matches_request(
+    ASSERT_TRUE(lsm_daemon_frontend_cancellation_matches_request(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{\"requestId\":\"request-7\"}}",
         -1, "request-7"));
-    ASSERT_FALSE(cbm_daemon_frontend_cancellation_matches_request(
+    ASSERT_FALSE(lsm_daemon_frontend_cancellation_matches_request(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{\"requestId\":7}}",
         -1, "7"));
-    ASSERT_FALSE(cbm_daemon_frontend_cancellation_matches_request(
+    ASSERT_FALSE(lsm_daemon_frontend_cancellation_matches_request(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\","
         "\"params\":{}}",
         7, NULL));
     ASSERT_FALSE(
-        cbm_daemon_frontend_cancellation_matches_request("{\"jsonrpc\":\"2.0\",\"id\":9,"
+        lsm_daemon_frontend_cancellation_matches_request("{\"jsonrpc\":\"2.0\",\"id\":9,"
                                                          "\"method\":\"notifications/cancelled\","
                                                          "\"params\":{\"requestId\":7}}",
                                                          7, NULL));
@@ -1116,29 +1116,29 @@ TEST(daemon_frontend_correlates_cancellation_to_exact_request) {
 }
 
 TEST(daemon_frontend_ignores_cancellation_text_in_string_content) {
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
         "\"params\":{\"name\":\"search_graph\",\"arguments\":{\"query\":"
         "\"notifications/cancelled\"}}}"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\","
         "\"params\":{\"method\":\"notifications/cancelled\"}}"));
     PASS();
 }
 
 TEST(daemon_frontend_rejects_non_notification_cancellation_shapes) {
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"id\":3,"
         "\"method\":\"notifications/cancelled\"}"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled-extra\"}"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"method\":\"prefix/notifications/cancelled\"}"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(
         "{\"jsonrpc\":\"2.0\",\"params\":{\"method\":"
         "\"notifications/cancelled\"}}"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification("not-json"));
-    ASSERT_FALSE(cbm_daemon_frontend_is_cancellation_notification(NULL));
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification("not-json"));
+    ASSERT_FALSE(lsm_daemon_frontend_is_cancellation_notification(NULL));
     PASS();
 }
 
@@ -1159,18 +1159,18 @@ TEST(daemon_frontend_maintenance_exits_while_stdio_reader_is_blocked) {
     if (child == 0) {
         (void)close(input_pipe[1]);
         (void)close(ready_pipe[0]);
-        cbm_daemon_ipc_endpoint_t *endpoint =
-            cbm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
-        cbm_version_cohort_manager_t *manager =
-            endpoint ? cbm_version_cohort_manager_new(endpoint) : NULL;
-        cbm_version_cohort_lease_t *participant = NULL;
-        cbm_daemon_conflict_t conflict;
-        cbm_daemon_build_identity_t identity = frontend_test_identity();
-        cbm_version_cohort_status_t admitted =
-            manager ? cbm_version_cohort_acquire(manager, &identity, cbm_now_ms() + 2000U,
+        lsm_daemon_ipc_endpoint_t *endpoint =
+            lsm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
+        lsm_version_cohort_manager_t *manager =
+            endpoint ? lsm_version_cohort_manager_new(endpoint) : NULL;
+        lsm_version_cohort_lease_t *participant = NULL;
+        lsm_daemon_conflict_t conflict;
+        lsm_daemon_build_identity_t identity = frontend_test_identity();
+        lsm_version_cohort_status_t admitted =
+            manager ? lsm_version_cohort_acquire(manager, &identity, lsm_now_ms() + 2000U,
                                                  &participant, &conflict)
-                    : CBM_VERSION_COHORT_IO;
-        FILE *input = admitted == CBM_VERSION_COHORT_OK ? fdopen(input_pipe[0], "rb") : NULL;
+                    : LSM_VERSION_COHORT_IO;
+        FILE *input = admitted == LSM_VERSION_COHORT_OK ? fdopen(input_pipe[0], "rb") : NULL;
         FILE *output = input ? tmpfile() : NULL;
         const char ready = 'R';
         bool announced = output && write(ready_pipe[1], &ready, 1) == 1;
@@ -1178,7 +1178,7 @@ TEST(daemon_frontend_maintenance_exits_while_stdio_reader_is_blocked) {
         if (!announced) {
             _exit(70);
         }
-        int result = cbm_daemon_frontend_mcp_run((cbm_daemon_runtime_client_t *)(uintptr_t)1,
+        int result = lsm_daemon_frontend_mcp_run((lsm_daemon_runtime_client_t *)(uintptr_t)1,
                                                  manager, input, output);
         (void)result;
         _exit(71);
@@ -1188,15 +1188,15 @@ TEST(daemon_frontend_maintenance_exits_while_stdio_reader_is_blocked) {
         (void)close(input_pipe[0]);
         (void)close(ready_pipe[1]);
     }
-    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', cbm_now_ms() + 2000U);
-    cbm_version_cohort_lease_t *mutation = NULL;
-    cbm_version_cohort_quiesce_result_t quiesce = CBM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
-    cbm_version_cohort_status_t status =
-        announced ? cbm_version_cohort_reserve_for_mutation(fixture.manager, cbm_now_ms() + 3000U,
+    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', lsm_now_ms() + 2000U);
+    lsm_version_cohort_lease_t *mutation = NULL;
+    lsm_version_cohort_quiesce_result_t quiesce = LSM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
+    lsm_version_cohort_status_t status =
+        announced ? lsm_version_cohort_reserve_for_mutation(fixture.manager, lsm_now_ms() + 3000U,
                                                             frontend_test_quiesce_requested, NULL,
                                                             &quiesce, &mutation)
-                  : CBM_VERSION_COHORT_IO;
-    if (status != CBM_VERSION_COHORT_OK && child > 0) {
+                  : LSM_VERSION_COHORT_IO;
+    if (status != LSM_VERSION_COHORT_OK && child > 0) {
         (void)kill(child, SIGKILL);
     }
     int child_status = 0;
@@ -1211,8 +1211,8 @@ TEST(daemon_frontend_maintenance_exits_while_stdio_reader_is_blocked) {
     ASSERT_TRUE(pipes_ready);
     ASSERT_TRUE(child > 0);
     ASSERT_TRUE(announced);
-    ASSERT_EQ(status, CBM_VERSION_COHORT_OK);
-    ASSERT_EQ(quiesce, CBM_VERSION_COHORT_QUIESCE_REQUESTED);
+    ASSERT_EQ(status, LSM_VERSION_COHORT_OK);
+    ASSERT_EQ(quiesce, LSM_VERSION_COHORT_QUIESCE_REQUESTED);
     ASSERT_TRUE(waited);
     ASSERT_TRUE(WIFEXITED(child_status));
     ASSERT_EQ(WEXITSTATUS(child_status), 0);
@@ -1234,20 +1234,20 @@ TEST(daemon_local_participant_monitor_cancels_then_bounds_active_operation) {
     if (child == 0) {
         (void)close(ready_pipe[0]);
         (void)close(cancel_pipe[0]);
-        cbm_daemon_ipc_endpoint_t *endpoint =
-            cbm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
-        cbm_version_cohort_manager_t *manager =
-            endpoint ? cbm_version_cohort_manager_new(endpoint) : NULL;
-        cbm_version_cohort_lease_t *participant = NULL;
-        cbm_daemon_conflict_t conflict;
-        cbm_daemon_build_identity_t identity = frontend_test_identity();
-        cbm_version_cohort_status_t admitted =
-            manager ? cbm_version_cohort_acquire(manager, &identity, cbm_now_ms() + 2000U,
+        lsm_daemon_ipc_endpoint_t *endpoint =
+            lsm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
+        lsm_version_cohort_manager_t *manager =
+            endpoint ? lsm_version_cohort_manager_new(endpoint) : NULL;
+        lsm_version_cohort_lease_t *participant = NULL;
+        lsm_daemon_conflict_t conflict;
+        lsm_daemon_build_identity_t identity = frontend_test_identity();
+        lsm_version_cohort_status_t admitted =
+            manager ? lsm_version_cohort_acquire(manager, &identity, lsm_now_ms() + 2000U,
                                                  &participant, &conflict)
-                    : CBM_VERSION_COHORT_IO;
-        cbm_daemon_maintenance_monitor_t *monitor =
-            admitted == CBM_VERSION_COHORT_OK
-                ? cbm_daemon_maintenance_monitor_start(manager, frontend_test_cancel_active,
+                    : LSM_VERSION_COHORT_IO;
+        lsm_daemon_maintenance_monitor_t *monitor =
+            admitted == LSM_VERSION_COHORT_OK
+                ? lsm_daemon_maintenance_monitor_start(manager, frontend_test_cancel_active,
                                                        &cancel_pipe[1], 37, "test-local-operation")
                 : NULL;
         const char ready = 'R';
@@ -1257,7 +1257,7 @@ TEST(daemon_local_participant_monitor_cancels_then_bounds_active_operation) {
             _exit(72);
         }
         for (;;) {
-            cbm_usleep(100000);
+            lsm_usleep(100000);
         }
     }
 
@@ -1265,17 +1265,17 @@ TEST(daemon_local_participant_monitor_cancels_then_bounds_active_operation) {
         (void)close(ready_pipe[1]);
         (void)close(cancel_pipe[1]);
     }
-    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', cbm_now_ms() + 2000U);
-    cbm_version_cohort_lease_t *mutation = NULL;
-    cbm_version_cohort_quiesce_result_t quiesce = CBM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
-    cbm_version_cohort_status_t status =
-        announced ? cbm_version_cohort_reserve_for_mutation(fixture.manager, cbm_now_ms() + 5000U,
+    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', lsm_now_ms() + 2000U);
+    lsm_version_cohort_lease_t *mutation = NULL;
+    lsm_version_cohort_quiesce_result_t quiesce = LSM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
+    lsm_version_cohort_status_t status =
+        announced ? lsm_version_cohort_reserve_for_mutation(fixture.manager, lsm_now_ms() + 5000U,
                                                             frontend_test_quiesce_requested, NULL,
                                                             &quiesce, &mutation)
-                  : CBM_VERSION_COHORT_IO;
-    bool cancelled = status == CBM_VERSION_COHORT_OK &&
-                     frontend_test_wait_byte(cancel_pipe[0], 'C', cbm_now_ms() + 1000U);
-    if (status != CBM_VERSION_COHORT_OK && child > 0) {
+                  : LSM_VERSION_COHORT_IO;
+    bool cancelled = status == LSM_VERSION_COHORT_OK &&
+                     frontend_test_wait_byte(cancel_pipe[0], 'C', lsm_now_ms() + 1000U);
+    if (status != LSM_VERSION_COHORT_OK && child > 0) {
         (void)kill(child, SIGKILL);
     }
     int child_status = 0;
@@ -1290,8 +1290,8 @@ TEST(daemon_local_participant_monitor_cancels_then_bounds_active_operation) {
     ASSERT_TRUE(pipes_ready);
     ASSERT_TRUE(child > 0);
     ASSERT_TRUE(announced);
-    ASSERT_EQ(status, CBM_VERSION_COHORT_OK);
-    ASSERT_EQ(quiesce, CBM_VERSION_COHORT_QUIESCE_REQUESTED);
+    ASSERT_EQ(status, LSM_VERSION_COHORT_OK);
+    ASSERT_EQ(quiesce, LSM_VERSION_COHORT_QUIESCE_REQUESTED);
     ASSERT_TRUE(cancelled);
     ASSERT_TRUE(waited);
     ASSERT_TRUE(WIFEXITED(child_status));
@@ -1311,22 +1311,22 @@ TEST(daemon_local_participant_monitor_allows_supervisor_containment_window) {
     pid_t child = pipe_ready ? fork() : -1;
     if (child == 0) {
         (void)close(ready_pipe[0]);
-        cbm_daemon_ipc_endpoint_t *endpoint =
-            cbm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
-        cbm_version_cohort_manager_t *manager =
-            endpoint ? cbm_version_cohort_manager_new(endpoint) : NULL;
-        cbm_version_cohort_lease_t *participant = NULL;
-        cbm_daemon_conflict_t conflict;
-        cbm_daemon_build_identity_t identity = frontend_test_identity();
-        cbm_version_cohort_status_t admitted =
-            manager ? cbm_version_cohort_acquire(manager, &identity, cbm_now_ms() + 2000U,
+        lsm_daemon_ipc_endpoint_t *endpoint =
+            lsm_daemon_ipc_endpoint_new("0123456789abcdef", fixture.parent);
+        lsm_version_cohort_manager_t *manager =
+            endpoint ? lsm_version_cohort_manager_new(endpoint) : NULL;
+        lsm_version_cohort_lease_t *participant = NULL;
+        lsm_daemon_conflict_t conflict;
+        lsm_daemon_build_identity_t identity = frontend_test_identity();
+        lsm_version_cohort_status_t admitted =
+            manager ? lsm_version_cohort_acquire(manager, &identity, lsm_now_ms() + 2000U,
                                                  &participant, &conflict)
-                    : CBM_VERSION_COHORT_IO;
+                    : LSM_VERSION_COHORT_IO;
         atomic_bool cancelled;
         atomic_init(&cancelled, false);
-        cbm_daemon_maintenance_monitor_t *monitor =
-            admitted == CBM_VERSION_COHORT_OK
-                ? cbm_daemon_maintenance_monitor_start(manager, frontend_test_cancel_and_mark,
+        lsm_daemon_maintenance_monitor_t *monitor =
+            admitted == LSM_VERSION_COHORT_OK
+                ? lsm_daemon_maintenance_monitor_start(manager, frontend_test_cancel_and_mark,
                                                        &cancelled, 38, "test-supervisor-window")
                 : NULL;
         const char ready = 'R';
@@ -1336,32 +1336,32 @@ TEST(daemon_local_participant_monitor_allows_supervisor_containment_window) {
             _exit(72);
         }
         while (!atomic_load_explicit(&cancelled, memory_order_acquire)) {
-            cbm_usleep(1000);
+            lsm_usleep(1000);
         }
 
         /* Model the maximum graceful + forced-settle supervisor bounds. */
-        cbm_usleep(2100U * 1000U);
-        bool stopped = cbm_daemon_maintenance_monitor_stop(&monitor);
+        lsm_usleep(2100U * 1000U);
+        bool stopped = lsm_daemon_maintenance_monitor_stop(&monitor);
         frontend_test_release_lease(&participant);
-        while (manager && cbm_version_cohort_manager_free(&manager) != CBM_PRIVATE_FILE_LOCK_OK) {
-            cbm_usleep(1000);
+        while (manager && lsm_version_cohort_manager_free(&manager) != LSM_PRIVATE_FILE_LOCK_OK) {
+            lsm_usleep(1000);
         }
-        cbm_daemon_ipc_endpoint_free(endpoint);
+        lsm_daemon_ipc_endpoint_free(endpoint);
         _exit(stopped ? 0 : 73);
     }
 
     if (pipe_ready) {
         (void)close(ready_pipe[1]);
     }
-    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', cbm_now_ms() + 2000U);
-    cbm_version_cohort_lease_t *mutation = NULL;
-    cbm_version_cohort_quiesce_result_t quiesce = CBM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
-    cbm_version_cohort_status_t status =
-        announced ? cbm_version_cohort_reserve_for_mutation(fixture.manager, cbm_now_ms() + 5000U,
+    bool announced = child > 0 && frontend_test_wait_byte(ready_pipe[0], 'R', lsm_now_ms() + 2000U);
+    lsm_version_cohort_lease_t *mutation = NULL;
+    lsm_version_cohort_quiesce_result_t quiesce = LSM_VERSION_COHORT_QUIESCE_NOT_NEEDED;
+    lsm_version_cohort_status_t status =
+        announced ? lsm_version_cohort_reserve_for_mutation(fixture.manager, lsm_now_ms() + 5000U,
                                                             frontend_test_quiesce_requested, NULL,
                                                             &quiesce, &mutation)
-                  : CBM_VERSION_COHORT_IO;
-    if (status != CBM_VERSION_COHORT_OK && child > 0) {
+                  : LSM_VERSION_COHORT_IO;
+    if (status != LSM_VERSION_COHORT_OK && child > 0) {
         (void)kill(child, SIGKILL);
     }
     int child_status = 0;
@@ -1375,8 +1375,8 @@ TEST(daemon_local_participant_monitor_allows_supervisor_containment_window) {
     ASSERT_TRUE(pipe_ready);
     ASSERT_TRUE(child > 0);
     ASSERT_TRUE(announced);
-    ASSERT_EQ(status, CBM_VERSION_COHORT_OK);
-    ASSERT_EQ(quiesce, CBM_VERSION_COHORT_QUIESCE_REQUESTED);
+    ASSERT_EQ(status, LSM_VERSION_COHORT_OK);
+    ASSERT_EQ(quiesce, LSM_VERSION_COHORT_QUIESCE_REQUESTED);
     ASSERT_TRUE(waited);
     ASSERT_TRUE(WIFEXITED(child_status));
     ASSERT_EQ(WEXITSTATUS(child_status), 0);
@@ -1424,10 +1424,10 @@ TEST(daemon_frontend_stdout_backpressure_maintenance_stops_and_cancels_session) 
 TEST(daemon_local_participant_monitor_joins_before_manager_teardown) {
     frontend_maintenance_fixture_t fixture;
     ASSERT_TRUE(frontend_maintenance_fixture_start(&fixture, "monitor-join"));
-    cbm_daemon_maintenance_monitor_t *monitor = cbm_daemon_maintenance_monitor_start(
+    lsm_daemon_maintenance_monitor_t *monitor = lsm_daemon_maintenance_monitor_start(
         fixture.manager, NULL, NULL, EXIT_FAILURE, "test-idle-command");
     bool started = monitor != NULL;
-    bool stopped = started && cbm_daemon_maintenance_monitor_stop(&monitor);
+    bool stopped = started && lsm_daemon_maintenance_monitor_stop(&monitor);
     bool consumed = monitor == NULL;
     frontend_maintenance_fixture_finish(&fixture);
 

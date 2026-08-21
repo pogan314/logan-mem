@@ -19,7 +19,7 @@ cat > "$INSTALL_FIXTURE" <<'EOF'
 #!/usr/bin/env bash
 [[ "$1 $2" == "daemon status" ]] && exit 1
 if [[ "$1 $2" == "install -y" ]]; then
-    printf '%s\t%s\t%s\n' "$HOME" "$CBM_CACHE_DIR" "$CBM_RUNTIME_DIR" > "$CBM_TEST_INSTALL_ENV_PROBE"
+    printf '%s\t%s\t%s\n' "$HOME" "$LSM_CACHE_DIR" "$LSM_RUNTIME_DIR" > "$LSM_TEST_INSTALL_ENV_PROBE"
 fi
 exit 0
 EOF
@@ -29,24 +29,24 @@ CALLER_ROOT="$WORKDIR/caller-a"
 mkdir -p "$CALLER_ROOT/runtime" "$CALLER_ROOT/cache"
 touch "$CALLER_ROOT/sentinel"
 (
-    export CBM_RUNTIME_DIR="$CALLER_ROOT/runtime"
-    export CBM_CACHE_DIR="$CALLER_ROOT/cache"
+    export LSM_RUNTIME_DIR="$CALLER_ROOT/runtime"
+    export LSM_CACHE_DIR="$CALLER_ROOT/cache"
     source "$ROOT/scripts/test-runtime.sh"
-    cbm_test_runtime_init
-    [[ "$CBM_RUNTIME_DIR" != "$CALLER_ROOT/runtime" ]] || fail "inherited runtime was reused"
-    [[ "$CBM_CACHE_DIR" != "$CALLER_ROOT/cache" ]] || fail "inherited cache was reused"
-    private_root="$CBM_TEST_RUNTIME_ROOT"
+    lsm_test_runtime_init
+    [[ "$LSM_RUNTIME_DIR" != "$CALLER_ROOT/runtime" ]] || fail "inherited runtime was reused"
+    [[ "$LSM_CACHE_DIR" != "$CALLER_ROOT/cache" ]] || fail "inherited cache was reused"
+    private_root="$LSM_TEST_RUNTIME_ROOT"
     [[ -d "$private_root/runtime" && -d "$private_root/cache" ]] || fail "private directories missing"
-    cbm_test_runtime_cleanup "$CONTROL"
+    lsm_test_runtime_cleanup "$CONTROL"
     [[ ! -e "$private_root" ]] || fail "normal cleanup left its private root"
 )
 [[ -f "$CALLER_ROOT/sentinel" ]] || fail "cleanup touched the caller root"
 for slot in 1 2; do
     (
         source "$ROOT/scripts/test-runtime.sh"
-        cbm_test_runtime_init
-        printf '%s\n' "$CBM_TEST_RUNTIME_ROOT" > "$WORKDIR/root-$slot"
-        cbm_test_runtime_cleanup "$CONTROL"
+        lsm_test_runtime_init
+        printf '%s\n' "$LSM_TEST_RUNTIME_ROOT" > "$WORKDIR/root-$slot"
+        lsm_test_runtime_cleanup "$CONTROL"
     ) &
 done
 wait
@@ -54,7 +54,7 @@ wait
 FAIL_FIXTURE="$WORKDIR/failure-fixture"
 cat > "$FAIL_FIXTURE" <<'EOF'
 #!/usr/bin/env bash
-touch "$CBM_TEST_FAILURE_MARKER"
+touch "$LSM_TEST_FAILURE_MARKER"
 EOF
 chmod +x "$FAIL_FIXTURE"
 mkdir "$WORKDIR/windows-ci-root"
@@ -63,11 +63,11 @@ set +e
     set -e
     source "$ROOT/scripts/test-runtime.sh"
     case "$(uname -s)" in
-        MINGW*|MSYS*|CYGWIN*) export CBM_CI_TEMP_ROOT="$(cygpath -m "$WORKDIR/windows-ci-root")" ;;
+        MINGW*|MSYS*|CYGWIN*) export LSM_CI_TEMP_ROOT="$(cygpath -m "$WORKDIR/windows-ci-root")" ;;
     esac
     mktemp() { return 1; }
-    cbm_test_runtime_init
-    CBM_TEST_FAILURE_MARKER="$WORKDIR/failure.marker" "$FAIL_FIXTURE"
+    lsm_test_runtime_init
+    LSM_TEST_FAILURE_MARKER="$WORKDIR/failure.marker" "$FAIL_FIXTURE"
 ) > "$WORKDIR/failure.out" 2>&1
 failure_rc=$?
 set -e
@@ -75,9 +75,9 @@ set -e
 [[ ! -e "$WORKDIR/failure.marker" ]] || fail "fixture ran after runtime creation failed"
 mkdir "$WORKDIR/caller-home" "$WORKDIR/caller-cache" "$WORKDIR/caller-runtime"
 HOME="$WORKDIR/caller-home" \
-CBM_CACHE_DIR="$WORKDIR/caller-cache" \
-CBM_RUNTIME_DIR="$WORKDIR/caller-runtime" \
-CBM_TEST_INSTALL_ENV_PROBE="$WORKDIR/install.env" \
+LSM_CACHE_DIR="$WORKDIR/caller-cache" \
+LSM_RUNTIME_DIR="$WORKDIR/caller-runtime" \
+LSM_TEST_INSTALL_ENV_PROBE="$WORKDIR/install.env" \
     "$ROOT/scripts/security-install.sh" "$INSTALL_FIXTURE" > "$WORKDIR/install.out" 2>&1
 IFS=$'\t' read -r install_home install_cache install_runtime < "$WORKDIR/install.env"
 install_home="$(normalize_path "$install_home")"
@@ -96,7 +96,7 @@ ENTRY_POINTS=(
 )
 for entry in "${ENTRY_POINTS[@]}"; do
     grep -q 'test-runtime.sh' "$ROOT/$entry" || fail "$entry does not source the helper"
-    grep -q 'cbm_test_runtime_init' "$ROOT/$entry" || fail "$entry does not initialize isolation"
-    grep -q 'cbm_test_runtime_cleanup' "$ROOT/$entry" || fail "$entry does not clean isolation"
+    grep -q 'lsm_test_runtime_init' "$ROOT/$entry" || fail "$entry does not initialize isolation"
+    grep -q 'lsm_test_runtime_cleanup' "$ROOT/$entry" || fail "$entry does not clean isolation"
 done
 echo "PASS: test harness runtimes are private, unique, fail-closed, and wired"

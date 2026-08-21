@@ -1,6 +1,6 @@
 /*
  * repro_lsp_go_py.c — EXHAUSTIVE per-LSP-pass invariant suite for the Go and
- * Python hybrid LSPs (internal/cbm/lsp/go_lsp.c, internal/cbm/lsp/py_lsp.c).
+ * Python hybrid LSPs (internal/lsm/lsp/go_lsp.c, internal/lsm/lsp/py_lsp.c).
  *
  * WHAT THIS ASSERTS — the LSP RESOLUTION CONTRACT, one invariant per strategy.
  *   Each cross resolver resolves a call via a specific STRATEGY and tags the
@@ -29,7 +29,7 @@
  *                the exact gap for the eventual fixer.
  *
  * TIE TO repro_invariant_lsp_rescue.c — that file pins the MECHANISM by which
- *   these can silently fail: cbm_pipeline_find_lsp_resolution joins each
+ *   these can silently fail: lsm_pipeline_find_lsp_resolution joins each
  *   LSP-resolved call to the tree-sitter call by EXACT caller-QN string
  *   equality. When tree-sitter's enclosing-func walk falls back to the MODULE
  *   QN but the LSP built the real method QN, the strcmp never matches, the LSP
@@ -40,7 +40,7 @@
  *   first (a same-file in-function fixture sidesteps it).
  *
  * GO STRATEGY INVENTORY — every literal "lsp_..." emitted by go_lsp.c, grepped
- *   from the source (grep '"lsp_' internal/cbm/lsp/go_lsp.c), with its keying
+ *   from the source (grep '"lsp_' internal/lsm/lsp/go_lsp.c), with its keying
  *   site:
  *     lsp_direct                (go_lsp.c:1139/1265)  pkg.Func() or local f()
  *     lsp_type_dispatch         (go_lsp.c:1161)       obj.Method() on a concrete
@@ -62,7 +62,7 @@
  *                                                     unresolved call
  *
  * PYTHON STRATEGY INVENTORY — every literal "lsp_..." emitted by py_lsp.c
- *   (grep '"lsp_' internal/cbm/lsp/py_lsp.c), with its keying site:
+ *   (grep '"lsp_' internal/lsm/lsp/py_lsp.c), with its keying site:
  *     lsp_direct                (py_lsp.c:1631)  module-local f()
  *     lsp_constructor           (py_lsp.c:1624)  ClassName() where the name is a
  *                                                NAMED type in scope
@@ -128,7 +128,7 @@
 static int assert_lsp_strategy_files(const RFile *files, int nfiles,
                                      const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -193,7 +193,7 @@ static int assert_lsp_strategy(const char *filename, const char *src,
 static int assert_no_resolvable_edge_files(const RFile *files, int nfiles,
                                            const char *callee_substr) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for no-edge callee %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, callee_substr);
@@ -241,7 +241,7 @@ static int assert_no_resolvable_edge(const char *filename, const char *src,
  * ───────────────────────────────────────────────────────────────────────── */
 
 /* lsp_direct — plain package-local function call f() (go_lsp.c:1259-1265:
- * func_node is a bare identifier resolved via cbm_registry_lookup_symbol on the
+ * func_node is a bare identifier resolved via lsm_registry_lookup_symbol on the
  * package QN). */
 static const char kGoDirect[] =
     "package main\n"
@@ -333,7 +333,7 @@ static const char kGoUnresolved[] = "package main\n"
 /* ── Python fixtures ───────────────────────────────────────────────────────── */
 
 /* lsp_direct — module-local function call f() (py_lsp.c:1627-1631: identifier
- * resolves via cbm_registry_lookup_symbol on the module QN). */
+ * resolves via lsm_registry_lookup_symbol on the module QN). */
 static const char kPyDirect[] =
     "def helper(x):\n"
     "    return x + 1\n"
@@ -341,7 +341,7 @@ static const char kPyDirect[] =
     "    return helper(v)\n";
 
 /* lsp_constructor — ClassName() where the name is a NAMED type in scope
- * (py_lsp.c:1620-1624: cbm_scope_lookup yields a NAMED type → emit constructor
+ * (py_lsp.c:1620-1624: lsm_scope_lookup yields a NAMED type → emit constructor
  * edge to the class QN). */
 static const char kPyConstructor[] =
     "class Widget:\n"
@@ -384,7 +384,7 @@ static const char kPySuperInit[] =
 
 /* lsp_module_attr — mod.func() after `import mod`, where func is a registered
  * symbol of the imported in-project module (py_lsp.c:1715-1719: obj_type is
- * MODULE and cbm_registry_lookup_symbol(module_qn, attr) hits → lsp_module_attr).
+ * MODULE and lsm_registry_lookup_symbol(module_qn, attr) hits → lsp_module_attr).
  * Requires a second in-project file so the imported symbol is in the registry. */
 static const RFile kPyModuleAttr[] = {
     {"helpers.py",
@@ -436,14 +436,14 @@ static const char kPyOperatorDunder[] =
     "    return a + b\n";
 
 /* lsp_builtin — print()/len()/... a builtins symbol (py_lsp.c:1634-1637:
- * cbm_registry_lookup_symbol("builtins", fname) hits). EXPECTED RED in a
+ * lsm_registry_lookup_symbol("builtins", fname) hits). EXPECTED RED in a
  * single-file harness with no typeshed/builtins registry loaded. */
 static const char kPyBuiltin[] =
     "def caller(v):\n"
     "    return len(v)\n";
 
 /* lsp_builtin_constructor — str()/list()/... a builtins TYPE used as a
- * constructor (py_lsp.c:1640-1643: cbm_registry_lookup_type("builtins.str")
+ * constructor (py_lsp.c:1640-1643: lsm_registry_lookup_type("builtins.str")
  * hits). EXPECTED RED without a typeshed/builtins registry. */
 static const char kPyBuiltinConstructor[] =
     "def caller(v):\n"
@@ -507,7 +507,7 @@ TEST(repro_lsp_go_interface_dispatch) {
 
 TEST(repro_lsp_go_strategy_cross_file) {
     /* PARKED for release: lsp_strategy_cross_file is emitted only by the parallel
-     * cross-file pass (cbm_go_fast_resolve_qualified_calls), which runs only when
+     * cross-file pass (lsm_go_fast_resolve_qualified_calls), which runs only when
      * a prebuilt cross-registry exists. That registry is not built for the small
      * single-package test fixture, so the strategy is structurally unreachable
      * here — the method call still resolves (callable>=1) via the per-file

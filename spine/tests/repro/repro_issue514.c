@@ -17,12 +17,12 @@
  *   The MCP schema for trace_path documents data_flow mode as "follow CALLS +
  *   DATA_FLOWS with arg expressions" (mcp.c line 356-357 and 363-364).  Argument
  *   expressions at each call site ARE stored in the graph: pass_parallel.c::
- *   append_args_json serializes each CBMCallArg as {"i":<index>,"e":"<expr>,...}
+ *   append_args_json serializes each LSMCallArg as {"i":<index>,"e":"<expr>,...}
  *   into the CALLS edge properties_json column.  However,
  *   bfs_to_json_array() (mcp.c ~line 2283) only emits the node fields (name,
- *   qualified_name, hop, risk, is_test) from cbm_node_hop_t.  The edge that
- *   carried the arg expressions is NOT propagated by cbm_store_bfs() into the
- *   cbm_traverse_result_t (cbm_edge_info_t carries only from_name, to_name,
+ *   qualified_name, hop, risk, is_test) from lsm_node_hop_t.  The edge that
+ *   carried the arg expressions is NOT propagated by lsm_store_bfs() into the
+ *   lsm_traverse_result_t (lsm_edge_info_t carries only from_name, to_name,
  *   type, confidence -- no properties_json).  So even if the user requests
  *   mode="data_flow", every hop in the response lacks the "args" field and the
  *   individual arg expression text ("e") is permanently absent from the output.
@@ -50,8 +50,8 @@
  *   discarded before it reaches the MCP JSON output.
  *
  * Fix location (not implemented here):
- *   cbm_store_bfs() in src/store/store.c must propagate edge properties_json
- *   into the cbm_traverse_result_t (extend cbm_edge_info_t or cbm_node_hop_t).
+ *   lsm_store_bfs() in src/store/store.c must propagate edge properties_json
+ *   into the lsm_traverse_result_t (extend lsm_edge_info_t or lsm_node_hop_t).
  *   bfs_to_json_array() in src/mcp/mcp.c must then emit an "args" field when
  *   mode == "data_flow" and the incoming edge has a non-empty args array.
  */
@@ -75,7 +75,7 @@
  *       return result
  *
  * caller() passes the compound expression (payload_info + 1) as the first
- * positional argument to callee().  The extractor captures this as a CBMCallArg
+ * positional argument to callee().  The extractor captures this as a LSMCallArg
  * with .expr == "payload_info + 1" (or a prefix thereof after sanitization).
  * append_args_json serializes it into the CALLS edge as:
  *   {"args":[{"i":0,"e":"payload_info + 1"}]}
@@ -111,7 +111,7 @@ static const RFile k_files[] = {
  */
 TEST(repro_issue514_data_flow_surfaces_arg_expr) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, k_files,
+    lsm_store_t *store = rh_index_files(&lp, k_files,
                                         (int)(sizeof(k_files) / sizeof(k_files[0])));
     ASSERT_NOT_NULL(store);
 
@@ -156,7 +156,7 @@ TEST(repro_issue514_data_flow_surfaces_arg_expr) {
              "\"mode\":\"data_flow\"}",
              lp.project);
 
-    char *resp = cbm_mcp_handle_tool(lp.srv, "trace_path", args);
+    char *resp = lsm_mcp_handle_tool(lp.srv, "trace_path", args);
     ASSERT_NOT_NULL(resp);
 
     fprintf(stderr, "  [514] trace_path data_flow response: %.400s\n", resp);
@@ -183,8 +183,8 @@ TEST(repro_issue514_data_flow_surfaces_arg_expr) {
      * to callee()) must appear in the response JSON when mode="data_flow".
      *
      * WHY RED on current code:
-     *   bfs_to_json_array() (mcp.c ~line 2283) only emits cbm_node_hop_t fields
-     *   (name, qualified_name, hop).  cbm_edge_info_t (store.h ~line 146) does
+     *   bfs_to_json_array() (mcp.c ~line 2283) only emits lsm_node_hop_t fields
+     *   (name, qualified_name, hop).  lsm_edge_info_t (store.h ~line 146) does
      *   not carry properties_json, so the "e":"payload_info + 1" stored in the
      *   CALLS edge never reaches the JSON output.  strstr returns NULL.
      *

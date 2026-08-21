@@ -93,7 +93,7 @@ struct slab_state {
     bool installed;
 };
 
-static CBM_TLS slab_state_t tls_slab;
+static LSM_TLS slab_state_t tls_slab;
 
 /* ── Page map: safe O(1) "is this a slab page?" lookup ───────────────
  *
@@ -214,7 +214,7 @@ static void slab_map_unregister_page(slab_page_t *page);
  * cross-thread free can always recover the page. */
 static bool slab_grow(slab_state_t *s) {
     void *mem = NULL;
-    if (cbm_aligned_alloc(&mem, SLAB_PAGE_SIZE, SLAB_PAGE_SIZE) != 0 || !mem) {
+    if (lsm_aligned_alloc(&mem, SLAB_PAGE_SIZE, SLAB_PAGE_SIZE) != 0 || !mem) {
         return false;
     }
     slab_page_t *page = (slab_page_t *)mem;
@@ -224,7 +224,7 @@ static bool slab_grow(slab_state_t *s) {
     atomic_init(&page->refcount, 1u); /* owner guard */
 
     if (!slab_map_register_page(page)) {
-        cbm_aligned_free(page);
+        lsm_aligned_free(page);
         return false;
     }
     s->pages = page;
@@ -269,7 +269,7 @@ static void slab_reclaim_pages(slab_state_t *s, bool clear_installed) {
         unsigned prev = atomic_fetch_sub_explicit(&p->refcount, 1u, memory_order_acq_rel);
         if (prev == 1u) {
             slab_map_unregister_page(p);
-            cbm_aligned_free(p);
+            lsm_aligned_free(p);
         }
         p = next;
     }
@@ -386,7 +386,7 @@ static void slab_free(void *ptr) {
     if (prev == 1u) {
         /* We returned the final chunk of a retired page → release it. */
         slab_map_unregister_page(page);
-        cbm_aligned_free(page);
+        lsm_aligned_free(page);
     }
 }
 
@@ -405,15 +405,15 @@ static void slab_map_unregister_page(slab_page_t *page) {
 extern void ts_set_allocator(void *(*new_malloc)(size_t), void *(*new_calloc)(size_t, size_t),
                              void *(*new_realloc)(void *, size_t), void (*new_free)(void *));
 
-void cbm_slab_install(void) {
+void lsm_slab_install(void) {
     ts_set_allocator(slab_malloc, slab_calloc, slab_realloc, slab_free);
 }
 
-void cbm_slab_reset_thread(void) {
-    cbm_slab_reclaim();
+void lsm_slab_reset_thread(void) {
+    lsm_slab_reclaim();
 }
 
-void cbm_slab_destroy_thread(void) {
+void lsm_slab_destroy_thread(void) {
     slab_reclaim_pages(&tls_slab, true);
 }
 
@@ -425,21 +425,21 @@ void cbm_slab_destroy_thread(void) {
  * page is retired instead of freed and released on the final cross-thread free.
  * This keeps peak memory bounded per-file without handing foreign slab chunks
  * to plain free(). */
-void cbm_slab_reclaim(void) {
+void lsm_slab_reclaim(void) {
     slab_reclaim_pages(&tls_slab, false);
 }
 
 /* ── Test API (thin wrappers for unit testing) ──────────────────── */
 
-void *cbm_slab_test_malloc(size_t size) {
+void *lsm_slab_test_malloc(size_t size) {
     return slab_malloc(size);
 }
-void cbm_slab_test_free(void *ptr) {
+void lsm_slab_test_free(void *ptr) {
     slab_free(ptr);
 }
-void *cbm_slab_test_realloc(void *ptr, size_t size) {
+void *lsm_slab_test_realloc(void *ptr, size_t size) {
     return slab_realloc(ptr, size);
 }
-void *cbm_slab_test_calloc(size_t count, size_t size) {
+void *lsm_slab_test_calloc(size_t count, size_t size) {
     return slab_calloc(count, size);
 }

@@ -83,9 +83,9 @@ MCPB_TARGETS = (
     "windows-arm64",
 )
 CANONICAL_ARCHIVES = frozenset(
-    [f"codebase-memory-mcp-{target}.tar.gz" for target in UNIX_TARGETS]
-    + [f"codebase-memory-mcp-{target}.zip" for target in WINDOWS_TARGETS]
-    + [f"codebase-memory-mcp-{target}.mcpb" for target in MCPB_TARGETS]
+    [f"logan-spine-mcp-{target}.tar.gz" for target in UNIX_TARGETS]
+    + [f"logan-spine-mcp-{target}.zip" for target in WINDOWS_TARGETS]
+    + [f"logan-spine-mcp-{target}.mcpb" for target in MCPB_TARGETS]
 )
 # One composition ships; the association column is retained so the schema stays
 # stable for the gate and release-notes consumers.
@@ -324,7 +324,7 @@ def validate_namespace(archive_name: str, names: Iterable[str]) -> Dict[str, str
     # platform detection by name is sound for every container kind.
     windows = "-windows-" in archive_name
     if archive_name.endswith(".mcpb"):
-        binary = "server/codebase-memory-mcp.exe" if windows else "server/codebase-memory-mcp"
+        binary = "server/logan-spine-mcp.exe" if windows else "server/logan-spine-mcp"
         fixed = {
             "manifest.json": "runtime",
             binary: "binary",
@@ -332,7 +332,7 @@ def validate_namespace(archive_name: str, names: Iterable[str]) -> Dict[str, str
             "server/THIRD_PARTY_NOTICES.md": "runtime",
         }
     else:
-        binary = "codebase-memory-mcp.exe" if windows else "codebase-memory-mcp"
+        binary = "logan-spine-mcp.exe" if windows else "logan-spine-mcp"
         installer = "install.ps1" if windows else "install.sh"
         fixed = {
             binary: "binary",
@@ -602,7 +602,7 @@ def main(argv: Sequence[str]) -> None:
     }
     total_members = 0
 
-    with tempfile.TemporaryDirectory(prefix=".cbm-release-scan-", dir=str(output_dir.parent)) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".lsm-release-scan-", dir=str(output_dir.parent)) as temporary:
         staged_output = pathlib.Path(temporary) / "bundle"
         staged_output.mkdir(mode=0o700)
         store = ObjectStore(staged_output / "objects")
@@ -669,7 +669,7 @@ def main(argv: Sequence[str]) -> None:
         )
         write_tsv(
             staged_output / "associations.tsv",
-            marker="cbm-release-scan-associations-v3",
+            marker="lsm-release-scan-associations-v3",
             metadata=((key, counts[key]) for key in metadata_order),
             fields=ASSOCIATION_FIELDS,
             rows=rows,
@@ -686,7 +686,7 @@ def main(argv: Sequence[str]) -> None:
         ]
         write_tsv(
             staged_output / "scan-set.tsv",
-            marker="cbm-release-scan-set-v2",
+            marker="lsm-release-scan-set-v2",
             metadata=((key, counts[key]) for key in ("scan_objects", "associations")),
             fields=SCAN_SET_FIELDS,
             rows=scan_rows,

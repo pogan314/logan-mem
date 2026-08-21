@@ -75,24 +75,24 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ runner.temp }}/cbm-selected-container
+          path: ${{ runner.temp }}/lsm-selected-container
       - name: Extract selected release executable
         if: ${{ inputs.use_release_artifacts }}
         run: |
-          mkdir -p "$RUNNER_TEMP/cbm-selected-artifact"
-          tar -xzf "$RUNNER_TEMP/cbm-selected-container/codebase-memory-mcp-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-            -C "$RUNNER_TEMP/cbm-selected-artifact" codebase-memory-mcp
-          chmod +x "$RUNNER_TEMP/cbm-selected-artifact/codebase-memory-mcp"
-          "$RUNNER_TEMP/cbm-selected-artifact/codebase-memory-mcp" --version
+          mkdir -p "$RUNNER_TEMP/lsm-selected-artifact"
+          tar -xzf "$RUNNER_TEMP/lsm-selected-container/logan-spine-mcp-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+            -C "$RUNNER_TEMP/lsm-selected-artifact" logan-spine-mcp
+          chmod +x "$RUNNER_TEMP/lsm-selected-artifact/logan-spine-mcp"
+          "$RUNNER_TEMP/lsm-selected-artifact/logan-spine-mcp" --version
       # The soak SEQUENCE and its guards live in the ONE canonical entry
       # scripts/soak-legs.sh — never in workflow YAML. Leg selection is a
       # workflow input so a long #581-only run needs no separate workflow.
       - name: Soak legs (${{ inputs.legs }}, ${{ inputs.duration_minutes }} min each)
         env:
-          SELECTED_BINARY: ${{ runner.temp }}/cbm-selected-artifact/codebase-memory-mcp
+          SELECTED_BINARY: ${{ runner.temp }}/lsm-selected-artifact/logan-spine-mcp
           USE_RELEASE_ARTIFACTS: ${{ inputs.use_release_artifacts }}
         run: |
-          binary=build/c/codebase-memory-mcp
+          binary=build/c/logan-spine-mcp
           test "$USE_RELEASE_ARTIFACTS" != true || binary="$SELECTED_BINARY"
           scripts/soak-legs.sh --legs "${{ inputs.legs }}" "$binary" ${{ inputs.duration_minutes }}
       - name: Upload metrics
@@ -137,9 +137,9 @@ jobs:
         shell: pwsh
         run: |
           $root = & scripts/ci/new-protected-temp-root.ps1 `
-            -Prefix 'cbm-ci-tmp-' `
+            -Prefix 'lsm-ci-tmp-' `
             -ProtectDir (Join-Path $env:GITHUB_WORKSPACE "build\c")
-          "CBM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LSM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build
         if: ${{ !inputs.use_release_artifacts }}
         shell: msys2 {0}
@@ -149,27 +149,27 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binaries-windows-amd64
-          path: ${{ runner.temp }}/cbm-selected-container
+          path: ${{ runner.temp }}/lsm-selected-container
       - name: Extract selected release executable
         if: ${{ inputs.use_release_artifacts }}
         shell: msys2 {0}
         run: |
-          ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/cbm-selected-artifact"
+          ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/lsm-selected-artifact"
           mkdir -p "$ARTIFACT_DIR"
-          unzip -q "$(cygpath -u "$RUNNER_TEMP")/cbm-selected-container/codebase-memory-mcp-windows-amd64.zip" \
-            codebase-memory-mcp.exe -d "$ARTIFACT_DIR"
-          "$ARTIFACT_DIR/codebase-memory-mcp.exe" --version
+          unzip -q "$(cygpath -u "$RUNNER_TEMP")/lsm-selected-container/logan-spine-mcp-windows-amd64.zip" \
+            logan-spine-mcp.exe -d "$ARTIFACT_DIR"
+          "$ARTIFACT_DIR/logan-spine-mcp.exe" --version
       # Both release-gating legs via the ONE canonical soak entry; only the
       # protected-TEMP provisioning is venue text. soak-legs.sh resolves .exe.
       - name: Soak legs (${{ inputs.legs }}, ${{ inputs.duration_minutes }} min each)
         shell: msys2 {0}
         run: |
-          export TEMP="$(cygpath -m "$CBM_CI_TEMP_ROOT")"
+          export TEMP="$(cygpath -m "$LSM_CI_TEMP_ROOT")"
           export TMP="$TEMP"
-          export TMPDIR="$(cygpath -u "$CBM_CI_TEMP_ROOT")"
-          binary=build/c/codebase-memory-mcp
+          export TMPDIR="$(cygpath -u "$LSM_CI_TEMP_ROOT")"
+          binary=build/c/logan-spine-mcp
           if [ "${{ inputs.use_release_artifacts }}" = true ]; then
-            binary="$(cygpath -u "$RUNNER_TEMP")/cbm-selected-artifact/codebase-memory-mcp.exe"
+            binary="$(cygpath -u "$RUNNER_TEMP")/lsm-selected-artifact/logan-spine-mcp.exe"
           fi
           scripts/soak-legs.sh --legs "${{ inputs.legs }}" "$binary" ${{ inputs.duration_minutes }}
       - name: Upload metrics
@@ -215,9 +215,9 @@ jobs:
         shell: pwsh
         run: |
           $root = & scripts/ci/new-protected-temp-root.ps1 `
-            -Prefix 'cbm-ci-tmp-' `
+            -Prefix 'lsm-ci-tmp-' `
             -ProtectDir (Join-Path $env:GITHUB_WORKSPACE "build\c")
-          "CBM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LSM_CI_TEMP_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build
         if: ${{ !inputs.use_release_artifacts }}
         shell: msys2 {0}
@@ -227,27 +227,27 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binaries-windows-arm64
-          path: ${{ runner.temp }}/cbm-selected-container
+          path: ${{ runner.temp }}/lsm-selected-container
       - name: Extract selected release executable
         if: ${{ inputs.use_release_artifacts }}
         shell: msys2 {0}
         run: |
-          ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/cbm-selected-artifact"
+          ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/lsm-selected-artifact"
           mkdir -p "$ARTIFACT_DIR"
-          unzip -q "$(cygpath -u "$RUNNER_TEMP")/cbm-selected-container/codebase-memory-mcp-windows-arm64.zip" \
-            codebase-memory-mcp.exe -d "$ARTIFACT_DIR"
-          "$ARTIFACT_DIR/codebase-memory-mcp.exe" --version
+          unzip -q "$(cygpath -u "$RUNNER_TEMP")/lsm-selected-container/logan-spine-mcp-windows-arm64.zip" \
+            logan-spine-mcp.exe -d "$ARTIFACT_DIR"
+          "$ARTIFACT_DIR/logan-spine-mcp.exe" --version
       # Both release-gating legs via the ONE canonical soak entry; only the
       # protected-TEMP provisioning is venue text. soak-legs.sh resolves .exe.
       - name: Soak legs (${{ inputs.legs }}, ${{ inputs.duration_minutes }} min each)
         shell: msys2 {0}
         run: |
-          export TEMP="$(cygpath -m "$CBM_CI_TEMP_ROOT")"
+          export TEMP="$(cygpath -m "$LSM_CI_TEMP_ROOT")"
           export TMP="$TEMP"
-          export TMPDIR="$(cygpath -u "$CBM_CI_TEMP_ROOT")"
-          binary=build/c/codebase-memory-mcp
+          export TMPDIR="$(cygpath -u "$LSM_CI_TEMP_ROOT")"
+          binary=build/c/logan-spine-mcp
           if [ "${{ inputs.use_release_artifacts }}" = true ]; then
-            binary="$(cygpath -u "$RUNNER_TEMP")/cbm-selected-artifact/codebase-memory-mcp.exe"
+            binary="$(cygpath -u "$RUNNER_TEMP")/lsm-selected-artifact/logan-spine-mcp.exe"
           fi
           scripts/soak-legs.sh --legs "${{ inputs.legs }}" "$binary" ${{ inputs.duration_minutes }}
       - name: Upload metrics
@@ -288,18 +288,18 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: binaries-linux-${{ matrix.arch }}-portable
-          path: ${{ runner.temp }}/cbm-selected-container
+          path: ${{ runner.temp }}/lsm-selected-container
       - name: Extract selected portable executable
         run: |
-          mkdir -p "$RUNNER_TEMP/cbm-selected-artifact"
-          tar -xzf "$RUNNER_TEMP/cbm-selected-container/codebase-memory-mcp-linux-${{ matrix.arch }}-portable.tar.gz" \
-            -C "$RUNNER_TEMP/cbm-selected-artifact" codebase-memory-mcp
-          chmod +x "$RUNNER_TEMP/cbm-selected-artifact/codebase-memory-mcp"
-          "$RUNNER_TEMP/cbm-selected-artifact/codebase-memory-mcp" --version
+          mkdir -p "$RUNNER_TEMP/lsm-selected-artifact"
+          tar -xzf "$RUNNER_TEMP/lsm-selected-container/logan-spine-mcp-linux-${{ matrix.arch }}-portable.tar.gz" \
+            -C "$RUNNER_TEMP/lsm-selected-artifact" logan-spine-mcp
+          chmod +x "$RUNNER_TEMP/lsm-selected-artifact/logan-spine-mcp"
+          "$RUNNER_TEMP/lsm-selected-artifact/logan-spine-mcp" --version
       - name: Soak selected portable legs (${{ inputs.legs }}, ${{ inputs.duration_minutes }} min each)
         run: |
           scripts/soak-legs.sh --legs "${{ inputs.legs }}" \
-            "$RUNNER_TEMP/cbm-selected-artifact/codebase-memory-mcp" \
+            "$RUNNER_TEMP/lsm-selected-artifact/logan-spine-mcp" \
             ${{ inputs.duration_minutes }}
       - name: Upload metrics
         if: always()
@@ -367,7 +367,7 @@ jobs:
         # Single-leg variant of the canonical soak entry: the ASan build is too
         # slow for the two-leg sequence; leg selection is a documented flag, not
         # a divergent inline procedure.
-        run: scripts/soak-legs.sh --legs quick build/c/codebase-memory-mcp 15
+        run: scripts/soak-legs.sh --legs quick build/c/logan-spine-mcp 15
       - name: Upload metrics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -407,7 +407,7 @@ jobs:
         env:
           ASAN_OPTIONS: "detect_leaks=0:halt_on_error=0:log_path=soak-results/asan"
         # Single-leg variant of the canonical soak entry (see the unix ASan job).
-        run: scripts/soak-legs.sh --legs quick build/c/codebase-memory-mcp 15
+        run: scripts/soak-legs.sh --legs quick build/c/logan-spine-mcp 15
       - name: Upload metrics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

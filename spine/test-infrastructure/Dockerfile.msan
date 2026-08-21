@@ -10,7 +10,7 @@
 # Sources are pinned by release tag from their canonical upstreams (same
 # precedent as the cppcheck 2.20.0 build in _lint.yml).
 #
-# Build:  docker build -f test-infrastructure/Dockerfile.msan -t cbm-msan test-infrastructure/
+# Build:  docker build -f test-infrastructure/Dockerfile.msan -t lsm-msan test-infrastructure/
 # Run:    see scripts/msan.sh (driven via docker-compose service test-msan)
 
 # Same pinned base as the primary test image — bump deliberately, never to a tag.

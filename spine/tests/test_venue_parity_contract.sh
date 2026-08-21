@@ -63,7 +63,7 @@ FORBIDDEN = [
     (re.compile(r"http\.server"),
      "inline fixture server — smoke-local.sh / vm-smoke.sh own serving"),
     (re.compile(r"SMOKE_DOWNLOAD_URL|SMOKE_UPDATE_FIXTURE_DIR"),
-     "fixture-server env is wrapper-owned; pass CBM_SMOKE_ARTIFACT_DIR instead"),
+     "fixture-server env is wrapper-owned; pass LSM_SMOKE_ARTIFACT_DIR instead"),
     (re.compile(r"scripts/smoke-test\.sh"),
      "smoke-test.sh must be reached through smoke-local.sh / vm-smoke.sh"),
     (re.compile(r"scripts/soak-test\.sh"),
@@ -109,7 +109,7 @@ ALLOWED_EXTRA = {
     "_test.yml": {"npm"},
     "release.yml": {"npm", "pip", "pip3", "twine", "python", "make",
                     "./mcp-publisher"},
-    "_smoke.yml": {"codebase-memory-mcp"},  # brew-installed CLI version check
+    "_smoke.yml": {"logan-spine-mcp"},  # brew-installed CLI version check
 }
 # Steps that are scanners/data-generators with inherently inline bodies, keyed
 # "<file>:<step name>". Additions here are DELIBERATE holes — keep tiny.
@@ -307,7 +307,7 @@ LOCAL_REQUIRED = [
     ("test-infrastructure/run.sh", r"glibc-floor",
      "run.sh exposes the glibc-floor leg"),
     # Slash-agnostic: the VM driver invokes it via a Windows path
-    # (C:\cbm\scripts\ci\ensure-defender.ps1).
+    # (C:\lsm\scripts\ci\ensure-defender.ps1).
     ("test-infrastructure/vm/win.sh", r"ensure-defender\.ps1",
      "the VM preflight enforces Defender-ON parity"),
     ("test-infrastructure/vm/win.sh", r"scripts/ci/smoke-artifact\.sh",

@@ -13,7 +13,7 @@ unreachable. The original red test asserted drives appeared in `dirs`; the fix
 intentionally exposes them via the separate `roots` field, so this guard checks
 `roots` (and that each advertised drive is actually browsable).
 
-Requires a UI build (`make -f Makefile.cbm cbm-with-ui`) because the HTTP server
+Requires a UI build (`make -f Makefile.lsm lsm-with-ui`) because the HTTP server
 only starts when the frontend is embedded. Runs green with a single drive (C:/
 must be advertised and browsable); a machine with D:/E: exercises the multi-drive
 reach more fully.
@@ -23,7 +23,7 @@ Exit code: 0 == all drives advertised in roots and reachable (green),
 2 == precondition not met (no UI build / server down).
 
 Usage:
-    python test_ui_drive_listing.py <path-to-codebase-memory-mcp-ui[.exe]> [port]
+    python test_ui_drive_listing.py <path-to-logan-spine-mcp-ui[.exe]> [port]
 """
 import json
 import os
@@ -107,18 +107,18 @@ def main():
         print("PRECONDITION: no fixed drives detected.")
         return 2
 
-    work = tempfile.mkdtemp(prefix="cbm_win_uidrv_")
+    work = tempfile.mkdtemp(prefix="lsm_win_uidrv_")
     port = int(sys.argv[2]) if len(sys.argv) > 2 else free_port()
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = os.path.join(work, "cache")
-    os.makedirs(env["CBM_CACHE_DIR"], exist_ok=True)
+    env["LSM_CACHE_DIR"] = os.path.join(work, "cache")
+    os.makedirs(env["LSM_CACHE_DIR"], exist_ok=True)
     proc = subprocess.Popen([binary, "--ui=true", "--port=%d" % port],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, env=env)
     try:
         if not wait_for_server(port, timeout=25):
             print("PRECONDITION: HTTP server did not start on port %d. Is this a "
-                  "UI build (make -f Makefile.cbm cbm-with-ui)?" % port)
+                  "UI build (make -f Makefile.lsm lsm-with-ui)?" % port)
             return 2
 
         # Control: browsing an explicit existing directory must return a payload

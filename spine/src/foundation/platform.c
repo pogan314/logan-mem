@@ -13,9 +13,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CBM_NSEC_PER_SEC 1000000000ULL
+#define LSM_NSEC_PER_SEC 1000000000ULL
 
-static uint64_t cbm_platform_scale_fraction(uint64_t remainder, uint64_t multiplier,
+static uint64_t lsm_platform_scale_fraction(uint64_t remainder, uint64_t multiplier,
                                             uint64_t divisor) {
     uint64_t quotient = 0;
     uint64_t reduced = 0;
@@ -43,17 +43,17 @@ static uint64_t cbm_platform_scale_fraction(uint64_t remainder, uint64_t multipl
     return quotient;
 }
 
-uint64_t cbm_platform_scale_counter_ns(uint64_t counter, uint64_t frequency) {
+uint64_t lsm_platform_scale_counter_ns(uint64_t counter, uint64_t frequency) {
     if (frequency == 0) {
         return UINT64_MAX;
     }
     uint64_t whole_seconds = counter / frequency;
     uint64_t remainder = counter % frequency;
-    if (whole_seconds > UINT64_MAX / CBM_NSEC_PER_SEC) {
+    if (whole_seconds > UINT64_MAX / LSM_NSEC_PER_SEC) {
         return UINT64_MAX;
     }
-    uint64_t whole_ns = whole_seconds * CBM_NSEC_PER_SEC;
-    uint64_t fraction_ns = cbm_platform_scale_fraction(remainder, CBM_NSEC_PER_SEC, frequency);
+    uint64_t whole_ns = whole_seconds * LSM_NSEC_PER_SEC;
+    uint64_t fraction_ns = lsm_platform_scale_fraction(remainder, LSM_NSEC_PER_SEC, frequency);
     return fraction_ns > UINT64_MAX - whole_ns ? UINT64_MAX : whole_ns + fraction_ns;
 }
 
@@ -66,7 +66,7 @@ uint64_t cbm_platform_scale_counter_ns(uint64_t counter, uint64_t frequency) {
  * project key, cache file and integrity check consistent regardless of case.
  * Only the strict drive-root form `X:/` or bare `X:` is touched, so ordinary
  * POSIX paths (which never start that way) are unaffected. */
-static void cbm_canonicalize_drive(char *path) {
+static void lsm_canonicalize_drive(char *path) {
     if (path && path[0] >= 'a' && path[0] <= 'z' && path[1] == ':' &&
         (path[2] == '/' || path[2] == '\0')) {
         path[0] = (char)(path[0] - 'a' + 'A');
@@ -85,13 +85,13 @@ static void cbm_canonicalize_drive(char *path) {
 #include <sys/stat.h>
 #include "foundation/win_utf8.h"
 
-void *cbm_mmap_read(const char *path, size_t *out_size) {
+void *lsm_mmap_read(const char *path, size_t *out_size) {
     if (!path || !out_size) {
         return NULL;
     }
     *out_size = 0;
 
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return NULL;
     }
@@ -125,34 +125,34 @@ void *cbm_mmap_read(const char *path, size_t *out_size) {
     return addr;
 }
 
-void cbm_munmap(void *addr, size_t size) {
+void lsm_munmap(void *addr, size_t size) {
     (void)size;
     if (addr) {
         UnmapViewOfFile(addr);
     }
 }
 
-uint64_t cbm_now_ns(void) {
+uint64_t lsm_now_ns(void) {
     LARGE_INTEGER freq, count;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&count);
-    return cbm_platform_scale_counter_ns((uint64_t)count.QuadPart, (uint64_t)freq.QuadPart);
+    return lsm_platform_scale_counter_ns((uint64_t)count.QuadPart, (uint64_t)freq.QuadPart);
 }
 
-#define CBM_USEC_PER_SEC 1000000ULL
+#define LSM_USEC_PER_SEC 1000000ULL
 
-uint64_t cbm_now_ms(void) {
-    return cbm_now_ns() / CBM_USEC_PER_SEC;
+uint64_t lsm_now_ms(void) {
+    return lsm_now_ns() / LSM_USEC_PER_SEC;
 }
 
-int cbm_nprocs(void) {
+int lsm_nprocs(void) {
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     return (int)si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
 }
 
-bool cbm_file_exists(const char *path) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+bool lsm_file_exists(const char *path) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return false;
     }
@@ -161,8 +161,8 @@ bool cbm_file_exists(const char *path) {
     return attr != INVALID_FILE_ATTRIBUTES;
 }
 
-bool cbm_is_dir(const char *path) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+bool lsm_is_dir(const char *path) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
         return false;
     }
@@ -171,16 +171,16 @@ bool cbm_is_dir(const char *path) {
     return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-int64_t cbm_file_size(const char *path) {
-    wchar_t *wpath = cbm_path_to_wide(path);
+int64_t lsm_file_size(const char *path) {
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     WIN32_FILE_ATTRIBUTE_DATA fad;
     BOOL ok = GetFileAttributesExW(wpath, GetFileExInfoStandard, &fad);
     free(wpath);
     if (!ok) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     LARGE_INTEGER sz;
     sz.HighPart = (LONG)fad.nFileSizeHigh; // cppcheck-suppress unreadVariable
@@ -188,14 +188,14 @@ int64_t cbm_file_size(const char *path) {
     return (int64_t)sz.QuadPart;
 }
 
-char *cbm_normalize_path_sep(char *path) {
+char *lsm_normalize_path_sep(char *path) {
     if (path) {
         for (char *p = path; *p; p++) {
             if (*p == '\\') {
                 *p = '/';
             }
         }
-        cbm_canonicalize_drive(path);
+        lsm_canonicalize_drive(path);
     }
     return path;
 }
@@ -219,7 +219,7 @@ char *cbm_normalize_path_sep(char *path) {
 
 /* ── Memory mapping ──────────────────────────── */
 
-void *cbm_mmap_read(const char *path, size_t *out_size) {
+void *lsm_mmap_read(const char *path, size_t *out_size) {
     if (!path || !out_size) {
         return NULL;
     }
@@ -246,7 +246,7 @@ void *cbm_mmap_read(const char *path, size_t *out_size) {
     return addr;
 }
 
-void cbm_munmap(void *addr, size_t size) {
+void lsm_munmap(void *addr, size_t size) {
     if (addr && size > 0) {
         munmap(addr, size);
     }
@@ -258,7 +258,7 @@ void cbm_munmap(void *addr, size_t size) {
 static mach_timebase_info_data_t timebase_info = {1, 1};
 static pthread_once_t timebase_once = PTHREAD_ONCE_INIT;
 
-static void cbm_timebase_initialize(void) {
+static void lsm_timebase_initialize(void) {
     (void)mach_timebase_info(&timebase_info);
     if (timebase_info.numer == 0 || timebase_info.denom == 0) {
         timebase_info.numer = 1;
@@ -266,28 +266,28 @@ static void cbm_timebase_initialize(void) {
     }
 }
 
-uint64_t cbm_now_ns(void) {
-    (void)pthread_once(&timebase_once, cbm_timebase_initialize);
+uint64_t lsm_now_ns(void) {
+    (void)pthread_once(&timebase_once, lsm_timebase_initialize);
     uint64_t ticks = mach_absolute_time();
     return ticks * timebase_info.numer / timebase_info.denom;
 }
 #else
-uint64_t cbm_now_ns(void) {
+uint64_t lsm_now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 #endif
 
-#define CBM_USEC_PER_SEC 1000000ULL
+#define LSM_USEC_PER_SEC 1000000ULL
 
-uint64_t cbm_now_ms(void) {
-    return cbm_now_ns() / CBM_USEC_PER_SEC;
+uint64_t lsm_now_ms(void) {
+    return lsm_now_ns() / LSM_USEC_PER_SEC;
 }
 
 /* ── System info ───────────────────────────── */
 
-int cbm_nprocs(void) {
+int lsm_nprocs(void) {
 #ifdef __APPLE__
     int ncpu = 0;
     size_t len = sizeof(ncpu);
@@ -304,25 +304,25 @@ int cbm_nprocs(void) {
 
 /* ── File system ──────────────────────────── */
 
-bool cbm_file_exists(const char *path) {
+bool lsm_file_exists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
 }
 
-bool cbm_is_dir(const char *path) {
+bool lsm_is_dir(const char *path) {
     struct stat st;
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-int64_t cbm_file_size(const char *path) {
+int64_t lsm_file_size(const char *path) {
     struct stat st;
     if (stat(path, &st) != 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     return (int64_t)st.st_size;
 }
 
-char *cbm_normalize_path_sep(char *path) {
+char *lsm_normalize_path_sep(char *path) {
     /* Normalize on ALL platforms — backslash paths can arrive via stored
      * data, cross-platform DB files, or Windows-style arguments. */
     if (path) {
@@ -331,7 +331,7 @@ char *cbm_normalize_path_sep(char *path) {
                 *p = '/';
             }
         }
-        cbm_canonicalize_drive(path);
+        lsm_canonicalize_drive(path);
     }
     return path;
 }
@@ -346,13 +346,13 @@ char *cbm_normalize_path_sep(char *path) {
  * caller-owned buffer immediately. */
 #ifdef _WIN32
 #include <stdlib.h>
-#define CBM_ENVIRON _environ
+#define LSM_ENVIRON _environ
 #elif defined(__APPLE__)
 #include <crt_externs.h>
-#define CBM_ENVIRON (*_NSGetEnviron())
+#define LSM_ENVIRON (*_NSGetEnviron())
 #else
 extern char **environ;
-#define CBM_ENVIRON environ
+#define LSM_ENVIRON environ
 #endif
 
 static const char *platform_copy_environment_value(char *buf, size_t buf_sz, const char *value) {
@@ -368,7 +368,7 @@ static const char *platform_copy_environment_value(char *buf, size_t buf_sz, con
     return buf;
 }
 
-const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const char *fallback) {
+const char *lsm_safe_getenv(const char *name, char *buf, size_t buf_sz, const char *fallback) {
     if (!name || !name[0] || !buf || buf_sz == 0) {
         return NULL;
     }
@@ -376,15 +376,15 @@ const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const ch
 #ifdef _WIN32
     /* #996 Layer 2: _environ holds ANSI-code-page bytes, NOT UTF-8. A
      * non-ASCII value (USERPROFILE of C:\Users\Kovács János, or a Greek/CJK
-     * CBM_CACHE_DIR) arrives here either mojibake'd or with unrepresentable
+     * LSM_CACHE_DIR) arrives here either mojibake'd or with unrepresentable
      * characters replaced by '?', which is INVALID in Windows paths — every
      * downstream wide-safe file API then fails no matter how correct it is.
      * Read the value wide and convert to genuine UTF-8, matching the
-     * UTF-8-path convention the rest of the codebase (cbm_fopen, _wmkdir,
+     * UTF-8-path convention the rest of the codebase (lsm_fopen, _wmkdir,
      * SQLite VFS) already assumes. */
     {
-        wchar_t wname[CBM_SZ_256];
-        int wn = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name, -1, wname, CBM_SZ_256);
+        wchar_t wname[LSM_SZ_256];
+        int wn = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, name, -1, wname, LSM_SZ_256);
         if (wn > 0) {
             SetLastError(ERROR_SUCCESS);
             DWORD needed = GetEnvironmentVariableW(wname, NULL, 0U);
@@ -407,7 +407,7 @@ const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const ch
                 free(wval);
                 return NULL;
             }
-            char *utf8 = cbm_wide_to_utf8(wval);
+            char *utf8 = lsm_wide_to_utf8(wval);
             free(wval);
             if (!utf8) {
                 return NULL;
@@ -419,7 +419,7 @@ const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const ch
         return NULL;
     }
 #else
-    char **env = CBM_ENVIRON;
+    char **env = LSM_ENVIRON;
     if (env) {
         size_t nlen = strlen(name);
         for (; *env; env++) {
@@ -437,21 +437,21 @@ const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const ch
 
 /* ── Home directory (cross-platform) ───────────────────── */
 
-const char *cbm_get_home_dir(void) {
-    static CBM_TLS char buf[CBM_SZ_1K];
-    char tmp[CBM_SZ_256] = "";
+const char *lsm_get_home_dir(void) {
+    static LSM_TLS char buf[LSM_SZ_1K];
+    char tmp[LSM_SZ_256] = "";
 
-    cbm_safe_getenv("HOME", tmp, sizeof(tmp), NULL);
+    lsm_safe_getenv("HOME", tmp, sizeof(tmp), NULL);
     if (tmp[0]) {
         snprintf(buf, sizeof(buf), "%s", tmp);
-        cbm_normalize_path_sep(buf);
+        lsm_normalize_path_sep(buf);
         return buf;
     }
 
-    cbm_safe_getenv("USERPROFILE", tmp, sizeof(tmp), NULL);
+    lsm_safe_getenv("USERPROFILE", tmp, sizeof(tmp), NULL);
     if (tmp[0]) {
         snprintf(buf, sizeof(buf), "%s", tmp);
-        cbm_normalize_path_sep(buf);
+        lsm_normalize_path_sep(buf);
         return buf;
     }
     return NULL;
@@ -459,17 +459,17 @@ const char *cbm_get_home_dir(void) {
 
 /* ── App config directories (cross-platform) ────────── */
 
-const char *cbm_app_config_dir(void) {
-    static CBM_TLS char buf[CBM_SZ_1K];
-    char tmp[CBM_SZ_256] = "";
+const char *lsm_app_config_dir(void) {
+    static LSM_TLS char buf[LSM_SZ_1K];
+    char tmp[LSM_SZ_256] = "";
 #ifdef _WIN32
-    cbm_safe_getenv("APPDATA", tmp, sizeof(tmp), NULL);
+    lsm_safe_getenv("APPDATA", tmp, sizeof(tmp), NULL);
     if (tmp[0]) {
         snprintf(buf, sizeof(buf), "%s", tmp);
-        cbm_normalize_path_sep(buf);
+        lsm_normalize_path_sep(buf);
         return buf;
     }
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (home) {
         snprintf(buf, sizeof(buf), "%s/AppData/Roaming", home);
         return buf;
@@ -477,12 +477,12 @@ const char *cbm_app_config_dir(void) {
     return NULL;
 #else
     /* Linux: XDG_CONFIG_HOME or ~/.config */
-    cbm_safe_getenv("XDG_CONFIG_HOME", tmp, sizeof(tmp), NULL);
+    lsm_safe_getenv("XDG_CONFIG_HOME", tmp, sizeof(tmp), NULL);
     if (tmp[0]) {
         snprintf(buf, sizeof(buf), "%s", tmp);
         return buf;
     }
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (home) {
         snprintf(buf, sizeof(buf), "%s/.config", home);
         return buf;
@@ -491,48 +491,48 @@ const char *cbm_app_config_dir(void) {
 #endif /* _WIN32 */
 }
 
-const char *cbm_app_local_dir(void) {
+const char *lsm_app_local_dir(void) {
 #ifdef _WIN32
-    static CBM_TLS char buf[CBM_SZ_1K];
-    char tmp[CBM_SZ_256] = "";
-    cbm_safe_getenv("LOCALAPPDATA", tmp, sizeof(tmp), NULL);
+    static LSM_TLS char buf[LSM_SZ_1K];
+    char tmp[LSM_SZ_256] = "";
+    lsm_safe_getenv("LOCALAPPDATA", tmp, sizeof(tmp), NULL);
     if (tmp[0]) {
         snprintf(buf, sizeof(buf), "%s", tmp);
-        cbm_normalize_path_sep(buf);
+        lsm_normalize_path_sep(buf);
         return buf;
     }
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (home) {
         snprintf(buf, sizeof(buf), "%s/AppData/Local", home);
         return buf;
     }
     return NULL;
 #else
-    return cbm_app_config_dir();
+    return lsm_app_config_dir();
 #endif
 }
 
 /* ── Cache directory ────────────────────────── */
 
-const char *cbm_resolve_cache_dir(void) {
-    static CBM_TLS char buf[CBM_SZ_4K];
+const char *lsm_resolve_cache_dir(void) {
+    static LSM_TLS char buf[LSM_SZ_4K];
     static const char missing[] = "\x1f"
-                                  "CBM_CACHE_DIR_MISSING"
+                                  "LSM_CACHE_DIR_MISSING"
                                   "\x1f";
-    const char *configured = cbm_safe_getenv("CBM_CACHE_DIR", buf, sizeof(buf), missing);
+    const char *configured = lsm_safe_getenv("LSM_CACHE_DIR", buf, sizeof(buf), missing);
     if (!configured) {
         /* Present but not representable in the product path bound. */
         return NULL;
     }
     if (strcmp(configured, missing) != 0 && configured[0]) {
-        cbm_normalize_path_sep(buf);
+        lsm_normalize_path_sep(buf);
         return buf;
     }
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (!home) {
         return NULL;
     }
-    int written = snprintf(buf, sizeof(buf), "%s/.cache/codebase-memory-mcp", home);
+    int written = snprintf(buf, sizeof(buf), "%s/.cache/logan-spine-mcp", home);
     if (written <= 0 || (size_t)written >= sizeof(buf)) {
         buf[0] = '\0';
         return NULL;

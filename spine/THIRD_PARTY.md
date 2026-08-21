@@ -7,44 +7,44 @@ Every vendored component directory carries the upstream `LICENSE`
 
 ## Tree-sitter Runtime
 
-The tree-sitter C runtime is vendored in `internal/cbm/vendored/ts_runtime/`.
+The tree-sitter C runtime is vendored in `internal/lsm/vendored/ts_runtime/`.
 
 - **Project:** [tree-sitter](https://github.com/tree-sitter/tree-sitter)
 - **License:** MIT
 - **Copyright:** (c) 2018–2024 Max Brunsfeld
 
-**Local modification** (`internal/cbm/vendored/ts_runtime/src/stack.c`, #913): a
-single CBM patch bounds the recursive ambiguity-merge in `stack_node_add_link`
-at `CBM_TS_STACK_MERGE_MAX_DEPTH` (512). Deeply nested grammar-ambiguous input
+**Local modification** (`internal/lsm/vendored/ts_runtime/src/stack.c`, #913): a
+single LSM patch bounds the recursive ambiguity-merge in `stack_node_add_link`
+at `LSM_TS_STACK_MERGE_MAX_DEPTH` (512). Deeply nested grammar-ambiguous input
 (e.g. Perl `f(f(f(...)))`) otherwise recurses once per level on the native C
 stack and overflows it during parsing (SIGSEGV on the ~1 MB Windows thread
 stack, and even the 8 MB POSIX stack at extreme depth) before any extractor
 runs. Past the cap the ambiguity is left on the GLR stack instead of merged —
 still a valid parse, never a wrong one — mirroring the existing
-`MAX_LINK_COUNT` bail-out. The change is clearly marked `// CBM patch:` inline.
+`MAX_LINK_COUNT` bail-out. The change is clearly marked `// LSM patch:` inline.
 **On re-vendor (e.g. ts_runtime → 0.26.x): re-apply this bound.**
 
-The shared scanner helpers in `internal/cbm/vendored/common/` (`scanner.h`,
+The shared scanner helpers in `internal/lsm/vendored/common/` (`scanner.h`,
 `tag.h`) originate from
 [tree-sitter-html](https://github.com/tree-sitter/tree-sitter-html) (MIT,
 (c) 2014 Max Brunsfeld) and carry that project's `LICENSE` in
-`internal/cbm/vendored/common/`.
+`internal/lsm/vendored/common/`.
 
-The core runtime headers in `internal/cbm/vendored/common/tree_sitter/`
+The core runtime headers in `internal/lsm/vendored/common/tree_sitter/`
 (`alloc.h`, `array.h`, `parser.h`) are part of the tree-sitter C runtime
 ([tree-sitter](https://github.com/tree-sitter/tree-sitter), MIT,
 (c) 2018 Max Brunsfeld) and carry their own `LICENSE` in that directory.
 
 ## Tree-sitter Grammars
 
-159 pre-generated parsers are vendored in `internal/cbm/vendored/grammars/<lang>/`
+159 pre-generated parsers are vendored in `internal/lsm/vendored/grammars/<lang>/`
 (generated `parser.c` plus `scanner.c` where applicable, compiled statically).
 Each grammar is the work of its upstream authors and each grammar directory
 contains the upstream `LICENSE` file.
 
 The **canonical provenance record** — upstream repository, pinned commit, and
 cross-registry verification status for every grammar — is
-[`internal/cbm/vendored/grammars/MANIFEST.md`](internal/cbm/vendored/grammars/MANIFEST.md).
+[`internal/lsm/vendored/grammars/MANIFEST.md`](internal/lsm/vendored/grammars/MANIFEST.md).
 
 License summary:
 
@@ -64,9 +64,9 @@ License summary:
 - **Project:** [intersystems/tree-sitter-objectscript](https://github.com/intersystems/tree-sitter-objectscript)
 - **License:** MIT
 - **Copyright:** (c) 2025 InterSystems Corporation
-- **Vendored at:** `internal/cbm/vendored/grammars/objectscript_udl/`, `internal/cbm/vendored/grammars/objectscript_routine/`
+- **Vendored at:** `internal/lsm/vendored/grammars/objectscript_udl/`, `internal/lsm/vendored/grammars/objectscript_routine/`
 - **Pinned commit:** `a7ffcdf`
-- **Notes:** InterSystems-maintained grammar for the ObjectScript language (InterSystems IRIS / Caché). Vendor-maintained; not in nvim-treesitter or Helix registries. Each `scanner.c`'s upstream `#include "../../common/scanner.h"` is repointed to a per-directory `objectscript_common.h` copied from upstream `common/scanner.h`; two loop counters in that copy are widened from `uint8_t` to `int` as documented in `internal/cbm/vendored/grammars/MANIFEST.md`.
+- **Notes:** InterSystems-maintained grammar for the ObjectScript language (InterSystems IRIS / Caché). Vendor-maintained; not in nvim-treesitter or Helix registries. Each `scanner.c`'s upstream `#include "../../common/scanner.h"` is repointed to a per-directory `objectscript_common.h` copied from upstream `common/scanner.h`; two loop counters in that copy are widened from `uint8_t` to `int` as documented in `internal/lsm/vendored/grammars/MANIFEST.md`.
 
 ## Vendored C/C++ Libraries
 
@@ -77,16 +77,16 @@ License summary:
 | yyjson | `vendored/yyjson/` | MIT | [ibireme/yyjson](https://github.com/ibireme/yyjson) |
 | xxHash | `vendored/xxhash/` | BSD-2-Clause | [Cyan4973/xxHash](https://github.com/Cyan4973/xxHash) |
 | TRE | `vendored/tre/` | BSD-2-Clause | [laurikari/tre](https://github.com/laurikari/tre) |
-| LZ4 | `internal/cbm/vendored/lz4/` | BSD-2-Clause (library files) | [lz4/lz4](https://github.com/lz4/lz4) |
-| Zstandard | `internal/cbm/vendored/zstd/` | BSD-3-Clause (dual BSD / GPLv2 — BSD selected) | [facebook/zstd](https://github.com/facebook/zstd) |
-| simplecpp | `internal/cbm/vendored/simplecpp/` | 0BSD | [danmar/simplecpp](https://github.com/danmar/simplecpp) |
-| Verstable | `internal/cbm/vendored/verstable/` | MIT | [JacksonAllan/Verstable](https://github.com/JacksonAllan/Verstable) |
-| wyhash | `internal/cbm/vendored/wyhash/` | Unlicense (public domain) | [wangyi-fudan/wyhash](https://github.com/wangyi-fudan/wyhash) |
+| LZ4 | `internal/lsm/vendored/lz4/` | BSD-2-Clause (library files) | [lz4/lz4](https://github.com/lz4/lz4) |
+| Zstandard | `internal/lsm/vendored/zstd/` | BSD-3-Clause (dual BSD / GPLv2 — BSD selected) | [facebook/zstd](https://github.com/facebook/zstd) |
+| simplecpp | `internal/lsm/vendored/simplecpp/` | 0BSD | [danmar/simplecpp](https://github.com/danmar/simplecpp) |
+| Verstable | `internal/lsm/vendored/verstable/` | MIT | [JacksonAllan/Verstable](https://github.com/JacksonAllan/Verstable) |
+| wyhash | `internal/lsm/vendored/wyhash/` | Unlicense (public domain) | [wangyi-fudan/wyhash](https://github.com/wangyi-fudan/wyhash) |
 
 Local modifications to these libraries are documented next to the
 vendored sources (currently only SQLite: `vendored/sqlite3/PATCHES.md`,
 raising the Unix VFS `MAX_PATHNAME` ceiling from 512 to 4096 to match
-CBM's 4 KiB path support). Patches must be reapplied on every upstream
+LSM's 4 KiB path support). Patches must be reapplied on every upstream
 refresh and are covered by `scripts/vendored-checksums.txt`.
 
 The graph-UI HTTP server is a first-party implementation
@@ -107,7 +107,7 @@ See `vendored/nomic/NOTICE` for the exact derivation procedure
 
 ## Hybrid LSP — Reference Language Servers
 
-The Hybrid LSP layer (`internal/cbm/lsp/`) is an original C implementation
+The Hybrid LSP layer (`internal/lsm/lsp/`) is an original C implementation
 written for this project. **It contains no source code from any language
 server.** Its type-resolution behavior is structurally inspired by, and
 validated for output compatibility against, the published behavior of the
@@ -128,7 +128,7 @@ as acknowledgment; their licenses are noted for reference:
 
 ### Standard-library type data
 
-The stdlib type registries in `internal/cbm/lsp/generated/` were produced as
+The stdlib type registries in `internal/lsm/lsp/generated/` were produced as
 follows:
 
 - **Python** (`python_stdlib_data.c`) — generated from

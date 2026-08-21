@@ -11,17 +11,17 @@
  * constructs).
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/py_lsp.h"
 
-static CBMFileResult *extract_py(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_PYTHON,
+static LSMFileResult *extract_py(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_PYTHON,
                             "test", "main.py", 0, NULL, NULL);
 }
 
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -30,13 +30,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
 }
 
 __attribute__((unused))
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("  MISSING resolved call: caller~%s -> callee~%s (have %d)\n",
                callerSub, calleeSub, r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n",
                    rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)",
@@ -51,7 +51,7 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
 
 TEST(stress_namedtuple_class_form) {
     /* class Point(NamedTuple): x: int  → Point(1, 2).x */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import NamedTuple\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -64,13 +64,13 @@ TEST(stress_namedtuple_class_form) {
         "    return p.a.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_typeddict_subscript) {
     /* class TD(TypedDict): x: Foo. d: TD = ...; d["x"].method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import TypedDict\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -81,14 +81,14 @@ TEST(stress_typeddict_subscript) {
         "    return d['foo'].method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_protocol_structural) {
     /* def use(x: HasMethod): x.method()
      * where HasMethod is a Protocol */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Protocol\n"
         "class HasMethod(Protocol):\n"
         "    def method(self) -> int: ...\n"
@@ -101,7 +101,7 @@ TEST(stress_protocol_structural) {
     /* Should resolve x.method against the Protocol */
     int idx = find_resolved(r, "use", "method");
     if (idx < 0) printf("  KNOWN GAP: Protocol structural method dispatch\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -109,7 +109,7 @@ TEST(stress_abc_abstractmethod) {
     /* class Base(ABC): @abstractmethod def m(self): ...
      * class Child(Base): def m(self): return 1
      * def use(x: Base): x.m()  → resolves to Base.m (or Child.m via dispatch?) */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from abc import ABC, abstractmethod\n"
         "class Base(ABC):\n"
         "    @abstractmethod\n"
@@ -122,7 +122,7 @@ TEST(stress_abc_abstractmethod) {
         "    return x.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -130,7 +130,7 @@ TEST(stress_abc_abstractmethod) {
 
 TEST(stress_context_manager_with_as) {
     /* with Foo() as f: f.method() — f bound by __enter__ */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def __enter__(self):\n"
         "        return self\n"
@@ -143,13 +143,13 @@ TEST(stress_context_manager_with_as) {
         "        return f.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_except_as_binding) {
     /* except E as e: e.method() — e bound to E */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class FooError(Exception):\n"
         "    def detail(self):\n"
         "        return 'oops'\n"
@@ -160,14 +160,14 @@ TEST(stress_except_as_binding) {
         "        return e.detail()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "detail"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_isinstance_else_negative_narrow) {
     /* if not isinstance(x, Foo): return; x.method()
      * Narrows x to Foo after the early return via py_block_terminates. */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -177,7 +177,7 @@ TEST(stress_isinstance_else_negative_narrow) {
         "    return x.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -186,7 +186,7 @@ TEST(stress_isinstance_else_negative_narrow) {
 TEST(stress_tuple_unpack_function_return) {
     /* def f() -> tuple[Foo, Bar]: ...
      * a, b = f(); a.method_a(); b.method_b() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method_a(self):\n"
         "        return 1\n"
@@ -202,13 +202,13 @@ TEST(stress_tuple_unpack_function_return) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method_a"), 0);
     ASSERT_GTE(require_resolved(r, "use", "method_b"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_dict_items_comprehension) {
     /* d: dict[str, Foo]; [v.method() for k, v in d.items()] */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -216,13 +216,13 @@ TEST(stress_dict_items_comprehension) {
         "    return [v.method() for k, v in d.items()]\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_list_slice_returns_list) {
     /* lst: list[Foo]; lst[1:3][0].method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -230,7 +230,7 @@ TEST(stress_list_slice_returns_list) {
         "    return items[1:3][0].method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -238,7 +238,7 @@ TEST(stress_list_slice_returns_list) {
 
 TEST(stress_function_as_dict_value) {
     /* funcs = {"a": foo, "b": bar}; funcs["a"]() — dict-literal dispatch */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "def foo():\n"
         "    return 1\n"
         "def bar():\n"
@@ -248,13 +248,13 @@ TEST(stress_function_as_dict_value) {
         "    funcs['a']()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "foo"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_decorator_factory) {
     /* @retry(times=3) — decorator factory pattern */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "import functools\n"
         "def retry(times: int):\n"
         "    def deco(fn):\n"
@@ -271,13 +271,13 @@ TEST(stress_decorator_factory) {
     ASSERT_NOT_NULL(r);
     /* helper() should resolve as helper despite the decorator. */
     ASSERT_GTE(require_resolved(r, "use", "helper"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_property_setter) {
     /* @prop.setter — assignment to property */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    @property\n"
         "    def value(self) -> int:\n"
@@ -290,7 +290,7 @@ TEST(stress_property_setter) {
         "        return self.value\n");
     ASSERT_NOT_NULL(r);
     /* Setter is rare in resolution but should not break anything. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -301,7 +301,7 @@ TEST(stress_self_in_inheritance_chain) {
      * class C(B): def child_method(self) -> int: ...
      * c = C().make()  # Pyright: c is C, not B
      * c.child_method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Self\n"
         "class Base:\n"
         "    def make(self) -> Self:\n"
@@ -315,14 +315,14 @@ TEST(stress_self_in_inheritance_chain) {
     ASSERT_NOT_NULL(r);
     int idx = find_resolved(r, "use", "child_method");
     if (idx < 0) printf("  KNOWN GAP: Self resolves to receiver class, not declaring class\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_diamond_inheritance_mro) {
     /* Diamond: Top -> Left, Right -> Bottom. Bottom().method() resolves to
      * Top.method via C3 unless Left/Right override. */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Top:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -335,14 +335,14 @@ TEST(stress_diamond_inheritance_mro) {
         "        return self.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_recursive_self_referencing_type) {
     /* class Node: children: list[Node]
      * def walk(node: Node): for c in node.children: c.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Node:\n"
         "    def __init__(self):\n"
         "        self.children: list['Node'] = []\n"
@@ -354,7 +354,7 @@ TEST(stress_recursive_self_referencing_type) {
     ASSERT_NOT_NULL(r);
     int idx = find_resolved(r, "walk", "method");
     if (idx < 0) printf("  KNOWN GAP: forward-ref `Node` inside list[] within own class\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -366,7 +366,7 @@ TEST(stress_nested_closure) {
      *   def inner():
      *     return x.method()
      *   return inner */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -379,13 +379,13 @@ TEST(stress_nested_closure) {
     /* inner() captures x via closure; x is Foo from outer scope. */
     int idx = find_resolved(r, "inner", "method");
     if (idx < 0) printf("  KNOWN GAP: closure scope capture across nested function\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_match_sequence_pattern) {
     /* match items: case [head, *tail]: head.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -397,13 +397,13 @@ TEST(stress_match_sequence_pattern) {
         "            return None\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_lambda_inference) {
     /* fn = lambda x: x.method(); fn(Foo()) — call-site driven inference */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -412,13 +412,13 @@ TEST(stress_lambda_inference) {
         "    return fn(Foo())\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "lambda", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_method_chain_long) {
     /* a.b().c().d().e() — every step must preserve type for the next. */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Self\n"
         "class B:\n"
         "    def step(self) -> Self:\n"
@@ -429,13 +429,13 @@ TEST(stress_method_chain_long) {
         "    return B().step().step().step().step().finish()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "finish"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_generator_delegation) {
     /* def outer(): yield from inner() — outer's iterable element is inner's */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Generator\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -449,13 +449,13 @@ TEST(stress_generator_delegation) {
         "        x.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_async_gen_for) {
     /* async for x in async_gen(): x.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import AsyncGenerator\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -468,7 +468,7 @@ TEST(stress_async_gen_for) {
     ASSERT_NOT_NULL(r);
     int idx = find_resolved(r, "use", "method");
     if (idx < 0) printf("  KNOWN GAP: async-for element typing\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -477,7 +477,7 @@ TEST(stress_async_gen_for) {
 TEST(stress_sqlalchemy_mapped_field) {
     /* SQLAlchemy 2.0: id: Mapped[int] = mapped_column(...)
      * Mapped[T] should unwrap to T for member access. */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Annotated\n"
         "class Mapped:\n"
         "    pass\n"
@@ -490,13 +490,13 @@ TEST(stress_sqlalchemy_mapped_field) {
         "    return u.id.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_pydantic_model_field) {
     /* class Model(BaseModel): name: Foo. m.name.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -509,13 +509,13 @@ TEST(stress_pydantic_model_field) {
         "    return u.name.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_chained_filter_map) {
     /* filter / map / list compose */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -524,13 +524,13 @@ TEST(stress_chained_filter_map) {
         "    return [y.method() for y in filtered]\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_nested_function_call) {
     /* outer(inner()) where outer/inner have annotations */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -542,13 +542,13 @@ TEST(stress_nested_function_call) {
         "    return transform(make()).method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_optional_chain_with_walrus) {
     /* if (result := compute()) is not None: result.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Optional\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -561,13 +561,13 @@ TEST(stress_optional_chain_with_walrus) {
         "    return None\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_classmethod_chain_to_method) {
     /* C.factory().method() where factory is a @classmethod returning Self */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Self\n"
         "class Builder:\n"
         "    @classmethod\n"
@@ -581,13 +581,13 @@ TEST(stress_classmethod_chain_to_method) {
         "    return Builder.create().step().finish()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "finish"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_multi_assign_same_line) {
     /* a, b = (Foo(), Bar()) — same as tuple unpack, but explicit tuple */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def m_a(self):\n"
         "        return 1\n"
@@ -601,13 +601,13 @@ TEST(stress_multi_assign_same_line) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "m_a"), 0);
     ASSERT_GTE(require_resolved(r, "use", "m_b"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_dict_get_default) {
     /* d.get(k, default) — return type still V (or default's type) */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -620,13 +620,13 @@ TEST(stress_dict_get_default) {
      * gives Optional. method() resolves through UNION fallback. */
     int idx = find_resolved(r, "use", "method");
     if (idx < 0) printf("  KNOWN GAP: dict.get with default narrows away None\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_chained_attribute_through_property_setter) {
     /* @property + @x.setter, then accessing through chain */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Inner:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -638,13 +638,13 @@ TEST(stress_chained_attribute_through_property_setter) {
         "    return o.inner.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_async_with_async_for) {
     /* async with X() as ctx: async for x in ctx: x.method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import AsyncIterator\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -664,13 +664,13 @@ TEST(stress_async_with_async_for) {
         "            x.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_recursive_method_self) {
     /* class Node: def visit(self) -> int: ... self.left.visit() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Optional\n"
         "class Node:\n"
         "    def __init__(self):\n"
@@ -681,13 +681,13 @@ TEST(stress_recursive_method_self) {
         "        return 0\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "visit", "visit"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_callable_return_value) {
     /* def factory() -> Callable[[], Foo]: ... factory()().method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Callable\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -698,13 +698,13 @@ TEST(stress_callable_return_value) {
         "    return factory()().method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_typeddict_total_false) {
     /* class TD(TypedDict, total=False): foo: Foo. d['foo'].method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import TypedDict\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -715,13 +715,13 @@ TEST(stress_typeddict_total_false) {
         "    return d['foo'].method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_nested_match_patterns) {
     /* match x: case Foo(a, b): bind a, b */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -737,14 +737,14 @@ TEST(stress_nested_match_patterns) {
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
     ASSERT_GTE(require_resolved(r, "use", "m2"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_protocol_via_named_class) {
     /* def use(x: SupportsMethod): x.method()
      * SupportsMethod is a Protocol, x can be any class with method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Protocol\n"
         "class SupportsMethod(Protocol):\n"
         "    def method(self) -> int: ...\n"
@@ -757,13 +757,13 @@ TEST(stress_protocol_via_named_class) {
     /* Should resolve x.method through the Protocol's method declaration. */
     int idx = find_resolved(r, "use", "method");
     if (idx < 0) printf("  KNOWN GAP: Protocol method resolution\n");
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_iterator_next_value) {
     /* def gen(): yield Foo(); next(gen()).method() */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Iterator\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -774,13 +774,13 @@ TEST(stress_iterator_next_value) {
         "    return next(gen()).method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_double_star_unpack) {
     /* def f(**kwargs): kwargs['x'].method() — kwargs is dict[str, Foo] */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -788,13 +788,13 @@ TEST(stress_double_star_unpack) {
         "    return kwargs['x'].method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_yield_from_in_use) {
     /* yield from gen() — body's yields collected by caller's iteration */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from typing import Iterator\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -808,13 +808,13 @@ TEST(stress_yield_from_in_use) {
         "        x.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_isinstance_or_chain) {
     /* if isinstance(x, Foo) or isinstance(x, Bar): — narrowed to Foo|Bar */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -827,13 +827,13 @@ TEST(stress_isinstance_or_chain) {
         "    return None\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_module_level_const_class) {
     /* Top-level: foo = Foo(); use foo.method() in another function. */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "class Foo:\n"
         "    def method(self):\n"
         "        return 1\n"
@@ -842,13 +842,13 @@ TEST(stress_module_level_const_class) {
         "    return foo.method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
 TEST(stress_dataclass_with_default_factory) {
     /* @dataclass with field(default_factory=list) */
-    CBMFileResult *r = extract_py(
+    LSMFileResult *r = extract_py(
         "from dataclasses import dataclass, field\n"
         "class Foo:\n"
         "    def method(self):\n"
@@ -860,7 +860,7 @@ TEST(stress_dataclass_with_default_factory) {
         "    return c.items[0].method()\n");
     ASSERT_NOT_NULL(r);
     ASSERT_GTE(require_resolved(r, "use", "method"), 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

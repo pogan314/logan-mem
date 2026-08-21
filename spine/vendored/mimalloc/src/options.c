@@ -221,8 +221,8 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   const int vermajor = MI_MALLOC_VERSION/10000;
   const int verminor = (MI_MALLOC_VERSION%10000)/100;
   const int verpatch = (MI_MALLOC_VERSION%100);
-  /* CBM LOCAL PATCH (keep across mimalloc refreshes): upstream appends
-   * "(built on __DATE__, __TIME__)" here. mimalloc is linked into every cbm
+  /* LSM LOCAL PATCH (keep across mimalloc refreshes): upstream appends
+   * "(built on __DATE__, __TIME__)" here. mimalloc is linked into every lsm
    * binary, so those two macros made every build byte-unique — two compilations
    * of identical source seconds apart could never produce the same hash. That
    * defeats reproducible builds, and it also means a released artifact can never

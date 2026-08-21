@@ -4,9 +4,9 @@
  * join key is exact caller-QN string equality.
  *
  * THE BLOCKER (file:func:line):
- *   cbm_pipeline_find_lsp_resolution  (src/pipeline/lsp_resolve.h:48)
- *   joins each LSP-resolved call (CBMResolvedCall) to the tree-sitter call
- *   (CBMCall) with EXACT string equality on the caller QN:
+ *   lsm_pipeline_find_lsp_resolution  (src/pipeline/lsp_resolve.h:48)
+ *   joins each LSP-resolved call (LSMResolvedCall) to the tree-sitter call
+ *   (LSMCall) with EXACT string equality on the caller QN:
  *
  *       lsp_resolve.h:65:
  *           if (strcmp(rc->caller_qn, call->enclosing_func_qn) != 0)
@@ -17,16 +17,16 @@
  *       resolve_single_call → emit_classified_edge)
  *     - src/pipeline/pass_parallel.c:1797 (parallel pipeline)
  *
- *   When tree-sitter's enclosing-func walk FAILS, cbm_enclosing_func_qn
+ *   When tree-sitter's enclosing-func walk FAILS, lsm_enclosing_func_qn
  *   falls back to the MODULE QN, so call->enclosing_func_qn is the module
- *   QN. The C/C++ LSP cross resolver (internal/cbm/lsp/c_lsp.c) builds its
+ *   QN. The C/C++ LSP cross resolver (internal/lsm/lsp/c_lsp.c) builds its
  *   OWN enclosing QN from scope resolution — for an out-of-line method
  *   Foo::bar it produces the real method QN "<proj>.<module>.Foo.bar"
- *   (c_process_function, c_lsp.c:4138-4143) and emits a CBMResolvedCall
+ *   (c_process_function, c_lsp.c:4138-4143) and emits a LSMResolvedCall
  *   with caller_qn = that real method QN, strategy = "lsp_direct" /
  *   "lsp_implicit_this" / "lsp_type_dispatch", confidence 0.95
  *   (c_emit_resolved_call, c_lsp.c:3287-3296). 0.95 is well above
- *   CBM_LSP_CONFIDENCE_FLOOR (0.6f, lsp_resolve.h:36).
+ *   LSM_LSP_CONFIDENCE_FLOOR (0.6f, lsp_resolve.h:36).
  *
  *   So the LSP HAS the correct caller, but the join key on the
  *   tree-sitter side is the MODULE QN. module-QN != real-method-QN, the
@@ -38,13 +38,13 @@
  * FIXTURE RATIONALE (C++ out-of-line method — the #554 family):
  *   A free function helper() and a class Processor with an OUT-OF-LINE
  *   method definition Processor::run that calls helper(v). For the
- *   out-of-line method body, tree-sitter's cbm_find_enclosing_func cannot
+ *   out-of-line method body, tree-sitter's lsm_find_enclosing_func cannot
  *   walk the call-expression's ancestry back to a node whose type is in
  *   func_kinds_cpp = {"function_definition"} in a way that yields the
- *   class-qualified method QN, so cbm_enclosing_func_qn falls back to the
+ *   class-qualified method QN, so lsm_enclosing_func_qn falls back to the
  *   module QN (issue #554 / extract_defs.c + c_lsp.c dominate the
  *   QUALITY_ANALYSIS Module-sourced-CALLS top-file list). C/C++ has a
- *   cross-file LSP wired up (cbm_pxc_has_cross_lsp, pass_lsp_cross.c:281),
+ *   cross-file LSP wired up (lsm_pxc_has_cross_lsp, pass_lsp_cross.c:281),
  *   so the LSP DOES resolve the real Processor::run caller. This is the
  *   cleanest fixture where tree-sitter attribution lands on Module but the
  *   LSP resolves the real enclosing function — exactly gap #5a.
@@ -109,21 +109,21 @@ static const char kCppOutOfLine[] =
  *
  * Returns 1 if found, 0 otherwise.
  */
-static int find_call_edge_to_helper(cbm_store_t *store, const char *project,
-                                    cbm_node_t *out_src, char *out_props,
+static int find_call_edge_to_helper(lsm_store_t *store, const char *project,
+                                    lsm_node_t *out_src, char *out_props,
                                     size_t props_cap) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int nedges = 0;
-    if (cbm_store_find_edges_by_type(store, project, "CALLS", &edges, &nedges)
-            != CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_type(store, project, "CALLS", &edges, &nedges)
+            != LSM_STORE_OK) {
         return 0;
     }
 
     int found = 0;
     for (int i = 0; i < nedges; i++) {
-        cbm_node_t tgt;
-        if (cbm_store_find_node_by_id(store, edges[i].target_id, &tgt)
-                != CBM_STORE_OK) {
+        lsm_node_t tgt;
+        if (lsm_store_find_node_by_id(store, edges[i].target_id, &tgt)
+                != LSM_STORE_OK) {
             continue;
         }
         const char *tqn = tgt.qualified_name ? tgt.qualified_name : "";
@@ -134,8 +134,8 @@ static int find_call_edge_to_helper(cbm_store_t *store, const char *project,
             continue;
         }
         /* This is the helper() call edge. Capture its source node + props. */
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, out_src)
-                == CBM_STORE_OK) {
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, out_src)
+                == LSM_STORE_OK) {
             const char *props = edges[i].properties_json
                                     ? edges[i].properties_json : "{}";
             snprintf(out_props, props_cap, "%s", props);
@@ -144,7 +144,7 @@ static int find_call_edge_to_helper(cbm_store_t *store, const char *project,
         break;
     }
 
-    cbm_store_free_edges(edges, nedges);
+    lsm_store_free_edges(edges, nedges);
     return found;
 }
 
@@ -160,7 +160,7 @@ static int find_call_edge_to_helper(cbm_store_t *store, const char *project,
  * LSP resolves caller = Processor::run, which should rescue the bad
  * tree-sitter Module attribution.
  *
- * Today the join in cbm_pipeline_find_lsp_resolution (lsp_resolve.h:65)
+ * Today the join in lsm_pipeline_find_lsp_resolution (lsp_resolve.h:65)
  * requires rc->caller_qn == call->enclosing_func_qn; tree-sitter supplies
  * the MODULE QN, the LSP supplies the real method QN, they never strcmp
  * equal, the LSP rescue is discarded, and the edge stays Module-sourced.
@@ -168,10 +168,10 @@ static int find_call_edge_to_helper(cbm_store_t *store, const char *project,
  */
 TEST(repro_invariant_lsp_rescue_source) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, "main.cpp", kCppOutOfLine);
+    lsm_store_t *store = rh_index(&lp, "main.cpp", kCppOutOfLine);
     ASSERT_TRUE(store != NULL);
 
-    cbm_node_t src;
+    lsm_node_t src;
     char props[1024];
     int found = find_call_edge_to_helper(store, lp.project, &src,
                                          props, sizeof(props));
@@ -221,10 +221,10 @@ TEST(repro_invariant_lsp_rescue_source) {
  */
 TEST(repro_invariant_lsp_rescue_props) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, "main.cpp", kCppOutOfLine);
+    lsm_store_t *store = rh_index(&lp, "main.cpp", kCppOutOfLine);
     ASSERT_TRUE(store != NULL);
 
-    cbm_node_t src;
+    lsm_node_t src;
     char props[1024];
     int found = find_call_edge_to_helper(store, lp.project, &src,
                                          props, sizeof(props));

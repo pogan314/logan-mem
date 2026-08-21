@@ -23,7 +23,7 @@ enum { PRIVATE_FILE_LOCK_PAYLOAD_CAP = 4096 };
 #include <time.h>
 #include <unistd.h>
 
-struct cbm_private_lock_directory {
+struct lsm_private_lock_directory {
     int fd;
     char *path;
     dev_t device;
@@ -34,11 +34,11 @@ struct cbm_private_lock_directory {
     bool test_fail_post_acquire_close;
 };
 
-struct cbm_private_file_lock {
+struct lsm_private_file_lock {
     int fd;
     pid_t owner_pid;
-    cbm_private_file_lock_mode_t mode;
-    struct cbm_private_file_lock *next_tracked;
+    lsm_private_file_lock_mode_t mode;
+    struct lsm_private_file_lock *next_tracked;
     bool unlocked;
     bool test_fail_unlock_once;
     bool test_fail_close_once;
@@ -47,13 +47,13 @@ struct cbm_private_file_lock {
     unsigned int test_close_attempts;
 };
 
-struct cbm_private_fork_condition {
+struct lsm_private_fork_condition {
     pthread_cond_t value;
 };
 
 static pthread_once_t private_atfork_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t private_fork_mutex = PTHREAD_MUTEX_INITIALIZER;
-static cbm_private_file_lock_t *private_tracked_locks;
+static lsm_private_file_lock_t *private_tracked_locks;
 static int private_atfork_status = -1;
 
 static void private_atfork_prepare(void) {
@@ -65,7 +65,7 @@ static void private_atfork_parent(void) {
 }
 
 static void private_atfork_child(void) {
-    cbm_private_file_lock_t *lock = private_tracked_locks;
+    lsm_private_file_lock_t *lock = private_tracked_locks;
     while (lock) {
         if (lock->fd >= 0) {
             /* Never LOCK_UN in the child: its descriptor references the same
@@ -89,16 +89,16 @@ static bool private_atfork_ensure(void) {
            private_atfork_status == 0;
 }
 
-bool cbm_private_file_lock_fork_guard_enter(void) {
+bool lsm_private_file_lock_fork_guard_enter(void) {
     return private_atfork_ensure() && pthread_mutex_lock(&private_fork_mutex) == 0;
 }
 
-void cbm_private_file_lock_fork_guard_leave(void) {
+void lsm_private_file_lock_fork_guard_leave(void) {
     (void)pthread_mutex_unlock(&private_fork_mutex);
 }
 
-cbm_private_fork_condition_t *cbm_private_fork_condition_new(void) {
-    cbm_private_fork_condition_t *condition = calloc(1, sizeof(*condition));
+lsm_private_fork_condition_t *lsm_private_fork_condition_new(void) {
+    lsm_private_fork_condition_t *condition = calloc(1, sizeof(*condition));
     pthread_condattr_t attributes;
     if (!condition || pthread_condattr_init(&attributes) != 0) {
         free(condition);
@@ -120,7 +120,7 @@ cbm_private_fork_condition_t *cbm_private_fork_condition_new(void) {
     return condition;
 }
 
-void cbm_private_fork_condition_free(cbm_private_fork_condition_t *condition) {
+void lsm_private_fork_condition_free(lsm_private_fork_condition_t *condition) {
     if (!condition) {
         return;
     }
@@ -128,16 +128,16 @@ void cbm_private_fork_condition_free(cbm_private_fork_condition_t *condition) {
     free(condition);
 }
 
-void cbm_private_fork_condition_broadcast_while_guarded(cbm_private_fork_condition_t *condition) {
+void lsm_private_fork_condition_broadcast_while_guarded(lsm_private_fork_condition_t *condition) {
     if (condition) {
         (void)pthread_cond_broadcast(&condition->value);
     }
 }
 
-cbm_private_fork_wait_status_t cbm_private_fork_condition_wait_until_while_guarded(
-    cbm_private_fork_condition_t *condition, uint64_t deadline_ms) {
+lsm_private_fork_wait_status_t lsm_private_fork_condition_wait_until_while_guarded(
+    lsm_private_fork_condition_t *condition, uint64_t deadline_ms) {
     if (!condition) {
-        return CBM_PRIVATE_FORK_WAIT_ERROR;
+        return LSM_PRIVATE_FORK_WAIT_ERROR;
     }
     int status;
     if (deadline_ms == UINT64_MAX) {
@@ -145,7 +145,7 @@ cbm_private_fork_wait_status_t cbm_private_fork_condition_wait_until_while_guard
     } else {
         struct timespec timeout;
 #ifdef __APPLE__
-        uint64_t now_ms = cbm_now_ms();
+        uint64_t now_ms = lsm_now_ms();
         uint64_t remaining_ms = deadline_ms > now_ms ? deadline_ms - now_ms : 0;
         timeout.tv_sec = (time_t)(remaining_ms / 1000U);
         timeout.tv_nsec = (long)((remaining_ms % 1000U) * 1000000U);
@@ -158,9 +158,9 @@ cbm_private_fork_wait_status_t cbm_private_fork_condition_wait_until_while_guard
 #endif
     }
     if (status == 0) {
-        return CBM_PRIVATE_FORK_WAIT_SIGNALED;
+        return LSM_PRIVATE_FORK_WAIT_SIGNALED;
     }
-    return status == ETIMEDOUT ? CBM_PRIVATE_FORK_WAIT_TIMEOUT : CBM_PRIVATE_FORK_WAIT_ERROR;
+    return status == ETIMEDOUT ? LSM_PRIVATE_FORK_WAIT_TIMEOUT : LSM_PRIVATE_FORK_WAIT_ERROR;
 }
 
 static bool private_fd_set_cloexec(int fd) {
@@ -168,7 +168,7 @@ static bool private_fd_set_cloexec(int fd) {
     return flags >= 0 && fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
 }
 
-static bool private_directory_revalidate(const cbm_private_lock_directory_t *directory) {
+static bool private_directory_revalidate(const lsm_private_lock_directory_t *directory) {
     struct stat by_handle;
     struct stat by_path;
     return directory && directory->owner_pid == getpid() && directory->fd >= 0 &&
@@ -178,7 +178,7 @@ static bool private_directory_revalidate(const cbm_private_lock_directory_t *dir
            by_path.st_dev == directory->device && by_path.st_ino == directory->inode &&
            by_handle.st_uid == geteuid() && by_path.st_uid == geteuid() &&
            (by_handle.st_mode & 07777) == 0700 && (by_path.st_mode & 07777) == 0700 &&
-           cbm_macos_extended_acl_fd_is_empty(directory->fd);
+           lsm_macos_extended_acl_fd_is_empty(directory->fd);
 }
 
 static bool private_base_name_valid(const char *base_name) {
@@ -200,7 +200,7 @@ static bool private_base_name_valid(const char *base_name) {
     return true;
 }
 
-static bool private_file_revalidate(const cbm_private_lock_directory_t *directory,
+static bool private_file_revalidate(const lsm_private_lock_directory_t *directory,
                                     const char *base_name, int fd, const struct stat *expected) {
     struct stat by_handle;
     struct stat by_path;
@@ -210,18 +210,18 @@ static bool private_file_revalidate(const cbm_private_lock_directory_t *director
            fstatat(directory->fd, base_name, &by_path, AT_SYMLINK_NOFOLLOW) == 0 &&
            S_ISREG(by_path.st_mode) && by_path.st_uid == geteuid() && by_path.st_nlink == 1 &&
            (by_path.st_mode & 07777) == 0600 && by_path.st_dev == by_handle.st_dev &&
-           by_path.st_ino == by_handle.st_ino && cbm_macos_extended_acl_fd_is_empty(fd) &&
+           by_path.st_ino == by_handle.st_ino && lsm_macos_extended_acl_fd_is_empty(fd) &&
            (!expected ||
             (expected->st_dev == by_handle.st_dev && expected->st_ino == by_handle.st_ino));
 }
 
-static cbm_private_file_lock_status_t private_open_failure_status(
-    const cbm_private_lock_directory_t *directory, const char *base_name) {
+static lsm_private_file_lock_status_t private_open_failure_status(
+    const lsm_private_lock_directory_t *directory, const char *base_name) {
     struct stat status;
     if (fstatat(directory->fd, base_name, &status, AT_SYMLINK_NOFOLLOW) == 0) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    return errno == ENOENT ? CBM_PRIVATE_FILE_LOCK_IO : CBM_PRIVATE_FILE_LOCK_UNSAFE;
+    return errno == ENOENT ? LSM_PRIVATE_FILE_LOCK_IO : LSM_PRIVATE_FILE_LOCK_UNSAFE;
 }
 
 static int private_flock_set(int fd, int operation) {
@@ -232,7 +232,7 @@ static int private_flock_set(int fd, int operation) {
     return result;
 }
 
-static int private_release_unlock(cbm_private_file_lock_t *lock) {
+static int private_release_unlock(lsm_private_file_lock_t *lock) {
     lock->test_unlock_attempts++;
     if (lock->test_fail_unlock_once) {
         lock->test_fail_unlock_once = false;
@@ -242,7 +242,7 @@ static int private_release_unlock(cbm_private_file_lock_t *lock) {
     return private_flock_set(lock->fd, LOCK_UN);
 }
 
-static int private_release_close(cbm_private_file_lock_t *lock, bool *attempted_out) {
+static int private_release_close(lsm_private_file_lock_t *lock, bool *attempted_out) {
     *attempted_out = false;
     lock->test_close_attempts++;
     if (lock->test_fail_close_once) {
@@ -260,14 +260,14 @@ static int private_release_close(cbm_private_file_lock_t *lock, bool *attempted_
     return close(lock->fd);
 }
 
-cbm_private_file_lock_status_t cbm_private_lock_directory_adopt_posix(
-    int directory_fd, const char *stable_path, cbm_private_lock_directory_t **directory_out) {
+lsm_private_file_lock_status_t lsm_private_lock_directory_adopt_posix(
+    int directory_fd, const char *stable_path, lsm_private_lock_directory_t **directory_out) {
     if (directory_out) {
         *directory_out = NULL;
     }
     if (directory_fd < 0 || !stable_path || !stable_path[0] || !directory_out ||
         !private_fd_set_cloexec(directory_fd)) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     struct stat status;
     struct stat by_path;
@@ -275,40 +275,40 @@ cbm_private_file_lock_status_t cbm_private_lock_directory_adopt_posix(
         !S_ISDIR(status.st_mode) || !S_ISDIR(by_path.st_mode) || status.st_uid != geteuid() ||
         by_path.st_uid != geteuid() || (status.st_mode & 07777) != 0700 ||
         (by_path.st_mode & 07777) != 0700 || status.st_dev != by_path.st_dev ||
-        status.st_ino != by_path.st_ino || !cbm_macos_extended_acl_fd_is_empty(directory_fd)) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        status.st_ino != by_path.st_ino || !lsm_macos_extended_acl_fd_is_empty(directory_fd)) {
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    cbm_private_lock_directory_t *directory = calloc(1, sizeof(*directory));
+    lsm_private_lock_directory_t *directory = calloc(1, sizeof(*directory));
     if (directory) {
         directory->path = strdup(stable_path);
     }
     if (!directory || !directory->path) {
         free(directory);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     directory->fd = directory_fd;
     directory->device = status.st_dev;
     directory->inode = status.st_ino;
     directory->owner_pid = getpid();
     *directory_out = directory;
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
-    cbm_private_lock_directory_t *directory, const char *base_name,
-    cbm_private_file_lock_mode_t mode, cbm_private_file_lock_t **lock_out) {
+lsm_private_file_lock_status_t lsm_private_file_lock_try_acquire(
+    lsm_private_lock_directory_t *directory, const char *base_name,
+    lsm_private_file_lock_mode_t mode, lsm_private_file_lock_t **lock_out) {
     if (lock_out) {
         *lock_out = NULL;
     }
     if (!directory || !lock_out || !private_base_name_valid(base_name) ||
-        (mode != CBM_PRIVATE_FILE_LOCK_SH && mode != CBM_PRIVATE_FILE_LOCK_EX)) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        (mode != LSM_PRIVATE_FILE_LOCK_SH && mode != LSM_PRIVATE_FILE_LOCK_EX)) {
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     if (!private_directory_revalidate(directory)) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
 
     int flags = O_RDWR | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK;
@@ -320,8 +320,8 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
         fd = openat(directory->fd, base_name, flags);
     }
     if (fd < 0) {
-        cbm_private_file_lock_status_t status = private_open_failure_status(directory, base_name);
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_status_t status = private_open_failure_status(directory, base_name);
+        lsm_private_file_lock_fork_guard_leave();
         return status;
     }
 
@@ -332,28 +332,28 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
     }
     if (!initial_ok || !private_file_revalidate(directory, base_name, fd, &initial)) {
         (void)close(fd);
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
 
-    cbm_private_file_lock_t *lock = calloc(1, sizeof(*lock));
+    lsm_private_file_lock_t *lock = calloc(1, sizeof(*lock));
     if (!lock) {
         (void)close(fd);
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     lock->fd = fd;
     lock->owner_pid = getpid();
     lock->mode = mode;
 
-    int operation = mode == CBM_PRIVATE_FILE_LOCK_SH ? LOCK_SH : LOCK_EX;
+    int operation = mode == LSM_PRIVATE_FILE_LOCK_SH ? LOCK_SH : LOCK_EX;
     if (private_flock_set(fd, operation | LOCK_NB) != 0) {
         int lock_error = errno;
         (void)close(fd);
         free(lock);
-        cbm_private_file_lock_fork_guard_leave();
-        return lock_error == EWOULDBLOCK || lock_error == EAGAIN ? CBM_PRIVATE_FILE_LOCK_BUSY
-                                                                 : CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return lock_error == EWOULDBLOCK || lock_error == EAGAIN ? LSM_PRIVATE_FILE_LOCK_BUSY
+                                                                 : LSM_PRIVATE_FILE_LOCK_IO;
     }
     lock->next_tracked = private_tracked_locks;
     private_tracked_locks = lock;
@@ -365,23 +365,23 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
     directory->test_fail_post_acquire_unlock = false;
     directory->test_fail_post_acquire_close = false;
     if (forced_cleanup || !private_file_revalidate(directory, base_name, fd, &initial)) {
-        cbm_private_file_lock_status_t failure_status =
-            forced_cleanup ? CBM_PRIVATE_FILE_LOCK_IO : CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        lsm_private_file_lock_status_t failure_status =
+            forced_cleanup ? LSM_PRIVATE_FILE_LOCK_IO : LSM_PRIVATE_FILE_LOCK_UNSAFE;
         lock->test_fail_unlock_once = fail_cleanup_unlock;
         lock->test_fail_close_once = fail_cleanup_close;
         *lock_out = lock;
-        cbm_private_file_lock_fork_guard_leave();
-        cbm_private_file_lock_status_t cleanup_status = cbm_private_file_lock_release(lock_out);
-        return cleanup_status == CBM_PRIVATE_FILE_LOCK_OK ? failure_status
-                                                          : CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_status_t cleanup_status = lsm_private_file_lock_release(lock_out);
+        return cleanup_status == LSM_PRIVATE_FILE_LOCK_OK ? failure_status
+                                                          : LSM_PRIVATE_FILE_LOCK_IO;
     }
     *lock_out = lock;
-    cbm_private_file_lock_fork_guard_leave();
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    lsm_private_file_lock_fork_guard_leave();
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-static bool private_lock_is_tracked(const cbm_private_file_lock_t *lock) {
-    for (const cbm_private_file_lock_t *cursor = private_tracked_locks; cursor;
+static bool private_lock_is_tracked(const lsm_private_file_lock_t *lock) {
+    for (const lsm_private_file_lock_t *cursor = private_tracked_locks; cursor;
          cursor = cursor->next_tracked) {
         if (cursor == lock) {
             return true;
@@ -390,30 +390,30 @@ static bool private_lock_is_tracked(const cbm_private_file_lock_t *lock) {
     return false;
 }
 
-static bool private_payload_fd_valid(const cbm_private_file_lock_t *lock, struct stat *status_out) {
+static bool private_payload_fd_valid(const lsm_private_file_lock_t *lock, struct stat *status_out) {
     struct stat status;
     bool valid = lock && lock->fd >= 0 && !lock->unlocked && lock->owner_pid == getpid() &&
                  private_lock_is_tracked(lock) && fstat(lock->fd, &status) == 0 &&
                  S_ISREG(status.st_mode) && status.st_uid == geteuid() && status.st_nlink == 1 &&
                  (status.st_mode & 07777) == 0600 && status.st_size >= 0 &&
-                 cbm_macos_extended_acl_fd_is_empty(lock->fd);
+                 lsm_macos_extended_acl_fd_is_empty(lock->fd);
     if (valid && status_out) {
         *status_out = status;
     }
     return valid;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_payload_read(cbm_private_file_lock_t *lock,
+lsm_private_file_lock_status_t lsm_private_file_lock_payload_read(lsm_private_file_lock_t *lock,
                                                                   void *buffer, size_t capacity,
                                                                   size_t *length_out) {
     if (length_out) {
         *length_out = 0;
     }
     if (!lock || !buffer || capacity == 0 || !length_out) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     struct stat status;
     bool metadata_safe = private_payload_fd_valid(lock, &status);
@@ -432,26 +432,26 @@ cbm_private_file_lock_status_t cbm_private_file_lock_payload_read(cbm_private_fi
             valid = false;
         }
     }
-    cbm_private_file_lock_fork_guard_leave();
+    lsm_private_file_lock_fork_guard_leave();
     if (!metadata_safe) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     if (!valid) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     *length_out = length;
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_payload_write(cbm_private_file_lock_t *lock,
+lsm_private_file_lock_status_t lsm_private_file_lock_payload_write(lsm_private_file_lock_t *lock,
                                                                    const void *buffer,
                                                                    size_t length) {
     if (!lock || !buffer || length == 0 || length > PRIVATE_FILE_LOCK_PAYLOAD_CAP ||
-        lock->mode != CBM_PRIVATE_FILE_LOCK_EX) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        lock->mode != LSM_PRIVATE_FILE_LOCK_EX) {
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     bool metadata_safe = private_payload_fd_valid(lock, NULL);
     bool valid = metadata_safe && ftruncate(lock->fd, 0) == 0;
@@ -475,56 +475,56 @@ cbm_private_file_lock_status_t cbm_private_file_lock_payload_write(cbm_private_f
         } while (sync_status != 0 && errno == EINTR);
         valid = sync_status == 0;
     }
-    cbm_private_file_lock_fork_guard_leave();
+    lsm_private_file_lock_fork_guard_leave();
     if (!metadata_safe) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    return valid ? CBM_PRIVATE_FILE_LOCK_OK : CBM_PRIVATE_FILE_LOCK_IO;
+    return valid ? LSM_PRIVATE_FILE_LOCK_OK : LSM_PRIVATE_FILE_LOCK_IO;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_release(cbm_private_file_lock_t **lock_io) {
+lsm_private_file_lock_status_t lsm_private_file_lock_release(lsm_private_file_lock_t **lock_io) {
     if (!lock_io || !*lock_io) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
-    cbm_private_file_lock_t *lock = *lock_io;
+    lsm_private_file_lock_t *lock = *lock_io;
     if (lock->owner_pid != getpid() || lock->fd < 0) {
         *lock_io = NULL;
         free(lock);
-        return CBM_PRIVATE_FILE_LOCK_OK;
+        return LSM_PRIVATE_FILE_LOCK_OK;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
-    cbm_private_file_lock_t **cursor = &private_tracked_locks;
+    lsm_private_file_lock_t **cursor = &private_tracked_locks;
     while (*cursor && *cursor != lock) {
         cursor = &(*cursor)->next_tracked;
     }
     if (*cursor != lock) {
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     if (!lock->unlocked) {
         if (private_release_unlock(lock) != 0) {
-            cbm_private_file_lock_fork_guard_leave();
-            return CBM_PRIVATE_FILE_LOCK_IO;
+            lsm_private_file_lock_fork_guard_leave();
+            return LSM_PRIVATE_FILE_LOCK_IO;
         }
         lock->unlocked = true;
     }
     bool close_attempted = false;
     int close_status = private_release_close(lock, &close_attempted);
     if (close_status != 0 && !close_attempted) {
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     lock->fd = -1;
     *cursor = lock->next_tracked;
-    cbm_private_file_lock_fork_guard_leave();
+    lsm_private_file_lock_fork_guard_leave();
     *lock_io = NULL;
     free(lock);
-    return close_status == 0 ? CBM_PRIVATE_FILE_LOCK_OK : CBM_PRIVATE_FILE_LOCK_IO;
+    return close_status == 0 ? LSM_PRIVATE_FILE_LOCK_OK : LSM_PRIVATE_FILE_LOCK_IO;
 }
 
-void cbm_private_lock_directory_close(cbm_private_lock_directory_t *directory) {
+void lsm_private_lock_directory_close(lsm_private_lock_directory_t *directory) {
     if (!directory) {
         return;
     }
@@ -535,11 +535,11 @@ void cbm_private_lock_directory_close(cbm_private_lock_directory_t *directory) {
     free(directory);
 }
 
-const char *cbm_private_lock_directory_path(const cbm_private_lock_directory_t *directory) {
+const char *lsm_private_lock_directory_path(const lsm_private_lock_directory_t *directory) {
     return directory ? directory->path : NULL;
 }
 
-bool cbm_private_file_lock_is_cloexec_for_test(const cbm_private_file_lock_t *lock) {
+bool lsm_private_file_lock_is_cloexec_for_test(const lsm_private_file_lock_t *lock) {
     if (!lock || lock->fd < 0) {
         return false;
     }
@@ -547,12 +547,12 @@ bool cbm_private_file_lock_is_cloexec_for_test(const cbm_private_file_lock_t *lo
     return flags >= 0 && (flags & FD_CLOEXEC) != 0;
 }
 
-bool cbm_private_file_lock_unlock_complete(const cbm_private_file_lock_t *lock) {
+bool lsm_private_file_lock_unlock_complete(const lsm_private_file_lock_t *lock) {
     return lock && lock->unlocked;
 }
 
-bool cbm_private_lock_directory_fail_post_acquire_cleanup_for_test(
-    cbm_private_lock_directory_t *directory, bool fail_unlock, bool fail_close) {
+bool lsm_private_lock_directory_fail_post_acquire_cleanup_for_test(
+    lsm_private_lock_directory_t *directory, bool fail_unlock, bool fail_close) {
     if (!directory || (!fail_unlock && !fail_close)) {
         return false;
     }
@@ -562,37 +562,37 @@ bool cbm_private_lock_directory_fail_post_acquire_cleanup_for_test(
     return true;
 }
 
-bool cbm_private_file_lock_fail_next_release_step_for_test(
-    cbm_private_file_lock_t *lock, cbm_private_file_lock_release_step_t step) {
+bool lsm_private_file_lock_fail_next_release_step_for_test(
+    lsm_private_file_lock_t *lock, lsm_private_file_lock_release_step_t step) {
     if (!lock) {
         return false;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
         lock->test_fail_unlock_once = true;
         return true;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
         lock->test_fail_close_once = true;
         return true;
     }
     return false;
 }
 
-unsigned int cbm_private_file_lock_release_step_attempts_for_test(
-    const cbm_private_file_lock_t *lock, cbm_private_file_lock_release_step_t step) {
+unsigned int lsm_private_file_lock_release_step_attempts_for_test(
+    const lsm_private_file_lock_t *lock, lsm_private_file_lock_release_step_t step) {
     if (!lock) {
         return 0;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
         return lock->test_unlock_attempts;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
         return lock->test_close_attempts;
     }
     return 0;
 }
 
-bool cbm_private_file_lock_fail_close_after_consuming_for_test(cbm_private_file_lock_t *lock) {
+bool lsm_private_file_lock_fail_close_after_consuming_for_test(lsm_private_file_lock_t *lock) {
     if (!lock) {
         return false;
     }
@@ -600,7 +600,7 @@ bool cbm_private_file_lock_fail_close_after_consuming_for_test(cbm_private_file_
     return true;
 }
 
-int cbm_private_file_lock_native_fd_for_test(const cbm_private_file_lock_t *lock) {
+int lsm_private_file_lock_native_fd_for_test(const lsm_private_file_lock_t *lock) {
     return lock ? lock->fd : -1;
 }
 
@@ -668,7 +668,7 @@ typedef struct {
     DWORD index_low;
 } private_win_identity_t;
 
-struct cbm_private_lock_directory {
+struct lsm_private_lock_directory {
     HANDLE handle;
     char *path;
     wchar_t *wide_path;
@@ -681,10 +681,10 @@ struct cbm_private_lock_directory {
     bool test_fail_lock_attempt_close;
 };
 
-struct cbm_private_file_lock {
+struct lsm_private_file_lock {
     HANDLE handle;
     OVERLAPPED range;
-    cbm_private_file_lock_mode_t mode;
+    lsm_private_file_lock_mode_t mode;
     bool unlocked;
     bool test_fail_unlock_once;
     bool test_fail_close_once;
@@ -692,7 +692,7 @@ struct cbm_private_file_lock {
     unsigned int test_close_attempts;
 };
 
-struct cbm_private_fork_condition {
+struct lsm_private_fork_condition {
     CONDITION_VARIABLE value;
 };
 
@@ -963,20 +963,20 @@ static bool private_win_path_syntax_valid(const wchar_t *path) {
     return true;
 }
 
-static cbm_private_file_lock_status_t private_win_path_from_utf8(const char *path,
+static lsm_private_file_lock_status_t private_win_path_from_utf8(const char *path,
                                                                  wchar_t **wide_out) {
     *wide_out = NULL;
     int needed = path ? MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0) : 0;
     if (needed <= 0 || needed > MAX_PATH) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     wchar_t *wide = malloc((size_t)needed * sizeof(*wide));
     if (!wide) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, needed) <= 0) {
         free(wide);
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     for (int index = 0; index < needed - 1; index++) {
         if (wide[index] == L'/') {
@@ -989,10 +989,10 @@ static cbm_private_file_lock_status_t private_win_path_from_utf8(const char *pat
     }
     if (!private_win_path_syntax_valid(wide)) {
         free(wide);
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     *wide_out = wide;
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
 static bool private_win_path_tree_is_plain_local(const wchar_t *path) {
@@ -1040,7 +1040,7 @@ static bool private_win_path_tree_is_plain_local(const wchar_t *path) {
     return valid;
 }
 
-static bool private_win_directory_handle_valid(cbm_private_lock_directory_t *directory,
+static bool private_win_directory_handle_valid(lsm_private_lock_directory_t *directory,
                                                BY_HANDLE_FILE_INFORMATION *information_out) {
     BY_HANDLE_FILE_INFORMATION information;
     bool valid =
@@ -1058,7 +1058,7 @@ static bool private_win_directory_handle_valid(cbm_private_lock_directory_t *dir
     return valid;
 }
 
-static bool private_win_directory_path_matches(cbm_private_lock_directory_t *directory) {
+static bool private_win_directory_path_matches(lsm_private_lock_directory_t *directory) {
     HANDLE probe =
         CreateFileW(directory->wide_path, FILE_READ_ATTRIBUTES | READ_CONTROL,
                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
@@ -1080,7 +1080,7 @@ static bool private_win_directory_path_matches(cbm_private_lock_directory_t *dir
     return valid;
 }
 
-static bool private_win_directory_revalidate(cbm_private_lock_directory_t *directory) {
+static bool private_win_directory_revalidate(lsm_private_lock_directory_t *directory) {
     BY_HANDLE_FILE_INFORMATION information;
     if (!private_win_path_tree_is_plain_local(directory->wide_path) ||
         !private_win_directory_handle_valid(directory, &information)) {
@@ -1121,7 +1121,7 @@ static bool private_win_base_name_valid(const char *base_name) {
     return true;
 }
 
-static wchar_t *private_win_file_path(const cbm_private_lock_directory_t *directory,
+static wchar_t *private_win_file_path(const lsm_private_lock_directory_t *directory,
                                       const char *base_name) {
     size_t directory_length = wcslen(directory->wide_path);
     size_t base_length = strlen(base_name);
@@ -1146,7 +1146,7 @@ static wchar_t *private_win_file_path(const cbm_private_lock_directory_t *direct
     return path;
 }
 
-static bool private_win_file_handle_valid(cbm_private_lock_directory_t *directory, HANDLE handle,
+static bool private_win_file_handle_valid(lsm_private_lock_directory_t *directory, HANDLE handle,
                                           BY_HANDLE_FILE_INFORMATION *information_out) {
     BY_HANDLE_FILE_INFORMATION information;
     bool valid = handle != INVALID_HANDLE_VALUE && GetFileType(handle) == FILE_TYPE_DISK &&
@@ -1163,7 +1163,7 @@ static bool private_win_file_handle_valid(cbm_private_lock_directory_t *director
     return valid;
 }
 
-static bool private_win_file_revalidate(cbm_private_lock_directory_t *directory,
+static bool private_win_file_revalidate(lsm_private_lock_directory_t *directory,
                                         const wchar_t *path, HANDLE handle,
                                         const private_win_identity_t *expected) {
     BY_HANDLE_FILE_INFORMATION information;
@@ -1195,40 +1195,40 @@ static bool private_win_file_revalidate(cbm_private_lock_directory_t *directory,
     return valid;
 }
 
-static cbm_private_file_lock_status_t private_win_open_failure_status(const wchar_t *path) {
+static lsm_private_file_lock_status_t private_win_open_failure_status(const wchar_t *path) {
     DWORD attributes = GetFileAttributesW(path);
-    return attributes == INVALID_FILE_ATTRIBUTES ? CBM_PRIVATE_FILE_LOCK_IO
-                                                 : CBM_PRIVATE_FILE_LOCK_UNSAFE;
+    return attributes == INVALID_FILE_ATTRIBUTES ? LSM_PRIVATE_FILE_LOCK_IO
+                                                 : LSM_PRIVATE_FILE_LOCK_UNSAFE;
 }
 
-cbm_private_file_lock_status_t cbm_private_lock_directory_adopt_windows(
-    void *directory_handle, const char *stable_path, cbm_private_lock_directory_t **directory_out) {
+lsm_private_file_lock_status_t lsm_private_lock_directory_adopt_windows(
+    void *directory_handle, const char *stable_path, lsm_private_lock_directory_t **directory_out) {
     if (directory_out) {
         *directory_out = NULL;
     }
     HANDLE handle = (HANDLE)directory_handle;
     if (!directory_out || !stable_path || !stable_path[0] || !handle ||
         handle == INVALID_HANDLE_VALUE) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     wchar_t *wide_path = NULL;
-    cbm_private_file_lock_status_t path_status =
+    lsm_private_file_lock_status_t path_status =
         private_win_path_from_utf8(stable_path, &wide_path);
-    if (path_status != CBM_PRIVATE_FILE_LOCK_OK) {
+    if (path_status != LSM_PRIVATE_FILE_LOCK_OK) {
         return path_status;
     }
     private_win_security_t security;
     if (!private_win_security_init(&security)) {
         free(wide_path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     if (!private_win_make_noninheritable(handle)) {
         private_win_security_destroy(&security);
         free(wide_path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
 
-    cbm_private_lock_directory_t candidate;
+    lsm_private_lock_directory_t candidate;
     memset(&candidate, 0, sizeof(candidate));
     candidate.handle = handle;
     candidate.wide_path = wide_path;
@@ -1243,62 +1243,62 @@ cbm_private_file_lock_status_t cbm_private_lock_directory_adopt_windows(
     if (!safe) {
         private_win_security_destroy(&candidate.security);
         free(wide_path);
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
 
     size_t path_length = strlen(stable_path);
-    cbm_private_lock_directory_t *directory = calloc(1, sizeof(*directory));
+    lsm_private_lock_directory_t *directory = calloc(1, sizeof(*directory));
     char *path_copy = malloc(path_length + 1);
     if (!directory || !path_copy) {
         free(directory);
         free(path_copy);
         private_win_security_destroy(&candidate.security);
         free(wide_path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     memcpy(path_copy, stable_path, path_length + 1);
     *directory = candidate;
     directory->path = path_copy;
     *directory_out = directory;
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
-    cbm_private_lock_directory_t *directory, const char *base_name,
-    cbm_private_file_lock_mode_t mode, cbm_private_file_lock_t **lock_out) {
+lsm_private_file_lock_status_t lsm_private_file_lock_try_acquire(
+    lsm_private_lock_directory_t *directory, const char *base_name,
+    lsm_private_file_lock_mode_t mode, lsm_private_file_lock_t **lock_out) {
     if (lock_out) {
         *lock_out = NULL;
     }
     if (!directory || !lock_out || !private_win_base_name_valid(base_name) ||
-        (mode != CBM_PRIVATE_FILE_LOCK_SH && mode != CBM_PRIVATE_FILE_LOCK_EX)) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        (mode != LSM_PRIVATE_FILE_LOCK_SH && mode != LSM_PRIVATE_FILE_LOCK_EX)) {
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     if (!private_win_directory_revalidate(directory)) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
     wchar_t *path = private_win_file_path(directory, base_name);
     if (!path) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
+    if (!lsm_private_file_lock_fork_guard_enter()) {
         free(path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     HANDLE handle =
         CreateFileW(path, GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
                     FILE_SHARE_READ | FILE_SHARE_WRITE, &directory->security.attributes,
                     OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (handle == INVALID_HANDLE_VALUE) {
-        cbm_private_file_lock_status_t status = private_win_open_failure_status(path);
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_status_t status = private_win_open_failure_status(path);
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
         return status;
     }
     if (!private_win_make_noninheritable(handle)) {
         (void)CloseHandle(handle);
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
 
     BY_HANDLE_FILE_INFORMATION information;
@@ -1310,23 +1310,23 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
     }
     if (!initially_valid) {
         (void)CloseHandle(handle);
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
 
-    cbm_private_file_lock_t *lock = calloc(1, sizeof(*lock));
+    lsm_private_file_lock_t *lock = calloc(1, sizeof(*lock));
     if (!lock) {
         (void)CloseHandle(handle);
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     lock->handle = handle;
     lock->mode = mode;
 
     DWORD flags = LOCKFILE_FAIL_IMMEDIATELY;
-    if (mode == CBM_PRIVATE_FILE_LOCK_EX) {
+    if (mode == LSM_PRIVATE_FILE_LOCK_EX) {
         flags |= LOCKFILE_EXCLUSIVE_LOCK;
     }
     bool forced_lock_failure = directory->test_fail_lock_attempt_once;
@@ -1340,14 +1340,14 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
         lock->unlocked = true;
         lock->test_fail_close_once = fail_lock_cleanup_close;
         *lock_out = lock;
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
-        cbm_private_file_lock_status_t failure_status = lock_error == ERROR_LOCK_VIOLATION
-                                                            ? CBM_PRIVATE_FILE_LOCK_BUSY
-                                                            : CBM_PRIVATE_FILE_LOCK_IO;
-        cbm_private_file_lock_status_t cleanup_status = cbm_private_file_lock_release(lock_out);
-        return cleanup_status == CBM_PRIVATE_FILE_LOCK_OK ? failure_status
-                                                          : CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_status_t failure_status = lock_error == ERROR_LOCK_VIOLATION
+                                                            ? LSM_PRIVATE_FILE_LOCK_BUSY
+                                                            : LSM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_status_t cleanup_status = lsm_private_file_lock_release(lock_out);
+        return cleanup_status == LSM_PRIVATE_FILE_LOCK_OK ? failure_status
+                                                          : LSM_PRIVATE_FILE_LOCK_IO;
     }
     bool forced_cleanup = directory->test_fail_post_acquire_once;
     bool fail_cleanup_unlock = directory->test_fail_post_acquire_unlock;
@@ -1356,24 +1356,24 @@ cbm_private_file_lock_status_t cbm_private_file_lock_try_acquire(
     directory->test_fail_post_acquire_unlock = false;
     directory->test_fail_post_acquire_close = false;
     if (forced_cleanup || !private_win_file_revalidate(directory, path, handle, &identity)) {
-        cbm_private_file_lock_status_t failure_status =
-            forced_cleanup ? CBM_PRIVATE_FILE_LOCK_IO : CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        lsm_private_file_lock_status_t failure_status =
+            forced_cleanup ? LSM_PRIVATE_FILE_LOCK_IO : LSM_PRIVATE_FILE_LOCK_UNSAFE;
         lock->test_fail_unlock_once = fail_cleanup_unlock;
         lock->test_fail_close_once = fail_cleanup_close;
         *lock_out = lock;
-        cbm_private_file_lock_fork_guard_leave();
+        lsm_private_file_lock_fork_guard_leave();
         free(path);
-        cbm_private_file_lock_status_t cleanup_status = cbm_private_file_lock_release(lock_out);
-        return cleanup_status == CBM_PRIVATE_FILE_LOCK_OK ? failure_status
-                                                          : CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_status_t cleanup_status = lsm_private_file_lock_release(lock_out);
+        return cleanup_status == LSM_PRIVATE_FILE_LOCK_OK ? failure_status
+                                                          : LSM_PRIVATE_FILE_LOCK_IO;
     }
     free(path);
     *lock_out = lock;
-    cbm_private_file_lock_fork_guard_leave();
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    lsm_private_file_lock_fork_guard_leave();
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-static bool private_win_payload_handle_valid(const cbm_private_file_lock_t *lock) {
+static bool private_win_payload_handle_valid(const lsm_private_file_lock_t *lock) {
     BY_HANDLE_FILE_INFORMATION information;
     return lock && lock->handle != INVALID_HANDLE_VALUE && !lock->unlocked &&
            GetFileType(lock->handle) == FILE_TYPE_DISK &&
@@ -1383,17 +1383,17 @@ static bool private_win_payload_handle_valid(const cbm_private_file_lock_t *lock
            information.nNumberOfLinks == 1 && private_win_handle_is_noninheritable(lock->handle);
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_payload_read(cbm_private_file_lock_t *lock,
+lsm_private_file_lock_status_t lsm_private_file_lock_payload_read(lsm_private_file_lock_t *lock,
                                                                   void *buffer, size_t capacity,
                                                                   size_t *length_out) {
     if (length_out) {
         *length_out = 0;
     }
     if (!lock || !buffer || capacity == 0 || !length_out) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     LARGE_INTEGER size;
     LARGE_INTEGER zero;
@@ -1413,23 +1413,23 @@ cbm_private_file_lock_status_t cbm_private_file_lock_payload_read(cbm_private_fi
             count > 0;
         offset += valid ? (size_t)count : 0;
     }
-    cbm_private_file_lock_fork_guard_leave();
+    lsm_private_file_lock_fork_guard_leave();
     if (!valid) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     *length_out = length;
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_payload_write(cbm_private_file_lock_t *lock,
+lsm_private_file_lock_status_t lsm_private_file_lock_payload_write(lsm_private_file_lock_t *lock,
                                                                    const void *buffer,
                                                                    size_t length) {
     if (!lock || !buffer || length == 0 || length > PRIVATE_FILE_LOCK_PAYLOAD_CAP ||
-        lock->mode != CBM_PRIVATE_FILE_LOCK_EX) {
-        return CBM_PRIVATE_FILE_LOCK_UNSAFE;
+        lock->mode != LSM_PRIVATE_FILE_LOCK_EX) {
+        return LSM_PRIVATE_FILE_LOCK_UNSAFE;
     }
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     LARGE_INTEGER zero;
     zero.QuadPart = 0;
@@ -1446,11 +1446,11 @@ cbm_private_file_lock_status_t cbm_private_file_lock_payload_write(cbm_private_f
         offset += valid ? (size_t)count : 0;
     }
     valid = valid && FlushFileBuffers(lock->handle) != 0;
-    cbm_private_file_lock_fork_guard_leave();
-    return valid ? CBM_PRIVATE_FILE_LOCK_OK : CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_fork_guard_leave();
+    return valid ? LSM_PRIVATE_FILE_LOCK_OK : LSM_PRIVATE_FILE_LOCK_IO;
 }
 
-static bool private_win_release_unlock(cbm_private_file_lock_t *lock) {
+static bool private_win_release_unlock(lsm_private_file_lock_t *lock) {
     lock->test_unlock_attempts++;
     if (lock->test_fail_unlock_once) {
         lock->test_fail_unlock_once = false;
@@ -1460,7 +1460,7 @@ static bool private_win_release_unlock(cbm_private_file_lock_t *lock) {
     return UnlockFileEx(lock->handle, 0, 1, 0, &lock->range) != 0;
 }
 
-static bool private_win_release_close(cbm_private_file_lock_t *lock) {
+static bool private_win_release_close(lsm_private_file_lock_t *lock) {
     lock->test_close_attempts++;
     if (lock->test_fail_close_once) {
         lock->test_fail_close_once = false;
@@ -1470,37 +1470,37 @@ static bool private_win_release_close(cbm_private_file_lock_t *lock) {
     return CloseHandle(lock->handle) != 0;
 }
 
-cbm_private_file_lock_status_t cbm_private_file_lock_release(cbm_private_file_lock_t **lock_io) {
+lsm_private_file_lock_status_t lsm_private_file_lock_release(lsm_private_file_lock_t **lock_io) {
     if (!lock_io || !*lock_io) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
-    cbm_private_file_lock_t *lock = *lock_io;
-    if (!cbm_private_file_lock_fork_guard_enter()) {
-        return CBM_PRIVATE_FILE_LOCK_IO;
+    lsm_private_file_lock_t *lock = *lock_io;
+    if (!lsm_private_file_lock_fork_guard_enter()) {
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     if (lock->handle == INVALID_HANDLE_VALUE) {
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     if (!lock->unlocked) {
         if (!private_win_release_unlock(lock)) {
-            cbm_private_file_lock_fork_guard_leave();
-            return CBM_PRIVATE_FILE_LOCK_IO;
+            lsm_private_file_lock_fork_guard_leave();
+            return LSM_PRIVATE_FILE_LOCK_IO;
         }
         lock->unlocked = true;
     }
     if (!private_win_release_close(lock)) {
-        cbm_private_file_lock_fork_guard_leave();
-        return CBM_PRIVATE_FILE_LOCK_IO;
+        lsm_private_file_lock_fork_guard_leave();
+        return LSM_PRIVATE_FILE_LOCK_IO;
     }
     lock->handle = INVALID_HANDLE_VALUE;
-    cbm_private_file_lock_fork_guard_leave();
+    lsm_private_file_lock_fork_guard_leave();
     *lock_io = NULL;
     free(lock);
-    return CBM_PRIVATE_FILE_LOCK_OK;
+    return LSM_PRIVATE_FILE_LOCK_OK;
 }
 
-void cbm_private_lock_directory_close(cbm_private_lock_directory_t *directory) {
+void lsm_private_lock_directory_close(lsm_private_lock_directory_t *directory) {
     if (!directory) {
         return;
     }
@@ -1513,20 +1513,20 @@ void cbm_private_lock_directory_close(cbm_private_lock_directory_t *directory) {
     free(directory);
 }
 
-const char *cbm_private_lock_directory_path(const cbm_private_lock_directory_t *directory) {
+const char *lsm_private_lock_directory_path(const lsm_private_lock_directory_t *directory) {
     return directory ? directory->path : NULL;
 }
 
-bool cbm_private_file_lock_is_cloexec_for_test(const cbm_private_file_lock_t *lock) {
+bool lsm_private_file_lock_is_cloexec_for_test(const lsm_private_file_lock_t *lock) {
     return lock && private_win_handle_is_noninheritable(lock->handle);
 }
 
-bool cbm_private_file_lock_unlock_complete(const cbm_private_file_lock_t *lock) {
+bool lsm_private_file_lock_unlock_complete(const lsm_private_file_lock_t *lock) {
     return lock && lock->unlocked;
 }
 
-bool cbm_private_lock_directory_fail_post_acquire_cleanup_for_test(
-    cbm_private_lock_directory_t *directory, bool fail_unlock, bool fail_close) {
+bool lsm_private_lock_directory_fail_post_acquire_cleanup_for_test(
+    lsm_private_lock_directory_t *directory, bool fail_unlock, bool fail_close) {
     if (!directory || (!fail_unlock && !fail_close)) {
         return false;
     }
@@ -1536,8 +1536,8 @@ bool cbm_private_lock_directory_fail_post_acquire_cleanup_for_test(
     return true;
 }
 
-bool cbm_private_lock_directory_fail_lock_attempt_cleanup_for_test(
-    cbm_private_lock_directory_t *directory) {
+bool lsm_private_lock_directory_fail_lock_attempt_cleanup_for_test(
+    lsm_private_lock_directory_t *directory) {
     if (!directory) {
         return false;
     }
@@ -1546,37 +1546,37 @@ bool cbm_private_lock_directory_fail_lock_attempt_cleanup_for_test(
     return true;
 }
 
-bool cbm_private_file_lock_fail_next_release_step_for_test(
-    cbm_private_file_lock_t *lock, cbm_private_file_lock_release_step_t step) {
+bool lsm_private_file_lock_fail_next_release_step_for_test(
+    lsm_private_file_lock_t *lock, lsm_private_file_lock_release_step_t step) {
     if (!lock) {
         return false;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
         lock->test_fail_unlock_once = true;
         return true;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
         lock->test_fail_close_once = true;
         return true;
     }
     return false;
 }
 
-unsigned int cbm_private_file_lock_release_step_attempts_for_test(
-    const cbm_private_file_lock_t *lock, cbm_private_file_lock_release_step_t step) {
+unsigned int lsm_private_file_lock_release_step_attempts_for_test(
+    const lsm_private_file_lock_t *lock, lsm_private_file_lock_release_step_t step) {
     if (!lock) {
         return 0;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_UNLOCK) {
         return lock->test_unlock_attempts;
     }
-    if (step == CBM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
+    if (step == LSM_PRIVATE_FILE_LOCK_RELEASE_CLOSE) {
         return lock->test_close_attempts;
     }
     return 0;
 }
 
-bool cbm_private_file_lock_fork_guard_enter(void) {
+bool lsm_private_file_lock_fork_guard_enter(void) {
     if (!InitOnceExecuteOnce(&private_win_gate_once, private_win_gate_initialize, NULL, NULL)) {
         return false;
     }
@@ -1584,44 +1584,44 @@ bool cbm_private_file_lock_fork_guard_enter(void) {
     return true;
 }
 
-void cbm_private_file_lock_fork_guard_leave(void) {
+void lsm_private_file_lock_fork_guard_leave(void) {
     LeaveCriticalSection(&private_win_gate);
 }
 
-cbm_private_fork_condition_t *cbm_private_fork_condition_new(void) {
-    cbm_private_fork_condition_t *condition = calloc(1, sizeof(*condition));
+lsm_private_fork_condition_t *lsm_private_fork_condition_new(void) {
+    lsm_private_fork_condition_t *condition = calloc(1, sizeof(*condition));
     if (condition) {
         InitializeConditionVariable(&condition->value);
     }
     return condition;
 }
 
-void cbm_private_fork_condition_free(cbm_private_fork_condition_t *condition) {
+void lsm_private_fork_condition_free(lsm_private_fork_condition_t *condition) {
     free(condition);
 }
 
-void cbm_private_fork_condition_broadcast_while_guarded(cbm_private_fork_condition_t *condition) {
+void lsm_private_fork_condition_broadcast_while_guarded(lsm_private_fork_condition_t *condition) {
     if (condition) {
         WakeAllConditionVariable(&condition->value);
     }
 }
 
-cbm_private_fork_wait_status_t cbm_private_fork_condition_wait_until_while_guarded(
-    cbm_private_fork_condition_t *condition, uint64_t deadline_ms) {
+lsm_private_fork_wait_status_t lsm_private_fork_condition_wait_until_while_guarded(
+    lsm_private_fork_condition_t *condition, uint64_t deadline_ms) {
     if (!condition) {
-        return CBM_PRIVATE_FORK_WAIT_ERROR;
+        return LSM_PRIVATE_FORK_WAIT_ERROR;
     }
     DWORD timeout = INFINITE;
     if (deadline_ms != UINT64_MAX) {
-        uint64_t now_ms = cbm_now_ms();
+        uint64_t now_ms = lsm_now_ms();
         uint64_t remaining_ms = deadline_ms > now_ms ? deadline_ms - now_ms : 0;
         timeout = remaining_ms >= (uint64_t)INFINITE ? INFINITE - 1U : (DWORD)remaining_ms;
     }
     if (SleepConditionVariableCS(&condition->value, &private_win_gate, timeout)) {
-        return CBM_PRIVATE_FORK_WAIT_SIGNALED;
+        return LSM_PRIVATE_FORK_WAIT_SIGNALED;
     }
-    return GetLastError() == ERROR_TIMEOUT ? CBM_PRIVATE_FORK_WAIT_TIMEOUT
-                                           : CBM_PRIVATE_FORK_WAIT_ERROR;
+    return GetLastError() == ERROR_TIMEOUT ? LSM_PRIVATE_FORK_WAIT_TIMEOUT
+                                           : LSM_PRIVATE_FORK_WAIT_ERROR;
 }
 
 #endif

@@ -31,7 +31,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -52,7 +52,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } ProbeLangProj;
 
 typedef struct {
@@ -66,29 +66,29 @@ static void pb_fwd_slashes(char *p) {
     }
 }
 
-static cbm_store_t *pb_open_indexed(ProbeLangProj *lp) {
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+static lsm_store_t *pb_open_indexed(ProbeLangProj *lp) {
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static cbm_store_t *pb_index_files(ProbeLangProj *lp, const ProbeLangFile *files, int nfiles) {
+static lsm_store_t *pb_index_files(ProbeLangProj *lp, const ProbeLangFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_pb_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_pb_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     pb_fwd_slashes(lp->tmpdir);
     for (int i = 0; i < nfiles; i++) {
         char path[700];
@@ -96,7 +96,7 @@ static cbm_store_t *pb_index_files(ProbeLangProj *lp, const ProbeLangFile *files
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -107,14 +107,14 @@ static cbm_store_t *pb_index_files(ProbeLangProj *lp, const ProbeLangFile *files
     return pb_open_indexed(lp);
 }
 
-static cbm_store_t *pb_index(ProbeLangProj *lp, const char *filename, const char *content) {
+static lsm_store_t *pb_index(ProbeLangProj *lp, const char *filename, const char *content) {
     ProbeLangFile f = {filename, content};
     return pb_index_files(lp, &f, 1);
 }
 
-static void pb_cleanup(ProbeLangProj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void pb_cleanup(ProbeLangProj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project); lp->project = NULL;
     th_rmtree(lp->tmpdir);
     unlink(lp->dbpath);
@@ -125,24 +125,24 @@ static void pb_cleanup(ProbeLangProj *lp, cbm_store_t *store) {
 }
 
 /* Count nodes by label. Returns -1 on store error. */
-static int pb_count_label(cbm_store_t *store, const char *project, const char *label) {
-    cbm_node_t *nodes = NULL;
+static int pb_count_label(lsm_store_t *store, const char *project, const char *label) {
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    if (cbm_store_find_nodes_by_label(store, project, label, &nodes, &count) != CBM_STORE_OK)
+    if (lsm_store_find_nodes_by_label(store, project, label, &nodes, &count) != LSM_STORE_OK)
         return -1;
-    cbm_store_free_nodes(nodes, count);
+    lsm_store_free_nodes(nodes, count);
     return count;
 }
 
 /* Sum across the labels different languages use for callables. */
-static int pb_callable_nodes(cbm_store_t *store, const char *project) {
+static int pb_callable_nodes(lsm_store_t *store, const char *project) {
     int fn = pb_count_label(store, project, "Function");
     int mt = pb_count_label(store, project, "Method");
     return (fn < 0 ? 0 : fn) + (mt < 0 ? 0 : mt);
 }
 
 /* Sum across type-like labels. */
-static int pb_type_nodes(cbm_store_t *store, const char *project) {
+static int pb_type_nodes(lsm_store_t *store, const char *project) {
     static const char *labels[] = {"Class", "Struct", "Interface", "Enum", "Trait", "Type", NULL};
     int total = 0;
     for (int i = 0; labels[i]; i++) {
@@ -162,7 +162,7 @@ static int pb_type_nodes(cbm_store_t *store, const char *project) {
 /* GLSL: helper + main entrypoint must both reach graph as Function nodes. */
 TEST(glsl_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "shader.glsl",
+    lsm_store_t *store = pb_index(&lp, "shader.glsl",
         "float luminance(vec3 color) {\n"
         "    return dot(color, vec3(0.299, 0.587, 0.114));\n"
         "}\n\n"
@@ -179,7 +179,7 @@ TEST(glsl_function_nodes) {
 /* GLSL: struct type (e.g. Light) must appear as a type node. */
 TEST(glsl_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "light.glsl",
+    lsm_store_t *store = pb_index(&lp, "light.glsl",
         "struct Light {\n"
         "    vec3 position;\n"
         "    vec3 color;\n"
@@ -203,7 +203,7 @@ TEST(glsl_struct_node) {
 /* GLSL: vertex shader with multiple stage-specific functions. */
 TEST(glsl_vertex_shader_functions) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "vert.glsl",
+    lsm_store_t *store = pb_index(&lp, "vert.glsl",
         "vec4 transform(vec4 pos, mat4 mvp) {\n"
         "    return mvp * pos;\n"
         "}\n\n"
@@ -228,7 +228,7 @@ TEST(glsl_vertex_shader_functions) {
 /* Hare: function nodes from top-level fn declarations. */
 TEST(hare_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "math.ha",
+    lsm_store_t *store = pb_index(&lp, "math.ha",
         "fn square(x: i64) i64 = x * x;\n\n"
         "fn cube(x: i64) i64 = x * x * x;\n\n"
         "fn sum_of_squares(a: i64, b: i64) i64 = {\n"
@@ -243,7 +243,7 @@ TEST(hare_function_nodes) {
 /* Hare: type definition (struct) reaches graph as a type node. */
 TEST(hare_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "point.ha",
+    lsm_store_t *store = pb_index(&lp, "point.ha",
         "type point = struct {\n"
         "    x: i64,\n"
         "    y: i64,\n"
@@ -261,7 +261,7 @@ TEST(hare_struct_node) {
 
 /* Hare: `use` import statement → IMPORTS edge (extraction-level check).
  * The graph-level IMPORTS edge requires cross-file resolution which a single
- * fixture cannot trigger — so we probe at extraction level via cbm_extract_file. */
+ * fixture cannot trigger — so we probe at extraction level via lsm_extract_file. */
 TEST(hare_use_import_extracted) {
     static const char *src =
         "use fmt;\n"
@@ -269,11 +269,11 @@ TEST(hare_use_import_extracted) {
         "fn greet(name: str) void = {\n"
         "    fmt::println(name);\n"
         "};\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_HARE, "lc", "greet.ha", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_HARE, "lc", "greet.ha", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* use fmt; use strings; → BUG if 0: hare `use` not extracted */
     PASS();
 }
@@ -287,7 +287,7 @@ TEST(hare_use_import_extracted) {
 /* HLSL: pixel shader functions must reach graph. */
 TEST(hlsl_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "pixel.hlsl",
+    lsm_store_t *store = pb_index(&lp, "pixel.hlsl",
         "float4 tint(float4 color, float factor) {\n"
         "    return color * factor;\n"
         "}\n\n"
@@ -307,7 +307,7 @@ TEST(hlsl_function_nodes) {
 /* HLSL: struct definition reaches graph as type node. */
 TEST(hlsl_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "types.hlsl",
+    lsm_store_t *store = pb_index(&lp, "types.hlsl",
         "struct VSInput {\n"
         "    float4 position : POSITION;\n"
         "    float2 texcoord : TEXCOORD0;\n"
@@ -331,7 +331,7 @@ TEST(hlsl_struct_node) {
 /* HLSL: compute shader kernel (another entrypoint style). */
 TEST(hlsl_compute_shader_function) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "compute.hlsl",
+    lsm_store_t *store = pb_index(&lp, "compute.hlsl",
         "RWBuffer<float> gOutput : register(u0);\n\n"
         "float transform(float x) {\n"
         "    return x * x;\n"
@@ -355,7 +355,7 @@ TEST(hlsl_compute_shader_function) {
 /* ISPC: uniform and varying function nodes. */
 TEST(ispc_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "kernel.ispc",
+    lsm_store_t *store = pb_index(&lp, "kernel.ispc",
         "float square(float x) {\n"
         "    return x * x;\n"
         "}\n\n"
@@ -376,7 +376,7 @@ TEST(ispc_function_nodes) {
 /* ISPC: struct definition reaches graph as type node. */
 TEST(ispc_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "types.ispc",
+    lsm_store_t *store = pb_index(&lp, "types.ispc",
         "struct Vec3 {\n"
         "    float x, y, z;\n"
         "};\n\n"
@@ -398,7 +398,7 @@ TEST(ispc_struct_node) {
 /* ISPC: task function (another callable kind). */
 TEST(ispc_task_function) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "tasks.ispc",
+    lsm_store_t *store = pb_index(&lp, "tasks.ispc",
         "uniform float compute(uniform float x) {\n"
         "    return x * 2.0f;\n"
         "}\n\n"
@@ -422,7 +422,7 @@ TEST(ispc_task_function) {
 /* Julia: function and struct nodes. */
 TEST(julia_function_and_struct_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "geom.jl",
+    lsm_store_t *store = pb_index(&lp, "geom.jl",
         "struct Point\n"
         "    x::Float64\n"
         "    y::Float64\n"
@@ -449,11 +449,11 @@ TEST(julia_using_import_extracted) {
         "function norm_vec(v::Vector{Float64})::Float64\n"
         "    return norm(v)\n"
         "end\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_JULIA, "lc", "vec.jl", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_JULIA, "lc", "vec.jl", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* using LinearAlgebra; using Statistics → BUG if 0 */
     PASS();
 }
@@ -467,11 +467,11 @@ TEST(julia_import_extracted) {
         "    data::Vector{Float64}\n"
         "end\n\n"
         "Base.length(v::MyVec) = length(v.data)\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_JULIA, "lc", "myvec.jl", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_JULIA, "lc", "myvec.jl", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* import Base; import Random → BUG if 0 */
     PASS();
 }
@@ -490,8 +490,8 @@ TEST(julia_abstract_subtype_extracted) {
         "    s = (t.a + t.b + t.c) / 2\n"
         "    return sqrt(s * (s-t.a) * (s-t.b) * (s-t.c))\n"
         "end\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_JULIA, "lc", "shapes.jl", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_JULIA, "lc", "shapes.jl", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     /* We expect at least 1 def whose base_classes is non-empty (Polygon<:Shape or
      * Triangle<:Polygon).  Iterate defs to check. */
@@ -502,7 +502,7 @@ TEST(julia_abstract_subtype_extracted) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(found_base); /* BUG if 0: julia `<:` base not extracted */
     PASS();
 }
@@ -510,7 +510,7 @@ TEST(julia_abstract_subtype_extracted) {
 /* Julia: full-pipeline INHERITS edge for same-file abstract subtype chain. */
 TEST(julia_inherits_edge) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "animals.jl",
+    lsm_store_t *store = pb_index(&lp, "animals.jl",
         "abstract type Animal end\n\n"
         "abstract type Pet <: Animal end\n\n"
         "struct Dog <: Pet\n"
@@ -519,7 +519,7 @@ TEST(julia_inherits_edge) {
         "function speak(d::Dog)::String\n"
         "    return \"Woof: \" * d.name\n"
         "end\n");
-    int inherits = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    int inherits = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     pb_cleanup(&lp, store);
     ASSERT_TRUE(inherits >= 1); /* Pet<:Animal, Dog<:Pet → BUG if 0 */
     PASS();
@@ -534,7 +534,7 @@ TEST(julia_inherits_edge) {
 /* Luau: function nodes reach the graph. */
 TEST(luau_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "utils.luau",
+    lsm_store_t *store = pb_index(&lp, "utils.luau",
         "local function clamp(value: number, min: number, max: number): number\n"
         "    if value < min then return min end\n"
         "    if value > max then return max end\n"
@@ -553,7 +553,7 @@ TEST(luau_function_nodes) {
 /* Luau: type alias and interface-like construct (type keyword). */
 TEST(luau_type_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "types.luau",
+    lsm_store_t *store = pb_index(&lp, "types.luau",
         "type Vector2 = {\n"
         "    x: number,\n"
         "    y: number,\n"
@@ -577,7 +577,7 @@ TEST(luau_type_nodes) {
 /* Luau: class-style OOP via metatables (functions only — no native class keyword). */
 TEST(luau_class_style_functions) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "player.luau",
+    lsm_store_t *store = pb_index(&lp, "player.luau",
         "local Player = {}\n"
         "Player.__index = Player\n\n"
         "function Player.new(name: string): Player\n"
@@ -606,7 +606,7 @@ TEST(luau_class_style_functions) {
 /* MATLAB: top-level function and local subfunctions reach graph. */
 TEST(matlab_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "stats.m",
+    lsm_store_t *store = pb_index(&lp, "stats.m",
         "function result = compute_mean(data)\n"
         "    result = sum_values(data) / length(data);\n"
         "end\n\n"
@@ -625,7 +625,7 @@ TEST(matlab_function_nodes) {
 /* MATLAB: multiple function file — all functions are nodes. */
 TEST(matlab_multiple_functions) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "linalg.m",
+    lsm_store_t *store = pb_index(&lp, "linalg.m",
         "function c = dot_product(a, b)\n"
         "    c = sum(a .* b);\n"
         "end\n\n"
@@ -650,7 +650,7 @@ TEST(matlab_multiple_functions) {
 /* Odin: proc nodes reach graph. */
 TEST(odin_proc_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "math.odin",
+    lsm_store_t *store = pb_index(&lp, "math.odin",
         "package math\n\n"
         "square :: proc(x: f64) -> f64 {\n"
         "    return x * x\n"
@@ -672,7 +672,7 @@ TEST(odin_proc_nodes) {
 /* Odin: struct type node. */
 TEST(odin_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "point.odin",
+    lsm_store_t *store = pb_index(&lp, "point.odin",
         "package point\n\n"
         "Vec2 :: struct {\n"
         "    x, y: f64,\n"
@@ -699,11 +699,11 @@ TEST(odin_import_extracted) {
         "main :: proc() {\n"
         "    fmt.println(\"hello\")\n"
         "}\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_ODIN, "lc", "main.odin", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_ODIN, "lc", "main.odin", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* import "core:fmt"; import "core:os" → BUG if 0 */
     PASS();
 }
@@ -717,7 +717,7 @@ TEST(odin_import_extracted) {
 /* Pascal: procedure and function nodes. */
 TEST(pascal_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "arith.pas",
+    lsm_store_t *store = pb_index(&lp, "arith.pas",
         "unit Arith;\n\n"
         "interface\n\n"
         "function Add(a, b: Integer): Integer;\n"
@@ -746,7 +746,7 @@ TEST(pascal_function_nodes) {
 /* Pascal: record type node. */
 TEST(pascal_record_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "geom.pas",
+    lsm_store_t *store = pb_index(&lp, "geom.pas",
         "unit Geom;\n\n"
         "interface\n\n"
         "type\n"
@@ -784,11 +784,11 @@ TEST(pascal_uses_import_extracted) {
         "  Writeln(IntToStr(42));\n"
         "end;\n\n"
         "end.\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_PASCAL, "lc", "myunit.pas", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_PASCAL, "lc", "myunit.pas", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* uses SysUtils, Classes, Math → BUG if 0 */
     PASS();
 }
@@ -813,8 +813,8 @@ TEST(pascal_class_inheritance_extracted) {
         "procedure TDog.Speak; begin Writeln('Woof'); end;\n"
         "procedure TCat.Speak; begin Writeln('Meow'); end;\n\n"
         "end.\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_PASCAL, "lc", "zoo.pas", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_PASCAL, "lc", "zoo.pas", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int found_base = 0;
     for (int i = 0; i < r->defs.count; i++) {
@@ -823,7 +823,7 @@ TEST(pascal_class_inheritance_extracted) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(found_base); /* TDog(TAnimal), TCat(TAnimal) → BUG if 0 */
     PASS();
 }
@@ -831,7 +831,7 @@ TEST(pascal_class_inheritance_extracted) {
 /* Pascal: full-pipeline INHERITS edge for OOP class hierarchy. */
 TEST(pascal_inherits_edge) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "vehicles.pas",
+    lsm_store_t *store = pb_index(&lp, "vehicles.pas",
         "unit Vehicles;\n\n"
         "interface\n\n"
         "type\n"
@@ -849,7 +849,7 @@ TEST(pascal_inherits_edge) {
         "function TCar.GetSpeed: Integer; begin Result := 100; end;\n"
         "function TTruck.GetSpeed: Integer; begin Result := 80; end;\n\n"
         "end.\n");
-    int inherits = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    int inherits = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     pb_cleanup(&lp, store);
     ASSERT_TRUE(inherits >= 1); /* TCar->TVehicle, TTruck->TVehicle → BUG if 0 */
     PASS();
@@ -864,7 +864,7 @@ TEST(pascal_inherits_edge) {
 /* PowerShell: function nodes reach graph. */
 TEST(powershell_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "utils.ps1",
+    lsm_store_t *store = pb_index(&lp, "utils.ps1",
         "function Get-Square {\n"
         "    param([double]$x)\n"
         "    return $x * $x\n"
@@ -886,7 +886,7 @@ TEST(powershell_function_nodes) {
 /* PowerShell: class definition reaches graph as type node. */
 TEST(powershell_class_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "shapes.ps1",
+    lsm_store_t *store = pb_index(&lp, "shapes.ps1",
         "class Shape {\n"
         "    [string]$Name\n"
         "    Shape([string]$name) { $this.Name = $name }\n"
@@ -913,11 +913,11 @@ TEST(powershell_using_import_extracted) {
         "    param([string]$Path)\n"
         "    [System.IO.File]::Exists($Path)\n"
         "}\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_POWERSHELL, "lc", "task.ps1", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_POWERSHELL, "lc", "task.ps1", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* using module / using namespace → BUG if 0 */
     PASS();
 }
@@ -938,8 +938,8 @@ TEST(powershell_class_inheritance_extracted) {
         "    Cat([string]$name) : base($name) {}\n"
         "    [string] Speak() { return 'Meow' }\n"
         "}\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_POWERSHELL, "lc", "animals.ps1", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_POWERSHELL, "lc", "animals.ps1", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int found_base = 0;
     for (int i = 0; i < r->defs.count; i++) {
@@ -948,7 +948,7 @@ TEST(powershell_class_inheritance_extracted) {
             break;
         }
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(found_base); /* Dog : Animal, Cat : Animal → BUG if 0 */
     PASS();
 }
@@ -956,7 +956,7 @@ TEST(powershell_class_inheritance_extracted) {
 /* PowerShell: full-pipeline INHERITS edge from same-file class hierarchy. */
 TEST(powershell_inherits_edge) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "exceptions.ps1",
+    lsm_store_t *store = pb_index(&lp, "exceptions.ps1",
         "class AppException {\n"
         "    [string]$Message\n"
         "    AppException([string]$msg) { $this.Message = $msg }\n"
@@ -967,7 +967,7 @@ TEST(powershell_inherits_edge) {
         "class NetworkException : AppException {\n"
         "    NetworkException([string]$msg) : base($msg) {}\n"
         "}\n");
-    int inherits = store ? cbm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
+    int inherits = store ? lsm_store_count_edges_by_type(store, lp.project, "INHERITS") : -1;
     pb_cleanup(&lp, store);
     ASSERT_TRUE(inherits >= 1); /* Database->App, Network->App → BUG if 0 */
     PASS();
@@ -982,7 +982,7 @@ TEST(powershell_inherits_edge) {
 /* Racket: function (define) nodes reach graph. */
 TEST(racket_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "math.rkt",
+    lsm_store_t *store = pb_index(&lp, "math.rkt",
         "#lang racket\n\n"
         "(define (square x) (* x x))\n\n"
         "(define (cube x) (* x (square x)))\n\n"
@@ -999,7 +999,7 @@ TEST(racket_function_nodes) {
 /* Racket: struct definition reaches graph as type node. */
 TEST(racket_struct_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "point.rkt",
+    lsm_store_t *store = pb_index(&lp, "point.rkt",
         "#lang racket\n\n"
         "(struct point (x y) #:transparent)\n\n"
         "(struct circle (center radius) #:transparent)\n\n"
@@ -1024,11 +1024,11 @@ TEST(racket_require_import_extracted) {
         "  (* pi r r))\n\n"
         "(define (join-words words)\n"
         "  (string-join words \" \"))\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_RACKET, "lc", "utils.rkt", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_RACKET, "lc", "utils.rkt", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* require racket/list etc. → BUG if 0 */
     PASS();
 }
@@ -1046,8 +1046,8 @@ TEST(racket_imports_edge) {
          "(require \"math.rkt\")\n"
          "(define (run n) (+ (square n) (cube n)))\n"}};
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index_files(&lp, files, 2);
-    int imports = store ? cbm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
+    lsm_store_t *store = pb_index_files(&lp, files, 2);
+    int imports = store ? lsm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
     pb_cleanup(&lp, store);
     ASSERT_TRUE(imports >= 1); /* main.rkt requires math.rkt → BUG if 0 */
     PASS();
@@ -1062,7 +1062,7 @@ TEST(racket_imports_edge) {
 /* ReScript: let-bound function nodes reach graph. */
 TEST(rescript_function_nodes) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "math.res",
+    lsm_store_t *store = pb_index(&lp, "math.res",
         "let square = (x: float) => x *. x\n\n"
         "let cube = (x: float) => x *. square(x)\n\n"
         "let clamp = (v: float, lo: float, hi: float) =>\n"
@@ -1076,7 +1076,7 @@ TEST(rescript_function_nodes) {
 /* ReScript: type definition reaches graph as type node. */
 TEST(rescript_type_node) {
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index(&lp, "types.res",
+    lsm_store_t *store = pb_index(&lp, "types.res",
         "type color = Red | Green | Blue\n\n"
         "type point = {\n"
         "  x: float,\n"
@@ -1104,11 +1104,11 @@ TEST(rescript_open_import_extracted) {
         "  Array.reduce(arr, 0, (acc, x) => acc + x)\n\n"
         "let max_val = (arr: array<int>) =>\n"
         "  Array.reduce(arr, Int.min_int, (acc, x) => if x > acc { x } else { acc })\n";
-    CBMFileResult *r = cbm_extract_file(src, (int)strlen(src),
-                                        CBM_LANG_RESCRIPT, "lc", "utils.res", 0, NULL, NULL);
+    LSMFileResult *r = lsm_extract_file(src, (int)strlen(src),
+                                        LSM_LANG_RESCRIPT, "lc", "utils.res", 0, NULL, NULL);
     ASSERT_NOT_NULL(r);
     int n = r->imports.count;
-    cbm_free_result(r);
+    lsm_free_result(r);
     ASSERT_TRUE(n >= 1); /* open Belt; open Belt.Array → BUG if 0 */
     PASS();
 }
@@ -1123,8 +1123,8 @@ TEST(rescript_imports_edge) {
          "open Utils\n\n"
          "let run = (n: float) => square(n) +. cube(n)\n"}};
     ProbeLangProj lp;
-    cbm_store_t *store = pb_index_files(&lp, files, 2);
-    int imports = store ? cbm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
+    lsm_store_t *store = pb_index_files(&lp, files, 2);
+    int imports = store ? lsm_store_count_edges_by_type(store, lp.project, "IMPORTS") : -1;
     pb_cleanup(&lp, store);
     ASSERT_TRUE(imports >= 1); /* Main opens Utils → BUG if 0 */
     PASS();

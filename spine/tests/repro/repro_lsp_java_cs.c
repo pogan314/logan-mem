@@ -1,6 +1,6 @@
 /*
  * repro_lsp_java_cs.c — EXHAUSTIVE per-LSP-pass invariant suite for the Java
- * (internal/cbm/lsp/java_lsp.c) and C# (internal/cbm/lsp/cs_lsp.c) hybrid LSPs.
+ * (internal/lsm/lsp/java_lsp.c) and C# (internal/lsm/lsp/cs_lsp.c) hybrid LSPs.
  *
  * This MIRRORS repro_lsp_c_cpp.c: same shared assert_lsp_strategy runner, same
  * two invariants per strategy (callable-sourcing floor + strategy-presence),
@@ -39,14 +39,14 @@
  *                the exact gap for the eventual fixer.
  *
  * Like repro_invariant_lsp_rescue.c, a strategy correctly EMITTED by the
- *   resolver can still be ABSENT here if cbm_pipeline_find_lsp_resolution
+ *   resolver can still be ABSENT here if lsm_pipeline_find_lsp_resolution
  *   (src/pipeline/lsp_resolve.h) fails to join the LSP-resolved call to the
  *   tree-sitter call by exact caller-QN equality (#554). The in-line / method
  *   fixtures below keep the call inside a real callable so the join target is a
  *   method QN, not the module QN.
  *
  * JAVA STRATEGY INVENTORY — every literal "lsp_..." emitted by java_lsp.c,
- *   grepped from source (grep '"lsp_' internal/cbm/lsp/java_lsp.c):
+ *   grepped from source (grep '"lsp_' internal/lsm/lsp/java_lsp.c):
  *     lsp_type_dispatch        (1823/1923)  obj.method() / bare call on own class
  *     lsp_inherited_dispatch   (1825/1925)  call to an INHERITED (base) method
  *     lsp_outer_dispatch       (1839)       bare call resolved on an OUTER class
@@ -64,7 +64,7 @@
  *     lsp_unresolved           (1801)       fallback marker for an unresolved call
  *
  * C# STRATEGY INVENTORY — every literal "cs_..." emitted by cs_lsp.c, grepped
- *   from source (grep '"cs_' internal/cbm/lsp/cs_lsp.c):
+ *   from source (grep '"cs_' internal/lsm/lsp/cs_lsp.c):
  *     cs_static_typed           (1468)  Type.StaticMethod(), method indexed
  *     cs_static_typed_unindexed (1472)  Type.StaticMethod(), method NOT in registry
  *     cs_method_typed           (1494)  obj.Method() on own declared type
@@ -105,7 +105,7 @@
 static int assert_lsp_strategy(const char *filename, const char *src,
                                const char *strategy) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for strategy %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, strategy);
@@ -152,33 +152,33 @@ static int assert_lsp_strategy(const char *filename, const char *src,
     return rc;
 }
 
-static int count_edges_from_callable(cbm_store_t *store, const char *project, const char *edge_type,
+static int count_edges_from_callable(lsm_store_t *store, const char *project, const char *edge_type,
                                      const char *callable_name) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    if (cbm_store_find_edges_by_type(store, project, edge_type, &edges, &edge_count) !=
-        CBM_STORE_OK) {
+    if (lsm_store_find_edges_by_type(store, project, edge_type, &edges, &edge_count) !=
+        LSM_STORE_OK) {
         return 0;
     }
 
     int matches = 0;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t source = {0};
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &source) == CBM_STORE_OK &&
+        lsm_node_t source = {0};
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &source) == LSM_STORE_OK &&
             source.name && strcmp(source.name, callable_name) == 0 && source.label &&
             (strcmp(source.label, "Function") == 0 || strcmp(source.label, "Method") == 0)) {
             matches++;
         }
-        cbm_node_free_fields(&source);
+        lsm_node_free_fields(&source);
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     return matches;
 }
 
 static int assert_method_reference_semantics(const char *filename, const char *src,
                                              int target_is_materialized) {
     RProj project;
-    cbm_store_t *store = rh_index(&project, filename, src);
+    lsm_store_t *store = rh_index(&project, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: method-reference fixture failed to index\n", tf_red(), tf_reset(),
                __FILE__, __LINE__);
@@ -222,7 +222,7 @@ static int assert_method_reference_semantics(const char *filename, const char *s
 static int assert_no_resolvable_edge(const char *filename, const char *src,
                                      const char *callee_substr) {
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, filename, src);
+    lsm_store_t *store = rh_index(&lp, filename, src);
     if (!store) {
         printf("  %sFAIL%s %s:%d: index failed for no-edge callee %s\n", tf_red(),
                tf_reset(), __FILE__, __LINE__, callee_substr);

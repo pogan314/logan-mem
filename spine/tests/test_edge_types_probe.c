@@ -42,7 +42,7 @@
 #include "../src/foundation/compat.h"
 #include "test_framework.h"
 #include "test_helpers.h"
-#include "cbm.h"
+#include "lsm.h"
 #include <mcp/mcp.h>
 #include <store/store.h>
 #include <pipeline/pipeline.h>
@@ -60,7 +60,7 @@ typedef struct {
     char tmpdir[256];
     char dbpath[512];
     char *project;
-    cbm_mcp_server_t *srv;
+    lsm_mcp_server_t *srv;
 } EtProj;
 
 typedef struct {
@@ -75,10 +75,10 @@ static void et_to_fwd_slashes(char *p) {
 }
 
 /* Write files, then run index_repository and open the graph DB. */
-static cbm_store_t *et_index_files(EtProj *lp, const EtFile *files, int nfiles) {
+static lsm_store_t *et_index_files(EtProj *lp, const EtFile *files, int nfiles) {
     memset(lp, 0, sizeof(*lp));
-    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/cbm_et_XXXXXX");
-    if (!cbm_mkdtemp(lp->tmpdir)) return NULL;
+    snprintf(lp->tmpdir, sizeof(lp->tmpdir), "/tmp/lsm_et_XXXXXX");
+    if (!lsm_mkdtemp(lp->tmpdir)) return NULL;
     et_to_fwd_slashes(lp->tmpdir);
 
     for (int i = 0; i < nfiles; i++) {
@@ -87,7 +87,7 @@ static cbm_store_t *et_index_files(EtProj *lp, const EtFile *files, int nfiles) 
         char *slash = strrchr(path, '/');
         if (slash && slash > path + strlen(lp->tmpdir)) {
             *slash = '\0';
-            cbm_mkdir_p(path, 0755);
+            lsm_mkdir_p(path, 0755);
             *slash = '/';
         }
         FILE *f = fopen(path, "wb");
@@ -96,31 +96,31 @@ static cbm_store_t *et_index_files(EtProj *lp, const EtFile *files, int nfiles) 
         fclose(f);
     }
 
-    lp->project = cbm_project_name_from_path(lp->tmpdir);
+    lp->project = lsm_project_name_from_path(lp->tmpdir);
     if (!lp->project) return NULL;
 
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     char cache_dir[512];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/codebase-memory-mcp", home);
-    cbm_mkdir(cache_dir);
+    snprintf(cache_dir, sizeof(cache_dir), "%s/.cache/logan-spine-mcp", home);
+    lsm_mkdir(cache_dir);
     snprintf(lp->dbpath, sizeof(lp->dbpath), "%s/%s.db", cache_dir, lp->project);
     unlink(lp->dbpath);
 
-    lp->srv = cbm_mcp_server_new(NULL);
+    lp->srv = lsm_mcp_server_new(NULL);
     if (!lp->srv) return NULL;
 
     char args[700];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", lp->tmpdir);
-    char *resp = cbm_mcp_handle_tool(lp->srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(lp->srv, "index_repository", args);
     if (resp) free(resp);
 
-    return cbm_store_open_path(lp->dbpath);
+    return lsm_store_open_path(lp->dbpath);
 }
 
-static void et_cleanup(EtProj *lp, cbm_store_t *store) {
-    if (store) cbm_store_close(store);
-    if (lp->srv) { cbm_mcp_server_free(lp->srv); lp->srv = NULL; }
+static void et_cleanup(EtProj *lp, lsm_store_t *store) {
+    if (store) lsm_store_close(store);
+    if (lp->srv) { lsm_mcp_server_free(lp->srv); lp->srv = NULL; }
     free(lp->project); lp->project = NULL;
     th_rmtree(lp->tmpdir);
     unlink(lp->dbpath);
@@ -133,8 +133,8 @@ static void et_cleanup(EtProj *lp, cbm_store_t *store) {
 /* Assert edge_type count >= floor; dump diagnostic on failure. */
 static int et_edge_present(const EtFile *files, int nfiles, const char *edge, int floor) {
     EtProj lp;
-    cbm_store_t *store = et_index_files(&lp, files, nfiles);
-    int got = store ? cbm_store_count_edges_by_type(store, lp.project, edge) : -1;
+    lsm_store_t *store = et_index_files(&lp, files, nfiles);
+    int got = store ? lsm_store_count_edges_by_type(store, lp.project, edge) : -1;
     if (got < floor) {
         fprintf(stderr, "  [ET-EDGE] FAIL %-20s count=%d expected>=%d\n", edge, got, floor);
     }
@@ -149,8 +149,8 @@ enum { ET_ROUTE_ASSERT_MAX = 16 };
  * presence-only assertion would still allow stale partial Route nodes to leak. */
 static int et_routes_exact(const EtFile *files, int nfiles, const char **routes) {
     EtProj lp;
-    cbm_store_t *store = et_index_files(&lp, files, nfiles);
-    cbm_node_t *nodes = NULL;
+    lsm_store_t *store = et_index_files(&lp, files, nfiles);
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
     int wanted = 0;
     int found[ET_ROUTE_ASSERT_MAX] = {0};
@@ -163,8 +163,8 @@ static int et_routes_exact(const EtFile *files, int nfiles, const char **routes)
         ok = 0;
     }
 
-    if (!store || cbm_store_find_nodes_by_label(store, lp.project, "Route", &nodes, &node_count) !=
-                      CBM_STORE_OK) {
+    if (!store || lsm_store_find_nodes_by_label(store, lp.project, "Route", &nodes, &node_count) !=
+                      LSM_STORE_OK) {
         ok = 0;
     } else {
         if (node_count != wanted) {
@@ -197,7 +197,7 @@ static int et_routes_exact(const EtFile *files, int nfiles, const char **routes)
         fprintf(stderr, "\n");
     }
 
-    cbm_store_free_nodes(nodes, node_count);
+    lsm_store_free_nodes(nodes, node_count);
     et_cleanup(&lp, store);
     return ok;
 }
@@ -206,7 +206,7 @@ static int et_routes_exact(const EtFile *files, int nfiles, const char **routes)
  * parallel pipeline path (MIN_FILES_FOR_PARALLEL = 50). */
 enum { ET_PARALLEL_PAD = 52, ET_PAD_MAX = 68 /* 52 pad + 16 meaningful */ };
 
-static cbm_store_t *et_index_parallel(EtProj *lp, const EtFile *meaningful, int n_mean) {
+static lsm_store_t *et_index_parallel(EtProj *lp, const EtFile *meaningful, int n_mean) {
     static char pad_name[ET_PARALLEL_PAD][48];
     static char pad_body[ET_PARALLEL_PAD][64];
     EtFile files[ET_PAD_MAX] = {0};
@@ -230,21 +230,21 @@ static cbm_store_t *et_index_parallel(EtProj *lp, const EtFile *meaningful, int 
  * fallback, so the relationship vanished. Needs >50 files to reproduce. */
 static int et_calls_to_name_parallel(const EtFile *meaningful, int n_mean, const char *name) {
     EtProj lp;
-    cbm_store_t *store = et_index_parallel(&lp, meaningful, n_mean);
+    lsm_store_t *store = et_index_parallel(&lp, meaningful, n_mean);
     int hits = 0;
     if (store) {
-        cbm_edge_t *edges = NULL;
+        lsm_edge_t *edges = NULL;
         int n = 0;
-        if (cbm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &n) == CBM_STORE_OK) {
+        if (lsm_store_find_edges_by_type(store, lp.project, "CALLS", &edges, &n) == LSM_STORE_OK) {
             for (int i = 0; i < n; i++) {
-                cbm_node_t tgt;
-                if (cbm_store_find_node_by_id(store, edges[i].target_id, &tgt) != CBM_STORE_OK)
+                lsm_node_t tgt;
+                if (lsm_store_find_node_by_id(store, edges[i].target_id, &tgt) != LSM_STORE_OK)
                     continue;
                 if (tgt.name && strcmp(tgt.name, name) == 0)
                     hits++;
-                cbm_node_free_fields(&tgt);
+                lsm_node_free_fields(&tgt);
             }
-            cbm_store_free_edges(edges, n);
+            lsm_store_free_edges(edges, n);
         }
     }
     et_cleanup(&lp, store);
@@ -285,7 +285,7 @@ TEST(calls_jsx_component_via_tsconfig_alias_parallel_issue1085) {
  *  Django, Java Spring) or from the resolved QN matching a framework library id
  *  (Express, Fastify, Gin, ASP.NET MapGet/MapPost, Laravel).  Each fixture uses a
  *  LOCAL wrapper whose QN carries the framework substring so the sequential-path
- *  resolver (pass_calls.c → cbm_service_pattern_match → CBM_SVC_ROUTE_REG) fires.
+ *  resolver (pass_calls.c → lsm_service_pattern_match → LSM_SVC_ROUTE_REG) fires.
  *  Decorator-based frameworks (Flask, FastAPI, Django, Spring @RequestMapping) are
  *  handled via extract_route_from_decorators which sets def.route_path in the
  *  extraction result and creates Route+HANDLES during pass_definitions.
@@ -317,7 +317,7 @@ TEST(handles_fastapi_python) {
 /* DRF @action (Python) — issue #603. Before the try_drf_action_decorator
  * extractor, an @action-decorated ViewSet method carried no route_path, so
  * Phase 2a emitted 0 Route/HANDLES edges (this asserts >=1 → RED without the
- * fix, GREEN with it). Direction-agnostic count via cbm_store_count_edges_by_type. */
+ * fix, GREEN with it). Direction-agnostic count via lsm_store_count_edges_by_type. */
 TEST(handles_drf_action_python) {
     static const EtFile f[] = {
         {"viewsets.py",
@@ -336,7 +336,7 @@ TEST(handles_drf_action_python) {
  * inline-object method, which is never registered as a resolvable node).  We use
  * top-level wrapper functions defined in an "express"-pathed module so the
  * resolved QN (project.express.router.expressGet) carries the substring → the
- * sequential resolver classifies the call as CBM_SVC_ROUTE_REG and emits
+ * sequential resolver classifies the call as LSM_SVC_ROUTE_REG and emits
  * Route + HANDLES (mirrors the working handles_gin_go pattern). */
 TEST(handles_express_ts) {
     static const EtFile f[] = {
@@ -469,7 +469,7 @@ TEST(handles_jaxrs_java) {
  * fixture).  C# static calls resolve (S4 passes) and the substring is present,
  * yet no Route/HANDLES is emitted — the C# route-registration path is not wired:
  * the resolved C# static-invocation either is not run through
- * cbm_service_pattern_match as ROUTE_REG or the handler-arg (an identifier
+ * lsm_service_pattern_match as ROUTE_REG or the handler-arg (an identifier
  * method group) is not captured by extract_handler_arg for C#. */
 TEST(handles_aspnet_csharp) {
     static const EtFile f[] = {
@@ -493,7 +493,7 @@ TEST(handles_aspnet_csharp) {
 }
 
 /* Laravel (PHP) — Route facade whose QN contains "Laravel".
- * REAL BUG: internal/cbm/extract_calls.c:extract_handler_arg only accepts an
+ * REAL BUG: internal/lsm/extract_calls.c:extract_handler_arg only accepts an
  * identifier/member_expression/selector_expression/attribute/field_expression as
  * the handler argument.  Idiomatic Laravel handlers are STRINGS ('showUsers') or
  * arrays ([Ctrl::class,'m']) — PHP also parses a bare callee as a `name` node,
@@ -713,7 +713,7 @@ TEST(http_calls_resttemplate_java) {
  * REAL BUG (CONFIRMED: still HTTP_CALLS=0 after switching to a static call that
  * C# resolves, cf. S4).  Even though the call resolves and the QN contains
  * "RestSharp", no HTTP_CALLS edge is emitted — the C# resolved-call path is not
- * routed through cbm_service_pattern_match for HTTP classification (the C# lsp
+ * routed through lsm_service_pattern_match for HTTP classification (the C# lsp
  * resolver likely emits the call without going through emit_classified_edge's
  * service-pattern branch, or the resolved QN it returns lacks the path prefix). */
 TEST(http_calls_restsharp_csharp) {
@@ -754,7 +754,7 @@ TEST(http_calls_httparty_ruby) {
  * REAL BUG (CONFIRMED: still HTTP_CALLS=0).  PHP DOES resolve the Guzzle method
  * call (cf. test_php_lsp.c:phplsp_edge_guzzle_chain, which passes resolving
  * "Client.get"), but the PHP lsp resolver emits the SHORT resolved QN
- * "Client.get" — it drops the namespace/path, so cbm_service_pattern_match never
+ * "Client.get" — it drops the namespace/path, so lsm_service_pattern_match never
  * sees the "Guzzle"/"GuzzleHttp" substring and the call is classified as a plain
  * CALLS instead of HTTP_CALLS.  Fix = use the full namespaced QN (or match on the
  * class's declaring namespace) when classifying PHP service calls. */
@@ -778,7 +778,7 @@ TEST(http_calls_guzzle_php) {
 }
 
 /* reqwest (Rust) — Rust lsp_cross is not wired AND the generic resolver cannot
- * resolve a `::`-qualified cross-file path (cbm_registry_resolve splits on '.',
+ * resolve a `::`-qualified cross-file path (lsm_registry_resolve splits on '.',
  * not '::'), so reqwest::get never resolved.  Use SAME-FILE bare-name wrapper
  * functions whose names carry the "reqwest" substring (same-file Rust calls do
  * resolve, cf. probe_rust_calls_edge) → QN contains "reqwest" → HTTP_CALLS. */
@@ -854,7 +854,7 @@ TEST(async_calls_kafkajs_ts) {
 /* AWS SQS (Go) — "aws-sdk-go/service/sqs" substring in resolved QN.
  * REAL BUG (two compounding causes, cannot be exercised by a local fixture):
  *  1) service_patterns.c async_libraries lists the Go SQS id with SLASHES
- *     ("aws-sdk-go/service/sqs"), but cbm_fqn_compute (internal/cbm/helpers.c)
+ *     ("aws-sdk-go/service/sqs"), but lsm_fqn_compute (internal/lsm/helpers.c)
  *     converts path slashes to '.', so a resolved local QN is
  *     "...aws-sdk-go.service.sqs..." and strstr never matches the slash form.
  *  2) emit_http_async_edge (pass_calls.c) requires a URL/topic STRING arg;
@@ -929,9 +929,9 @@ TEST(throws_java) {
          "        if (id == 0) throw new NotFoundException(\"No user zero\");\n"
          "        return \"user:\" + id;\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] Java: THROWS=%d\n", throws);
     }
@@ -945,7 +945,7 @@ TEST(throws_java) {
  * passes the identical throws fixture shape, but Kotlin yields THROWS=0.  The
  * exception class is created+registered (defines_method_kotlin proves Kotlin
  * class/method extraction works), so the gap is in the Kotlin throw path:
- * internal/cbm/extract_semantic.c:resolve_exception_name does not recover the
+ * internal/lsm/extract_semantic.c:resolve_exception_name does not recover the
  * callee identifier from a Kotlin `throw_expression`→`call_expression` (the
  * Kotlin call callee is the first child, not on a "function"/"type" field), so
  * the THROWS edge resolution never gets a usable exception name. */
@@ -960,9 +960,9 @@ TEST(throws_kotlin) {
          "    if (name.isEmpty()) throw NotFoundException(\"category missing\")\n"
          "    return name\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] Kotlin: THROWS=%d\n", throws);
     }
@@ -986,9 +986,9 @@ TEST(throws_python) {
          "        raise ValidationException('age must be non-negative')\n"
          "    return age\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] Python: THROWS=%d\n", throws);
     }
@@ -1012,9 +1012,9 @@ TEST(throws_typescript) {
          "    if (!name) throw new HttpException(400, 'Name required');\n"
          "    return `updated:${id}`;\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] TypeScript: THROWS=%d\n", throws);
     }
@@ -1039,9 +1039,9 @@ TEST(throws_csharp) {
          "            if (id <= 0) throw new NotFoundException($\"Cannot delete {id}\");\n"
          "            return \"deleted\";\n        }\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] C#: THROWS=%d\n", throws);
     }
@@ -1065,9 +1065,9 @@ TEST(throws_php) {
          "        if ($id <= 0) throw new NotFoundException(\"Cannot remove $id\");\n"
          "    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] PHP: THROWS=%d\n", throws);
     }
@@ -1088,9 +1088,9 @@ TEST(throws_scala) {
          "    if (raw.length < 2) throw new RecordException(\"too short\")\n"
          "    true\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int throws = store ? cbm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
+    int throws = store ? lsm_store_count_edges_by_type(store, lp.project, "THROWS") : -1;
     if (throws < 1) {
         fprintf(stderr, "  [ET-THROWS] Scala: THROWS=%d\n", throws);
     }
@@ -1118,9 +1118,9 @@ TEST(raises_python) {
          "    except Exception:\n"
          "        raise ValueError('not a float: ' + s)\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int raises = store ? cbm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
+    int raises = store ? lsm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
     if (raises < 1) {
         fprintf(stderr, "  [ET-RAISES] Python: RAISES=%d\n", raises);
     }
@@ -1144,9 +1144,9 @@ TEST(raises_typescript) {
          "    if (typeof val !== 'string') throw new TypeError('not a string');\n"
          "    return val as string;\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int raises = store ? cbm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
+    int raises = store ? lsm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
     if (raises < 1) {
         fprintf(stderr, "  [ET-RAISES] TypeScript: RAISES=%d\n", raises);
     }
@@ -1158,7 +1158,7 @@ TEST(raises_typescript) {
 /* Kotlin — `throw IllegalArgumentError(...)` — runtime (name has "Error").
  * REAL BUG (same Kotlin throw-extraction gap as throws_kotlin): RAISES=0 while
  * every other language passes the identical fixture shape.  Root cause:
- * internal/cbm/extract_semantic.c:resolve_exception_name fails to extract the
+ * internal/lsm/extract_semantic.c:resolve_exception_name fails to extract the
  * exception identifier from a Kotlin throw_expression→call_expression. */
 TEST(raises_kotlin) {
     static const EtFile meaningful[] = {
@@ -1171,9 +1171,9 @@ TEST(raises_kotlin) {
          "    if (s.isEmpty()) throw IllegalArgumentError(\"string is empty\")\n"
          "    return s\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int raises = store ? cbm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
+    int raises = store ? lsm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
     if (raises < 1) {
         fprintf(stderr, "  [ET-RAISES] Kotlin: RAISES=%d\n", raises);
     }
@@ -1198,9 +1198,9 @@ TEST(raises_csharp) {
          "            if (n <= 0) throw new ArgumentError($\"{name} must be positive\");\n"
          "        }\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int raises = store ? cbm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
+    int raises = store ? lsm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
     if (raises < 1) {
         fprintf(stderr, "  [ET-RAISES] C#: RAISES=%d\n", raises);
     }
@@ -1223,9 +1223,9 @@ TEST(raises_php) {
          "    if ($n < 0) throw new RuntimeError('sqrt of negative');\n"
          "    return sqrt($n);\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int raises = store ? cbm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
+    int raises = store ? lsm_store_count_edges_by_type(store, lp.project, "RAISES") : -1;
     if (raises < 1) {
         fprintf(stderr, "  [ET-RAISES] PHP: RAISES=%d\n", raises);
     }
@@ -1240,12 +1240,12 @@ TEST(raises_php) {
  *  Parallel-path only (> 50 files).
  *
  *  REAL BUG (all five WRITES below — single shared root cause):
- *    Variable nodes ARE created (cbm_gbuf_upsert_node, "Variable" label) but are
+ *    Variable nodes ARE created (lsm_gbuf_upsert_node, "Variable" label) but are
  *    NEVER added to the resolver registry — both register_and_link_def()
  *    (src/pipeline/pass_parallel.c:781) and process_def()
- *    (src/pipeline/pass_definitions.c:262) only cbm_registry_add() the labels
+ *    (src/pipeline/pass_definitions.c:262) only lsm_registry_add() the labels
  *    Function/Method/Class/Interface.  resolve_file_rw() resolves the written
- *    var via cbm_registry_resolve(var_name) → always empty → no target node →
+ *    var via lsm_registry_resolve(var_name) → always empty → no target node →
  *    no WRITES edge for ANY language.  Fix = register "Variable" (and "Field")
  *    defs so rw resolution can find them.  The fixtures correctly write to
  *    module-level vars / fields that DO become nodes; the gap is registration. */
@@ -1261,9 +1261,9 @@ TEST(writes_python) {
          "def clear_registry():\n"
          "    registry = {}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int writes = store ? cbm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
+    int writes = store ? lsm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
     if (writes < 1) {
         fprintf(stderr, "  [ET-WRITES] Python: WRITES=%d\n", writes);
     }
@@ -1284,9 +1284,9 @@ TEST(writes_go) {
          "func Reset() {\n"
          "    store = nil\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int writes = store ? cbm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
+    int writes = store ? lsm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
     if (writes < 1) {
         fprintf(stderr, "  [ET-WRITES] Go: WRITES=%d\n", writes);
     }
@@ -1308,9 +1308,9 @@ TEST(writes_java) {
          "        count = 0;\n    }\n\n"
          "    public int get() {\n        return count;\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int writes = store ? cbm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
+    int writes = store ? lsm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
     if (writes < 1) {
         fprintf(stderr, "  [ET-WRITES] Java: WRITES=%d\n", writes);
     }
@@ -1331,9 +1331,9 @@ TEST(writes_rust) {
          "    pub fn clear(&mut self) {\n"
          "        self.total = 0;\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int writes = store ? cbm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
+    int writes = store ? lsm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
     if (writes < 1) {
         fprintf(stderr, "  [ET-WRITES] Rust: WRITES=%d\n", writes);
     }
@@ -1355,9 +1355,9 @@ TEST(writes_csharp) {
          "        public void SetPort(int port) {\n"
          "            Port = port;\n        }\n    }\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int writes = store ? cbm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
+    int writes = store ? lsm_store_count_edges_by_type(store, lp.project, "WRITES") : -1;
     if (writes < 1) {
         fprintf(stderr, "  [ET-WRITES] C#: WRITES=%d\n", writes);
     }
@@ -1378,7 +1378,7 @@ TEST(writes_csharp) {
 
 /* Go — struct with methods.
  * REAL BUG: Go receiver methods are labelled "Method" with def.receiver set
- * (internal/cbm/extract_defs.c:2042-2047) but def.parent_class is NEVER derived
+ * (internal/lsm/extract_defs.c:2042-2047) but def.parent_class is NEVER derived
  * from the receiver type.  DEFINES_METHOD is only emitted when label=="Method"
  * AND parent_class resolves (pass_definitions.c:273 / pass_parallel.c:794), so
  * Go struct methods get no DEFINES_METHOD edge.  Fix = set def.parent_class to
@@ -1520,10 +1520,10 @@ TEST(defines_method_scala) {
 
 /* ══════════════════════════════════════════════════════════════════
  *  OVERRIDE — Go implicit interface satisfaction.
- *  Produced by pass_semantic.c:cbm_pipeline_implements_go().
+ *  Produced by pass_semantic.c:lsm_pipeline_implements_go().
  *  Parallel-path only (> 50 files).
  *
- *  REAL BUG (same root cause as defines_method_go): cbm_pipeline_implements_go
+ *  REAL BUG (same root cause as defines_method_go): lsm_pipeline_implements_go
  *  (src/pipeline/pass_semantic.c:276-301) discovers interface methods AND struct
  *  methods exclusively via DEFINES_METHOD edges.  Because Go receiver methods get
  *  no parent_class → no DEFINES_METHOD (see defines_method_go), the interface has
@@ -1549,10 +1549,10 @@ TEST(override_go_interface) {
          "func (r *Rectangle) Perimeter() float64 {\n"
          "    return 2.0 * (r.Width + r.Height)\n}\n"}};
     EtProj lp;
-    cbm_store_t *store =
+    lsm_store_t *store =
         et_index_parallel(&lp, meaningful, (int)(sizeof(meaningful) / sizeof(meaningful[0])));
-    int override_edges = store ? cbm_store_count_edges_by_type(store, lp.project, "OVERRIDE") : -1;
-    int implements     = store ? cbm_store_count_edges_by_type(store, lp.project, "IMPLEMENTS") : -1;
+    int override_edges = store ? lsm_store_count_edges_by_type(store, lp.project, "OVERRIDE") : -1;
+    int implements     = store ? lsm_store_count_edges_by_type(store, lp.project, "IMPLEMENTS") : -1;
     if (override_edges < 1 || implements < 1) {
         fprintf(stderr, "  [ET-OVERRIDE] Go: OVERRIDE=%d IMPLEMENTS=%d\n",
                 override_edges, implements);

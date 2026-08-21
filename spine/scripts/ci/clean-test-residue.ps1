@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Sweep cbm test residue from a Windows test host and assert a runner-like free
+Sweep lsm test residue from a Windows test host and assert a runner-like free
 disk, before any test/smoke/soak run.
 
 .DESCRIPTION
@@ -16,8 +16,8 @@ So every run starts from the same shape the runner would give it: residue gone,
 free space asserted. Refusing to start is correct - an unusable environment is a
 run blocker to escalate, never something to quietly run anyway on a bad disk.
 
-Sweeps only cbm-prefixed directories under the profile and TEMP. The checkout
-(C:\cbm) is not under either, and is never touched.
+Sweeps only lsm-prefixed directories under the profile and TEMP. The checkout
+(C:\lsm) is not under either, and is never touched.
 
 .PARAMETER MinFreeGB
 Free space required before a run. Defaults to 14, the SSD size a GitHub-hosted
@@ -40,7 +40,7 @@ function Get-FreeGB {
 }
 
 # The guard suites deliberately build adversarial trees - names with spaces and
-# non-representable characters, deep .cbm-retired/generations nesting - whose
+# non-representable characters, deep .lsm-retired/generations nesting - whose
 # full paths exceed MAX_PATH. Remove-Item cannot address those and fails with
 # DirectoryNotFoundException, so `rd` under the \\?\ prefix (which bypasses the
 # 260-char limit) is the fallback. Every removal is then VERIFIED: an earlier
@@ -60,7 +60,7 @@ $roots = @($env:USERPROFILE, $env:TEMP) | Where-Object { $_ } | Select-Object -U
 
 foreach ($root in $roots) {
     if (-not (Test-Path -LiteralPath $root)) { continue }
-    Get-ChildItem -LiteralPath $root -Directory -Filter 'cbm-*' -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $root -Directory -Filter 'lsm-*' -ErrorAction SilentlyContinue |
         ForEach-Object {
             if (Remove-ResidueDir $_.FullName) {
                 $removed++

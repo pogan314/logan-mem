@@ -1,8 +1,8 @@
 /*
  * lsp_resolve.h — Shared LSP-override resolver for the call-edge pipeline.
  *
- * Both pipeline paths (sequential cbm_pipeline_pass_calls and parallel
- * cbm_parallel_extract → resolve_file_calls) need to look up an
+ * Both pipeline paths (sequential lsm_pipeline_pass_calls and parallel
+ * lsm_parallel_extract → resolve_file_calls) need to look up an
  * LSP-resolved call for a given (caller, callee) pair before falling back
  * to the registry's name-based resolver. Before this header existed, each
  * pipeline carried its own copy of that lookup with divergent confidence
@@ -18,10 +18,10 @@
  *
  * Inline-only: no .c file needed.
  */
-#ifndef CBM_PIPELINE_LSP_RESOLVE_H
-#define CBM_PIPELINE_LSP_RESOLVE_H
+#ifndef LSM_PIPELINE_LSP_RESOLVE_H
+#define LSM_PIPELINE_LSP_RESOLVE_H
 
-#include "cbm.h"
+#include "lsm.h"
 #include "graph_buffer/graph_buffer.h"
 #include "foundation/constants.h"
 
@@ -36,16 +36,16 @@
  * Python-LSP integration plan; revisit when telemetry justifies a knob.
  * Applies to every language whose LSP populates result->resolved_calls
  * (Go, C/C++, Python, PHP). */
-#define CBM_LSP_CONFIDENCE_FLOOR 0.6f
+#define LSM_LSP_CONFIDENCE_FLOOR 0.6f
 
-#if defined(CBM_CALL_REFERENCE_LOOKUP_TEST_API) && CBM_CALL_REFERENCE_LOOKUP_TEST_API
+#if defined(LSM_CALL_REFERENCE_LOOKUP_TEST_API) && LSM_CALL_REFERENCE_LOOKUP_TEST_API
 /* Test-build-only operation counter implemented by pass_usages.c. Keeping the
  * increment behind this seam lets the regression measure the real sequential
  * and fused-parallel materialization helper without retaining instrumentation
  * in production builds. */
-void cbm_pipeline_lsp_reference_lookup_test_note_row(void);
+void lsm_pipeline_lsp_reference_lookup_test_note_row(void);
 #else
-static inline void cbm_pipeline_lsp_reference_lookup_test_note_row(void) {}
+static inline void lsm_pipeline_lsp_reference_lookup_test_note_row(void) {}
 #endif
 
 /* Bare last segment of a (possibly qualified) name, splitting on the LAST
@@ -59,7 +59,7 @@ static inline void cbm_pipeline_lsp_reference_lookup_test_note_row(void) {}
  * for template/alias scopes) and the textual side (`.`/`::`/`->`). Other
  * languages' callee names contain none of `::`/`->`, so this is a no-op
  * for them. */
-static inline const char *cbm_lsp_bare_segment(const char *name) {
+static inline const char *lsm_lsp_bare_segment(const char *name) {
     if (!name) {
         return name;
     }
@@ -82,7 +82,7 @@ static inline const char *cbm_lsp_bare_segment(const char *name) {
 
 /* Tail helper: return the start of the final two dot-separated segments
  * ("Class.method") or NULL when the QN is too short. */
-static inline const char *cbm_pipeline_qn_class_method_tail(const char *qn) {
+static inline const char *lsm_pipeline_qn_class_method_tail(const char *qn) {
     if (!qn) {
         return NULL;
     }
@@ -103,8 +103,8 @@ static inline const char *cbm_pipeline_qn_class_method_tail(const char *qn) {
     return qn;
 }
 
-static inline const char *cbm_pipeline_call_callee_leaf(const char *callee_name) {
-    return cbm_lsp_bare_segment(callee_name);
+static inline const char *lsm_pipeline_call_callee_leaf(const char *callee_name) {
+    return lsm_lsp_bare_segment(callee_name);
 }
 
 /* Gate for the unique-`Class.method`-tail fallbacks below. Tail-matching by
@@ -117,8 +117,8 @@ static inline const char *cbm_pipeline_call_callee_leaf(const char *callee_name)
  * guarantee does not exist (Python/TS re-export shims, Go internal clones,
  * C++ template instantiations), and a single wrong-module coincidence
  * would fabricate a CALLS edge — so the fallbacks stay off there. */
-static inline bool cbm_pipeline_lsp_allow_tail_match(CBMLanguage lang) {
-    return lang == CBM_LANG_JAVA || lang == CBM_LANG_KOTLIN;
+static inline bool lsm_pipeline_lsp_allow_tail_match(LSMLanguage lang) {
+    return lang == LSM_LANG_JAVA || lang == LSM_LANG_KOTLIN;
 }
 
 /* When a JVM callable-reference occurrence has no exact semantic target, its
@@ -126,9 +126,9 @@ static inline bool cbm_pipeline_lsp_allow_tail_match(CBMLanguage lang) {
  * `unique_name` and `suffix_match` are project-wide guesses: admitting either
  * would bind an unresolved `::handler` in one package to an unrelated callable
  * in another. Other languages retain their legacy value-usage fallback. */
-static inline bool cbm_pipeline_call_reference_usage_fallback_allowed(CBMLanguage lang,
+static inline bool lsm_pipeline_call_reference_usage_fallback_allowed(LSMLanguage lang,
                                                                       const char *strategy) {
-    if (lang != CBM_LANG_JAVA && lang != CBM_LANG_KOTLIN) {
+    if (lang != LSM_LANG_JAVA && lang != LSM_LANG_KOTLIN) {
         return true;
     }
     if (!strategy || !strategy[0]) {
@@ -137,17 +137,17 @@ static inline bool cbm_pipeline_call_reference_usage_fallback_allowed(CBMLanguag
     return strcmp(strategy, "unique_name") != 0 && strcmp(strategy, "suffix_match") != 0;
 }
 
-static inline bool cbm_pipeline_reference_candidate_fallback_allowed(
-    CBMLanguage lang, const CBMUsage *usage, const char *strategy, const char *const *import_names,
+static inline bool lsm_pipeline_reference_candidate_fallback_allowed(
+    LSMLanguage lang, const LSMUsage *usage, const char *strategy, const char *const *import_names,
     int import_count) {
     if (!usage) {
         return false;
     }
     bool reference_candidate =
-        usage->kind == CBM_USAGE_CALL_REFERENCE ||
-        (lang == CBM_LANG_KOTLIN && usage->kind == CBM_USAGE_VALUE && usage->may_be_call_reference);
+        usage->kind == LSM_USAGE_CALL_REFERENCE ||
+        (lang == LSM_LANG_KOTLIN && usage->kind == LSM_USAGE_VALUE && usage->may_be_call_reference);
     if (!reference_candidate ||
-        cbm_pipeline_call_reference_usage_fallback_allowed(lang, strategy)) {
+        lsm_pipeline_call_reference_usage_fallback_allowed(lang, strategy)) {
         return true;
     }
     /* Kotlin's project import map currently names the imported module rather
@@ -155,7 +155,7 @@ static inline bool cbm_pipeline_reference_candidate_fallback_allowed(
      * may therefore resolve by unique name after LSP proves it is not a
      * callable. Admit that ordinary USAGE only when the import map confirms
      * the local spelling; an unimported same-name symbol remains unreachable. */
-    if (lang == CBM_LANG_KOTLIN && usage->ref_name && import_names) {
+    if (lang == LSM_LANG_KOTLIN && usage->ref_name && import_names) {
         for (int i = 0; i < import_count; i++) {
             if (import_names[i] && strcmp(import_names[i], usage->ref_name) == 0) {
                 return true;
@@ -169,12 +169,12 @@ static inline bool cbm_pipeline_reference_candidate_fallback_allowed(
  * ordinary value participates only when extraction marked the narrow direct
  * argument shape in a language whose resolver can prove callable identity;
  * without an exact LSP record it remains USAGE. */
-static inline bool cbm_pipeline_usage_semantic_reference_candidate(const CBMUsage *usage) {
+static inline bool lsm_pipeline_usage_semantic_reference_candidate(const LSMUsage *usage) {
     if (!usage) {
         return false;
     }
-    return usage->kind == CBM_USAGE_CALL_REFERENCE ||
-           (usage->kind == CBM_USAGE_VALUE && usage->may_be_call_reference);
+    return usage->kind == LSM_USAGE_CALL_REFERENCE ||
+           (usage->kind == LSM_USAGE_VALUE && usage->may_be_call_reference);
 }
 
 /* Lexical extraction has whole-scope information that a source-order semantic
@@ -182,12 +182,12 @@ static inline bool cbm_pipeline_usage_semantic_reference_candidate(const CBMUsag
  * same-named value local too; an LSP row that still points at the module
  * function must not override that proof. A callable-alias row is different:
  * it explicitly resolves the local binding itself to its assigned callable. */
-static inline bool cbm_pipeline_usage_allows_semantic_reference(const CBMUsage *usage,
-                                                                const CBMResolvedCall *resolved) {
+static inline bool lsm_pipeline_usage_allows_semantic_reference(const LSMUsage *usage,
+                                                                const LSMResolvedCall *resolved) {
     if (!usage || !resolved) {
         return false;
     }
-    if (usage->kind != CBM_USAGE_VALUE || !usage->semantic_reference_blocked ||
+    if (usage->kind != LSM_USAGE_VALUE || !usage->semantic_reference_blocked ||
         !usage->semantic_reference_local_shadow) {
         return true;
     }
@@ -200,7 +200,7 @@ static inline bool cbm_pipeline_usage_allows_semantic_reference(const CBMUsage *
  * even a same-named module variable is a different binding. Exact semantic
  * rows are joined before either rule. This label check keeps sequential and
  * fused resolution aligned. */
-static inline bool cbm_pipeline_node_is_callable_target(const cbm_gbuf_node_t *node) {
+static inline bool lsm_pipeline_node_is_callable_target(const lsm_gbuf_node_t *node) {
     if (!node || !node->label) {
         return false;
     }
@@ -208,13 +208,13 @@ static inline bool cbm_pipeline_node_is_callable_target(const cbm_gbuf_node_t *n
            strcmp(node->label, "Constructor") == 0 || strcmp(node->label, "Class") == 0;
 }
 
-static inline int cbm_pipeline_qn_class_method_tail_eq(const char *qn, const char *tail) {
-    const char *qt = cbm_pipeline_qn_class_method_tail(qn);
+static inline int lsm_pipeline_qn_class_method_tail_eq(const char *qn, const char *tail) {
+    const char *qt = lsm_pipeline_qn_class_method_tail(qn);
     return qt && tail && strcmp(qt, tail) == 0;
 }
 
-static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
-    const cbm_gbuf_t *gbuf, const char *project_name, const char *callee_qn, bool allow_tail_match,
+static inline const lsm_gbuf_node_t *lsm_pipeline_lsp_target_node_policy(
+    const lsm_gbuf_t *gbuf, const char *project_name, const char *callee_qn, bool allow_tail_match,
     bool allow_unique_callable_fallback);
 
 /* Local and cross passes may spell one exact invocation target with and without
@@ -223,8 +223,8 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
  * reconcile file/project and declared-package QNs below; Class.method-tail
  * equality alone is insufficient because two packages can declare the same
  * class and method. */
-static inline bool cbm_pipeline_invocation_targets_equal(const char *left_qn, const char *right_qn,
-                                                         const cbm_gbuf_t *gbuf,
+static inline bool lsm_pipeline_invocation_targets_equal(const char *left_qn, const char *right_qn,
+                                                         const lsm_gbuf_t *gbuf,
                                                          const char *project_name,
                                                          bool allow_tail_match) {
     if (!left_qn || !right_qn) {
@@ -236,18 +236,18 @@ static inline bool cbm_pipeline_invocation_targets_equal(const char *left_qn, co
     if (!gbuf || !project_name) {
         return false;
     }
-    const cbm_gbuf_node_t *left_exact =
-        cbm_pipeline_lsp_target_node_policy(gbuf, project_name, left_qn, false, false);
-    const cbm_gbuf_node_t *right_exact =
-        cbm_pipeline_lsp_target_node_policy(gbuf, project_name, right_qn, false, false);
+    const lsm_gbuf_node_t *left_exact =
+        lsm_pipeline_lsp_target_node_policy(gbuf, project_name, left_qn, false, false);
+    const lsm_gbuf_node_t *right_exact =
+        lsm_pipeline_lsp_target_node_policy(gbuf, project_name, right_qn, false, false);
     if (left_exact && right_exact) {
         return left_exact->id == right_exact->id;
     }
     if (!allow_tail_match) {
         return false;
     }
-    const char *left_tail = cbm_pipeline_qn_class_method_tail(left_qn);
-    const char *right_tail = cbm_pipeline_qn_class_method_tail(right_qn);
+    const char *left_tail = lsm_pipeline_qn_class_method_tail(left_qn);
+    const char *right_tail = lsm_pipeline_qn_class_method_tail(right_qn);
     if (!left_tail || !right_tail || strcmp(left_tail, right_tail) != 0) {
         return false;
     }
@@ -257,69 +257,69 @@ static inline bool cbm_pipeline_invocation_targets_equal(const char *left_qn, co
     if (!left_exact && !right_exact) {
         return false;
     }
-    const cbm_gbuf_node_t *left =
+    const lsm_gbuf_node_t *left =
         left_exact ? left_exact
-                   : cbm_pipeline_lsp_target_node_policy(gbuf, project_name, left_qn, true, true);
-    const cbm_gbuf_node_t *right =
+                   : lsm_pipeline_lsp_target_node_policy(gbuf, project_name, left_qn, true, true);
+    const lsm_gbuf_node_t *right =
         right_exact ? right_exact
-                    : cbm_pipeline_lsp_target_node_policy(gbuf, project_name, right_qn, true, true);
+                    : lsm_pipeline_lsp_target_node_policy(gbuf, project_name, right_qn, true, true);
     return left && right && left->id == right->id;
 }
 
 /* A semantic join is occurrence-exact only when both producers recorded the
  * same non-empty source span. Byte spans, unlike line numbers, distinguish
  * repeated same-named references/operators on one line. */
-static inline bool cbm_pipeline_source_site_present(uint32_t start, uint32_t end) {
+static inline bool lsm_pipeline_source_site_present(uint32_t start, uint32_t end) {
     return end > start;
 }
 
-static inline bool cbm_pipeline_source_site_legacy(uint32_t start, uint32_t end) {
+static inline bool lsm_pipeline_source_site_legacy(uint32_t start, uint32_t end) {
     return start == 0 && end == 0;
 }
 
-static inline bool cbm_pipeline_source_site_eq(uint32_t lhs_start, uint32_t lhs_end,
+static inline bool lsm_pipeline_source_site_eq(uint32_t lhs_start, uint32_t lhs_end,
                                                uint32_t rhs_start, uint32_t rhs_end) {
-    return cbm_pipeline_source_site_present(lhs_start, lhs_end) &&
-           cbm_pipeline_source_site_present(rhs_start, rhs_end) && lhs_start == rhs_start &&
+    return lsm_pipeline_source_site_present(lhs_start, lhs_end) &&
+           lsm_pipeline_source_site_present(rhs_start, rhs_end) && lhs_start == rhs_start &&
            lhs_end == rhs_end;
 }
 
-static inline bool cbm_pipeline_source_occurrence_eq(uint32_t lhs_start, uint32_t lhs_end,
-                                                     CBMSourceOrigin lhs_origin, uint32_t rhs_start,
-                                                     uint32_t rhs_end, CBMSourceOrigin rhs_origin) {
+static inline bool lsm_pipeline_source_occurrence_eq(uint32_t lhs_start, uint32_t lhs_end,
+                                                     LSMSourceOrigin lhs_origin, uint32_t rhs_start,
+                                                     uint32_t rhs_end, LSMSourceOrigin rhs_origin) {
     return lhs_origin == rhs_origin &&
-           cbm_pipeline_source_site_eq(lhs_start, lhs_end, rhs_start, rhs_end);
+           lsm_pipeline_source_site_eq(lhs_start, lhs_end, rhs_start, rhs_end);
 }
 
 /* Rank an invocation record for one parser carrier. Exact occurrence identity
  * is stronger than the legacy 0:0 compatibility join. Partial/reversed spans
  * are corrupt metadata and never participate in either class. */
-static inline int cbm_pipeline_invocation_site_rank(const CBMResolvedCall *resolved,
-                                                    const CBMCall *call) {
+static inline int lsm_pipeline_invocation_site_rank(const LSMResolvedCall *resolved,
+                                                    const LSMCall *call) {
     if (!resolved || !call) {
         return 0;
     }
     bool call_has_site =
-        cbm_pipeline_source_site_present(call->site_start_byte, call->site_end_byte);
+        lsm_pipeline_source_site_present(call->site_start_byte, call->site_end_byte);
     bool call_is_legacy =
-        cbm_pipeline_source_site_legacy(call->site_start_byte, call->site_end_byte);
+        lsm_pipeline_source_site_legacy(call->site_start_byte, call->site_end_byte);
     if (!call_has_site && !call_is_legacy) {
         return 0;
     }
-    if (cbm_pipeline_source_site_present(resolved->site_start_byte, resolved->site_end_byte)) {
-        return cbm_pipeline_source_occurrence_eq(call->site_start_byte, call->site_end_byte,
+    if (lsm_pipeline_source_site_present(resolved->site_start_byte, resolved->site_end_byte)) {
+        return lsm_pipeline_source_occurrence_eq(call->site_start_byte, call->site_end_byte,
                                                  call->source_origin, resolved->site_start_byte,
                                                  resolved->site_end_byte, resolved->source_origin)
                    ? 2
                    : 0;
     }
-    if (!cbm_pipeline_source_site_legacy(resolved->site_start_byte, resolved->site_end_byte)) {
+    if (!lsm_pipeline_source_site_legacy(resolved->site_start_byte, resolved->site_end_byte)) {
         return 0;
     }
     return call->requires_lsp_resolution || call->source_origin != resolved->source_origin ? 0 : 1;
 }
 
-static inline bool cbm_pipeline_invocation_reason_join_strategy(const char *strategy) {
+static inline bool lsm_pipeline_invocation_reason_join_strategy(const char *strategy) {
     return strategy &&
            (strcmp(strategy, "lsp_func_ptr") == 0 || strcmp(strategy, "lsp_callable_alias") == 0 ||
             strcmp(strategy, "lsp_dll_resolve") == 0 ||
@@ -330,13 +330,13 @@ static inline bool cbm_pipeline_invocation_reason_join_strategy(const char *stra
             strcmp(strategy, "php_method_dynamic") == 0);
 }
 
-static inline bool cbm_pipeline_invocation_leaf_matches(const CBMResolvedCall *resolved,
-                                                        const CBMCall *call, int site_rank) {
+static inline bool lsm_pipeline_invocation_leaf_matches(const LSMResolvedCall *resolved,
+                                                        const LSMCall *call, int site_rank) {
     if (!resolved || !resolved->callee_qn || !call || !call->callee_name) {
         return false;
     }
-    const char *resolved_leaf = cbm_lsp_bare_segment(resolved->callee_qn);
-    const char *call_leaf = cbm_lsp_bare_segment(call->callee_name);
+    const char *resolved_leaf = lsm_lsp_bare_segment(resolved->callee_qn);
+    const char *call_leaf = lsm_lsp_bare_segment(call->callee_name);
     if (resolved_leaf && call_leaf && strcmp(resolved_leaf, call_leaf) == 0) {
         return true;
     }
@@ -349,8 +349,8 @@ static inline bool cbm_pipeline_invocation_leaf_matches(const CBMResolvedCall *r
     }
 
     /* Indirect resolvers retain the textual source leaf in reason. */
-    return cbm_pipeline_invocation_reason_join_strategy(resolved->strategy) && resolved->reason &&
-           call_leaf && strcmp(cbm_lsp_bare_segment(resolved->reason), call_leaf) == 0;
+    return lsm_pipeline_invocation_reason_join_strategy(resolved->strategy) && resolved->reason &&
+           call_leaf && strcmp(lsm_lsp_bare_segment(resolved->reason), call_leaf) == 0;
 }
 
 /* Look up the highest-confidence LSP-resolved call entry whose caller QN
@@ -361,7 +361,7 @@ static inline bool cbm_pipeline_invocation_leaf_matches(const CBMResolvedCall *r
  * Match rule:
  *   1. exact caller_qn + callee short-name match wins first;
  *   2. if no exact caller match exists AND allow_tail_match is set
- *      (JVM callers only, see cbm_pipeline_lsp_allow_tail_match), a
+ *      (JVM callers only, see lsm_pipeline_lsp_allow_tail_match), a
  *      unique Class.method tail match may win; an occurrence-exact row may
  *      also reconcile Kotlin's package-vs-file top-level owner QNs when their
  *      bare caller leaves agree;
@@ -369,13 +369,13 @@ static inline bool cbm_pipeline_invocation_leaf_matches(const CBMResolvedCall *r
  *      control.
  *
  * Qualified static callees (e.g. Perl `Pkg::sub`) are reduced to their
- * bare last segment by cbm_lsp_bare_segment before matching.
+ * bare last segment by lsm_lsp_bare_segment before matching.
  *
  * The pointer returned aliases into `arr` and stays valid as long as the
- * underlying CBMFileResult is alive. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution_in_graph(
-    const CBMResolvedCallArray *arr, const CBMCall *call, bool allow_tail_match,
-    const cbm_gbuf_t *gbuf, const char *project_name) {
+ * underlying LSMFileResult is alive. */
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_resolution_in_graph(
+    const LSMResolvedCallArray *arr, const LSMCall *call, bool allow_tail_match,
+    const lsm_gbuf_t *gbuf, const char *project_name) {
     if (!arr || arr->count == 0 || !call) {
         return NULL;
     }
@@ -383,25 +383,25 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution_in_graph(
         return NULL;
     }
 
-    const CBMResolvedCall *best_exact_caller = NULL;
+    const LSMResolvedCall *best_exact_caller = NULL;
     int best_exact_caller_rank = 0;
     bool exact_caller_ambiguous = false;
     for (int i = 0; i < arr->count; i++) {
-        const CBMResolvedCall *rc = &arr->items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION) {
+        const LSMResolvedCall *rc = &arr->items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION) {
             continue;
         }
         if (!rc->caller_qn || !rc->callee_qn) {
             continue;
         }
-        if (rc->confidence < CBM_LSP_CONFIDENCE_FLOOR) {
+        if (rc->confidence < LSM_LSP_CONFIDENCE_FLOOR) {
             continue;
         }
         if (strcmp(rc->caller_qn, call->enclosing_func_qn) != 0) {
             continue;
         }
-        int site_rank = cbm_pipeline_invocation_site_rank(rc, call);
-        if (site_rank == 0 || !cbm_pipeline_invocation_leaf_matches(rc, call, site_rank)) {
+        int site_rank = lsm_pipeline_invocation_site_rank(rc, call);
+        if (site_rank == 0 || !lsm_pipeline_invocation_leaf_matches(rc, call, site_rank)) {
             continue;
         }
         if (!best_exact_caller || site_rank > best_exact_caller_rank) {
@@ -413,7 +413,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution_in_graph(
         if (site_rank < best_exact_caller_rank) {
             continue;
         }
-        if (!cbm_pipeline_invocation_targets_equal(best_exact_caller->callee_qn, rc->callee_qn,
+        if (!lsm_pipeline_invocation_targets_equal(best_exact_caller->callee_qn, rc->callee_qn,
                                                    gbuf, project_name, allow_tail_match)) {
             exact_caller_ambiguous = true;
             continue;
@@ -429,46 +429,46 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution_in_graph(
         return NULL;
     }
 
-    const char *call_tail = cbm_pipeline_qn_class_method_tail(call->enclosing_func_qn);
+    const char *call_tail = lsm_pipeline_qn_class_method_tail(call->enclosing_func_qn);
 
-    const CBMResolvedCall *best_tail_exact = NULL;
-    const CBMResolvedCall *best_tail_legacy = NULL;
+    const LSMResolvedCall *best_tail_exact = NULL;
+    const LSMResolvedCall *best_tail_legacy = NULL;
     bool tail_exact_ambiguous = false;
     bool tail_legacy_ambiguous = false;
     for (int i = 0; i < arr->count; i++) {
-        const CBMResolvedCall *rc = &arr->items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION) {
+        const LSMResolvedCall *rc = &arr->items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION) {
             continue;
         }
         if (!rc->caller_qn || !rc->callee_qn) {
             continue;
         }
-        if (rc->confidence < CBM_LSP_CONFIDENCE_FLOOR) {
+        if (rc->confidence < LSM_LSP_CONFIDENCE_FLOOR) {
             continue;
         }
-        int site_rank = cbm_pipeline_invocation_site_rank(rc, call);
+        int site_rank = lsm_pipeline_invocation_site_rank(rc, call);
         if (site_rank == 0) {
             continue;
         }
         bool caller_matches =
-            call_tail && cbm_pipeline_qn_class_method_tail_eq(rc->caller_qn, call_tail);
+            call_tail && lsm_pipeline_qn_class_method_tail_eq(rc->caller_qn, call_tail);
         if (!caller_matches && site_rank == 2) {
-            const char *resolved_caller = cbm_lsp_bare_segment(rc->caller_qn);
-            const char *source_caller = cbm_lsp_bare_segment(call->enclosing_func_qn);
+            const char *resolved_caller = lsm_lsp_bare_segment(rc->caller_qn);
+            const char *source_caller = lsm_lsp_bare_segment(call->enclosing_func_qn);
             caller_matches =
                 resolved_caller && source_caller && strcmp(resolved_caller, source_caller) == 0;
         }
-        if (!caller_matches || !cbm_pipeline_invocation_leaf_matches(rc, call, site_rank)) {
+        if (!caller_matches || !lsm_pipeline_invocation_leaf_matches(rc, call, site_rank)) {
             continue;
         }
 
-        const CBMResolvedCall **best = site_rank == 2 ? &best_tail_exact : &best_tail_legacy;
+        const LSMResolvedCall **best = site_rank == 2 ? &best_tail_exact : &best_tail_legacy;
         bool *ambiguous = site_rank == 2 ? &tail_exact_ambiguous : &tail_legacy_ambiguous;
         if (!*best) {
             *best = rc;
             continue;
         }
-        if (!cbm_pipeline_invocation_targets_equal((*best)->callee_qn, rc->callee_qn, gbuf,
+        if (!lsm_pipeline_invocation_targets_equal((*best)->callee_qn, rc->callee_qn, gbuf,
                                                    project_name, allow_tail_match)) {
             *ambiguous = true;
             continue;
@@ -485,12 +485,12 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution_in_graph(
 
 /* Graph-free compatibility entry point for resolver unit tests. Raw distinct
  * targets remain ambiguous because no materialized-node identity is available. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_resolution(
-    const CBMResolvedCallArray *arr, const CBMCall *call, bool allow_tail_match) {
-    return cbm_pipeline_find_lsp_resolution_in_graph(arr, call, allow_tail_match, NULL, NULL);
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_resolution(
+    const LSMResolvedCallArray *arr, const LSMCall *call, bool allow_tail_match) {
+    return lsm_pipeline_find_lsp_resolution_in_graph(arr, call, allow_tail_match, NULL, NULL);
 }
 
-static inline bool cbm_pipeline_reference_reason_matches(const CBMResolvedCall *resolved,
+static inline bool lsm_pipeline_reference_reason_matches(const LSMResolvedCall *resolved,
                                                          const char *reference_leaf) {
     if (!resolved || !resolved->strategy || !resolved->reason || !reference_leaf) {
         return false;
@@ -502,14 +502,14 @@ static inline bool cbm_pipeline_reference_reason_matches(const CBMResolvedCall *
                                 strcmp(resolved->strategy, "lsp_callable_value") == 0 ||
                                 strcmp(resolved->strategy, "lsp_callable_value_reference") == 0;
     return reason_join_strategy &&
-           strcmp(cbm_lsp_bare_segment(resolved->reason), reference_leaf) == 0;
+           strcmp(lsm_lsp_bare_segment(resolved->reason), reference_leaf) == 0;
 }
 
-static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node(const cbm_gbuf_t *gbuf,
+static inline const lsm_gbuf_node_t *lsm_pipeline_lsp_target_node(const lsm_gbuf_t *gbuf,
                                                                   const char *project_name,
                                                                   const char *callee_qn,
                                                                   bool allow_tail_match) {
-    return cbm_pipeline_lsp_target_node_policy(gbuf, project_name, callee_qn, allow_tail_match,
+    return lsm_pipeline_lsp_target_node_policy(gbuf, project_name, callee_qn, allow_tail_match,
                                                true);
 }
 
@@ -517,19 +517,19 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node(const cbm_gbuf
  * A project-qualified retry is still exact, but Class.method and unique-leaf
  * fallbacks could bind `kotlin.IntArray.iterator` to an unrelated project
  * method and are therefore deliberately disabled. */
-static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_strict(const cbm_gbuf_t *gbuf,
+static inline const lsm_gbuf_node_t *lsm_pipeline_lsp_target_node_strict(const lsm_gbuf_t *gbuf,
                                                                          const char *project_name,
                                                                          const char *callee_qn,
                                                                          bool allow_tail_match) {
     (void)allow_tail_match;
-    return cbm_pipeline_lsp_target_node_policy(gbuf, project_name, callee_qn, false, false);
+    return lsm_pipeline_lsp_target_node_policy(gbuf, project_name, callee_qn, false, false);
 }
 
 /* Keep exact-only lookup scoped to known external Kotlin namespaces. Project
  * callable aliases and operators still need the normal JVM QN reconciliation
  * path, while unresolved synthetic carriers remain fail-closed at the caller. */
-static inline bool cbm_pipeline_kotlin_external_target(CBMLanguage lang, const char *callee_qn) {
-    if (lang != CBM_LANG_KOTLIN || !callee_qn) {
+static inline bool lsm_pipeline_kotlin_external_target(LSMLanguage lang, const char *callee_qn) {
+    if (lang != LSM_LANG_KOTLIN || !callee_qn) {
         return false;
     }
     return strncmp(callee_qn, "kotlin.", strlen("kotlin.")) == 0 ||
@@ -541,8 +541,8 @@ static inline bool cbm_pipeline_kotlin_external_target(CBMLanguage lang, const c
  * project-prefixed. Raw string inequality is not ambiguity when both spellings
  * resolve to the same materialized node; conversely, if both nodes exist they
  * remain distinct and the reference must fail closed. */
-static inline bool cbm_pipeline_reference_targets_equal(const char *left_qn, const char *right_qn,
-                                                        const cbm_gbuf_t *gbuf,
+static inline bool lsm_pipeline_reference_targets_equal(const char *left_qn, const char *right_qn,
+                                                        const lsm_gbuf_t *gbuf,
                                                         const char *project_name,
                                                         bool allow_tail_match) {
     if (!left_qn || !right_qn) {
@@ -559,31 +559,31 @@ static inline bool cbm_pipeline_reference_targets_equal(const char *left_qn, con
      * Equivalence is deliberately stricter: collapse only direct and
      * project-prefix spellings of one graph node, otherwise stay ambiguous. */
     (void)allow_tail_match;
-    const cbm_gbuf_node_t *left = cbm_pipeline_lsp_target_node(gbuf, project_name, left_qn, false);
-    const cbm_gbuf_node_t *right =
-        cbm_pipeline_lsp_target_node(gbuf, project_name, right_qn, false);
+    const lsm_gbuf_node_t *left = lsm_pipeline_lsp_target_node(gbuf, project_name, left_qn, false);
+    const lsm_gbuf_node_t *right =
+        lsm_pipeline_lsp_target_node(gbuf, project_name, right_qn, false);
     return left && right && left->id == right->id;
 }
 
 typedef struct {
-    const CBMResolvedCall *row;
+    const LSMResolvedCall *row;
     int original_index;
-} cbm_pipeline_lsp_reference_index_entry_t;
+} lsm_pipeline_lsp_reference_index_entry_t;
 
 typedef struct {
-    cbm_pipeline_lsp_reference_index_entry_t *entries;
+    lsm_pipeline_lsp_reference_index_entry_t *entries;
     int count;
-} cbm_pipeline_lsp_reference_index_t;
+} lsm_pipeline_lsp_reference_index_t;
 
 /* Sort by exact occurrence while retaining extraction order within one site.
  * The final ordinal key is intentional: confidence ties keep the first row,
  * so an unstable qsort tie must not silently change semantic selection. */
-static inline int cbm_pipeline_lsp_reference_index_entry_cmp(const void *left_ptr,
+static inline int lsm_pipeline_lsp_reference_index_entry_cmp(const void *left_ptr,
                                                              const void *right_ptr) {
-    const cbm_pipeline_lsp_reference_index_entry_t *left =
-        (const cbm_pipeline_lsp_reference_index_entry_t *)left_ptr;
-    const cbm_pipeline_lsp_reference_index_entry_t *right =
-        (const cbm_pipeline_lsp_reference_index_entry_t *)right_ptr;
+    const lsm_pipeline_lsp_reference_index_entry_t *left =
+        (const lsm_pipeline_lsp_reference_index_entry_t *)left_ptr;
+    const lsm_pipeline_lsp_reference_index_entry_t *right =
+        (const lsm_pipeline_lsp_reference_index_entry_t *)right_ptr;
     if (left->row->source_origin != right->row->source_origin) {
         return left->row->source_origin < right->row->source_origin ? -1 : 1;
     }
@@ -602,8 +602,8 @@ static inline int cbm_pipeline_lsp_reference_index_entry_cmp(const void *left_pt
 /* Build one compact pointer index per extracted file. Invocation rows cannot
  * participate in CALL_REFERENCE matching and are excluded. False means only
  * allocation failure; callers must then use the unchanged linear matcher. */
-static inline bool cbm_pipeline_lsp_reference_index_build(
-    const CBMResolvedCallArray *arr, cbm_pipeline_lsp_reference_index_t *index) {
+static inline bool lsm_pipeline_lsp_reference_index_build(
+    const LSMResolvedCallArray *arr, lsm_pipeline_lsp_reference_index_t *index) {
     if (!index) {
         return false;
     }
@@ -615,26 +615,26 @@ static inline bool cbm_pipeline_lsp_reference_index_build(
 
     int reference_count = 0;
     for (int i = 0; i < arr->count; i++) {
-        if (arr->items[i].kind == CBM_RESOLVED_CALL_REFERENCE) {
+        if (arr->items[i].kind == LSM_RESOLVED_CALL_REFERENCE) {
             reference_count++;
         }
     }
     if (reference_count == 0) {
         return true;
     }
-    if ((size_t)reference_count > SIZE_MAX / sizeof(cbm_pipeline_lsp_reference_index_entry_t)) {
+    if ((size_t)reference_count > SIZE_MAX / sizeof(lsm_pipeline_lsp_reference_index_entry_t)) {
         return false;
     }
 
-    cbm_pipeline_lsp_reference_index_entry_t *entries =
-        (cbm_pipeline_lsp_reference_index_entry_t *)malloc((size_t)reference_count *
+    lsm_pipeline_lsp_reference_index_entry_t *entries =
+        (lsm_pipeline_lsp_reference_index_entry_t *)malloc((size_t)reference_count *
                                                            sizeof(*entries));
     if (!entries) {
         return false;
     }
     int next = 0;
     for (int i = 0; i < arr->count; i++) {
-        if (arr->items[i].kind != CBM_RESOLVED_CALL_REFERENCE) {
+        if (arr->items[i].kind != LSM_RESOLVED_CALL_REFERENCE) {
             continue;
         }
         entries[next].row = &arr->items[i];
@@ -642,14 +642,14 @@ static inline bool cbm_pipeline_lsp_reference_index_build(
         next++;
     }
     qsort(entries, (size_t)reference_count, sizeof(*entries),
-          cbm_pipeline_lsp_reference_index_entry_cmp);
+          lsm_pipeline_lsp_reference_index_entry_cmp);
     index->entries = entries;
     index->count = reference_count;
     return true;
 }
 
-static inline void cbm_pipeline_lsp_reference_index_free(
-    cbm_pipeline_lsp_reference_index_t *index) {
+static inline void lsm_pipeline_lsp_reference_index_free(
+    lsm_pipeline_lsp_reference_index_t *index) {
     if (!index) {
         return;
     }
@@ -658,8 +658,8 @@ static inline void cbm_pipeline_lsp_reference_index_free(
     index->count = 0;
 }
 
-static inline int cbm_pipeline_lsp_reference_site_cmp_usage(const CBMResolvedCall *row,
-                                                            const CBMUsage *usage) {
+static inline int lsm_pipeline_lsp_reference_site_cmp_usage(const LSMResolvedCall *row,
+                                                            const LSMUsage *usage) {
     if (row->source_origin != usage->source_origin) {
         return row->source_origin < usage->source_origin ? -1 : 1;
     }
@@ -672,8 +672,8 @@ static inline int cbm_pipeline_lsp_reference_site_cmp_usage(const CBMResolvedCal
     return 0;
 }
 
-static inline const CBMResolvedCall *cbm_pipeline_lsp_reference_view_row(
-    const CBMResolvedCallArray *arr, const cbm_pipeline_lsp_reference_index_entry_t *entries,
+static inline const LSMResolvedCall *lsm_pipeline_lsp_reference_view_row(
+    const LSMResolvedCallArray *arr, const lsm_pipeline_lsp_reference_index_entry_t *entries,
     int first, int offset) {
     return entries ? entries[first + offset].row : &arr->items[first + offset];
 }
@@ -692,37 +692,37 @@ static inline const CBMResolvedCall *cbm_pipeline_lsp_reference_view_row(
  * `entries` is either NULL for the original full-array fallback or a sorted
  * occurrence slice. The matching body is deliberately shared so indexing
  * cannot diverge on caller, reason, ambiguity, target identity, or confidence. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_view_in_graph(
-    const CBMResolvedCallArray *arr, const cbm_pipeline_lsp_reference_index_entry_t *entries,
-    int first, int row_count, const CBMUsage *usage, bool allow_tail_match, const cbm_gbuf_t *gbuf,
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_reference_view_in_graph(
+    const LSMResolvedCallArray *arr, const lsm_pipeline_lsp_reference_index_entry_t *entries,
+    int first, int row_count, const LSMUsage *usage, bool allow_tail_match, const lsm_gbuf_t *gbuf,
     const char *project_name) {
     if ((!entries && !arr) || row_count <= 0 || !usage || !usage->enclosing_func_qn ||
         !usage->ref_name) {
         return NULL;
     }
 
-    const char *ref_leaf = cbm_lsp_bare_segment(usage->ref_name);
+    const char *ref_leaf = lsm_lsp_bare_segment(usage->ref_name);
     if (!ref_leaf || !ref_leaf[0]) {
         return NULL;
     }
 
-    const CBMResolvedCall *best_exact = NULL;
+    const LSMResolvedCall *best_exact = NULL;
     bool exact_ambiguous = false;
     for (int i = 0; i < row_count; i++) {
-        cbm_pipeline_lsp_reference_lookup_test_note_row();
-        const CBMResolvedCall *rc = cbm_pipeline_lsp_reference_view_row(arr, entries, first, i);
-        if (rc->kind != CBM_RESOLVED_CALL_REFERENCE || !rc->caller_qn || !rc->callee_qn ||
-            rc->confidence < CBM_LSP_CONFIDENCE_FLOOR) {
+        lsm_pipeline_lsp_reference_lookup_test_note_row();
+        const LSMResolvedCall *rc = lsm_pipeline_lsp_reference_view_row(arr, entries, first, i);
+        if (rc->kind != LSM_RESOLVED_CALL_REFERENCE || !rc->caller_qn || !rc->callee_qn ||
+            rc->confidence < LSM_LSP_CONFIDENCE_FLOOR) {
             continue;
         }
         if (strcmp(rc->caller_qn, usage->enclosing_func_qn) != 0 ||
-            !cbm_pipeline_source_occurrence_eq(usage->site_start_byte, usage->site_end_byte,
+            !lsm_pipeline_source_occurrence_eq(usage->site_start_byte, usage->site_end_byte,
                                                usage->source_origin, rc->site_start_byte,
                                                rc->site_end_byte, rc->source_origin)) {
             continue;
         }
-        bool name_matches = strcmp(cbm_lsp_bare_segment(rc->callee_qn), ref_leaf) == 0;
-        bool semantic_reason_matches = cbm_pipeline_reference_reason_matches(rc, ref_leaf);
+        bool name_matches = strcmp(lsm_lsp_bare_segment(rc->callee_qn), ref_leaf) == 0;
+        bool semantic_reason_matches = lsm_pipeline_reference_reason_matches(rc, ref_leaf);
         if (!name_matches && !semantic_reason_matches) {
             continue;
         }
@@ -730,7 +730,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_view_in_gra
             best_exact = rc;
             continue;
         }
-        if (!cbm_pipeline_reference_targets_equal(best_exact->callee_qn, rc->callee_qn, gbuf,
+        if (!lsm_pipeline_reference_targets_equal(best_exact->callee_qn, rc->callee_qn, gbuf,
                                                   project_name, allow_tail_match)) {
             exact_ambiguous = true;
             continue;
@@ -743,28 +743,28 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_view_in_gra
         return exact_ambiguous ? NULL : best_exact;
     }
 
-    const char *caller_tail = cbm_pipeline_qn_class_method_tail(usage->enclosing_func_qn);
+    const char *caller_tail = lsm_pipeline_qn_class_method_tail(usage->enclosing_func_qn);
     if (!caller_tail) {
         return NULL;
     }
 
-    const CBMResolvedCall *best_tail = NULL;
+    const LSMResolvedCall *best_tail = NULL;
     bool tail_ambiguous = false;
     for (int i = 0; i < row_count; i++) {
-        cbm_pipeline_lsp_reference_lookup_test_note_row();
-        const CBMResolvedCall *rc = cbm_pipeline_lsp_reference_view_row(arr, entries, first, i);
-        if (rc->kind != CBM_RESOLVED_CALL_REFERENCE || !rc->caller_qn || !rc->callee_qn ||
-            rc->confidence < CBM_LSP_CONFIDENCE_FLOOR) {
+        lsm_pipeline_lsp_reference_lookup_test_note_row();
+        const LSMResolvedCall *rc = lsm_pipeline_lsp_reference_view_row(arr, entries, first, i);
+        if (rc->kind != LSM_RESOLVED_CALL_REFERENCE || !rc->caller_qn || !rc->callee_qn ||
+            rc->confidence < LSM_LSP_CONFIDENCE_FLOOR) {
             continue;
         }
-        if (!cbm_pipeline_qn_class_method_tail_eq(rc->caller_qn, caller_tail) ||
-            !cbm_pipeline_source_occurrence_eq(usage->site_start_byte, usage->site_end_byte,
+        if (!lsm_pipeline_qn_class_method_tail_eq(rc->caller_qn, caller_tail) ||
+            !lsm_pipeline_source_occurrence_eq(usage->site_start_byte, usage->site_end_byte,
                                                usage->source_origin, rc->site_start_byte,
                                                rc->site_end_byte, rc->source_origin)) {
             continue;
         }
-        bool name_matches = strcmp(cbm_lsp_bare_segment(rc->callee_qn), ref_leaf) == 0;
-        bool semantic_reason_matches = cbm_pipeline_reference_reason_matches(rc, ref_leaf);
+        bool name_matches = strcmp(lsm_lsp_bare_segment(rc->callee_qn), ref_leaf) == 0;
+        bool semantic_reason_matches = lsm_pipeline_reference_reason_matches(rc, ref_leaf);
         if (!name_matches && !semantic_reason_matches) {
             continue;
         }
@@ -772,7 +772,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_view_in_gra
             best_tail = rc;
             continue;
         }
-        if (!cbm_pipeline_reference_targets_equal(best_tail->callee_qn, rc->callee_qn, gbuf,
+        if (!lsm_pipeline_reference_targets_equal(best_tail->callee_qn, rc->callee_qn, gbuf,
                                                   project_name, allow_tail_match)) {
             tail_ambiguous = true;
             continue;
@@ -786,23 +786,23 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_view_in_gra
 
 /* Full-array compatibility/fallback path. Allocation failure in either
  * materializer deliberately lands here rather than dropping semantic edges. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_in_graph(
-    const CBMResolvedCallArray *arr, const CBMUsage *usage, bool allow_tail_match,
-    const cbm_gbuf_t *gbuf, const char *project_name) {
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_reference_in_graph(
+    const LSMResolvedCallArray *arr, const LSMUsage *usage, bool allow_tail_match,
+    const lsm_gbuf_t *gbuf, const char *project_name) {
     int count = arr ? arr->count : 0;
-    return cbm_pipeline_find_lsp_reference_view_in_graph(arr, NULL, 0, count, usage,
+    return lsm_pipeline_find_lsp_reference_view_in_graph(arr, NULL, 0, count, usage,
                                                          allow_tail_match, gbuf, project_name);
 }
 
 /* Binary-search the exact (origin,start,end) occurrence, then run the shared
  * matcher only over that stable-order slice. A NULL index means construction
  * failed and selects the original linear fallback above. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_indexed_in_graph(
-    const CBMResolvedCallArray *arr, const cbm_pipeline_lsp_reference_index_t *index,
-    const CBMUsage *usage, bool allow_tail_match, const cbm_gbuf_t *gbuf,
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_reference_indexed_in_graph(
+    const LSMResolvedCallArray *arr, const lsm_pipeline_lsp_reference_index_t *index,
+    const LSMUsage *usage, bool allow_tail_match, const lsm_gbuf_t *gbuf,
     const char *project_name) {
     if (!index) {
-        return cbm_pipeline_find_lsp_reference_in_graph(arr, usage, allow_tail_match, gbuf,
+        return lsm_pipeline_find_lsp_reference_in_graph(arr, usage, allow_tail_match, gbuf,
                                                         project_name);
     }
     if (!usage || !usage->enclosing_func_qn || !usage->ref_name || index->count <= 0) {
@@ -813,7 +813,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_indexed_in_
     int high = index->count;
     while (low < high) {
         int middle = low + (high - low) / 2;
-        if (cbm_pipeline_lsp_reference_site_cmp_usage(index->entries[middle].row, usage) < 0) {
+        if (lsm_pipeline_lsp_reference_site_cmp_usage(index->entries[middle].row, usage) < 0) {
             low = middle + 1;
         } else {
             high = middle;
@@ -823,22 +823,22 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference_indexed_in_
     high = index->count;
     while (low < high) {
         int middle = low + (high - low) / 2;
-        if (cbm_pipeline_lsp_reference_site_cmp_usage(index->entries[middle].row, usage) <= 0) {
+        if (lsm_pipeline_lsp_reference_site_cmp_usage(index->entries[middle].row, usage) <= 0) {
             low = middle + 1;
         } else {
             high = middle;
         }
     }
     int row_count = low - first;
-    return cbm_pipeline_find_lsp_reference_view_in_graph(
+    return lsm_pipeline_find_lsp_reference_view_in_graph(
         arr, index->entries, first, row_count, usage, allow_tail_match, gbuf, project_name);
 }
 
 /* String-strict helper retained for unit tests and callers without a graph.
  * Production edge materialization uses the graph-aware variant above. */
-static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference(
-    const CBMResolvedCallArray *arr, const CBMUsage *usage, bool allow_tail_match) {
-    return cbm_pipeline_find_lsp_reference_in_graph(arr, usage, allow_tail_match, NULL, NULL);
+static inline const LSMResolvedCall *lsm_pipeline_find_lsp_reference(
+    const LSMResolvedCallArray *arr, const LSMUsage *usage, bool allow_tail_match) {
+    return lsm_pipeline_find_lsp_reference_in_graph(arr, usage, allow_tail_match, NULL, NULL);
 }
 
 /* Resolve an LSP-emitted callee_qn to a graph-buffer node.
@@ -849,7 +849,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference(
  *   1. try the LSP-emitted QN as-is;
  *   2. retry with `<project>.<callee_qn>` when needed;
  *   3. if both fail AND allow_tail_match is set (JVM callers only, see
- *      cbm_pipeline_lsp_allow_tail_match), use the exact node-name index
+ *      lsm_pipeline_lsp_allow_tail_match), use the exact node-name index
  *      to narrow candidates by short method name and accept exactly one
  *      Function/Method whose qualified_name has the same Class.method
  *      tail;
@@ -860,7 +860,7 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference(
 /* Tail-match cost counters (#1669).
  *
  * The scan below is the one candidate loop in the resolve path with NO cap —
- * cbm_registry_resolve bails at REG_MAX_CANDIDATES=256, this does not. Its
+ * lsm_registry_resolve bails at REG_MAX_CANDIDATES=256, this does not. Its
  * candidate set is every node sharing a short name, which grows with the
  * corpus, so `candidates scanned` is the quantity that turns resolve from O(n)
  * into O(n^2). Counted always (two relaxed adds), surfaced by pass_parallel at
@@ -869,13 +869,13 @@ static inline const CBMResolvedCall *cbm_pipeline_find_lsp_reference(
 extern _Atomic uint64_t g_lsp_tail_lookups;
 extern _Atomic uint64_t g_lsp_tail_candidates;
 
-static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
-    const cbm_gbuf_t *gbuf, const char *project_name, const char *callee_qn, bool allow_tail_match,
+static inline const lsm_gbuf_node_t *lsm_pipeline_lsp_target_node_policy(
+    const lsm_gbuf_t *gbuf, const char *project_name, const char *callee_qn, bool allow_tail_match,
     bool allow_unique_callable_fallback) {
     if (!gbuf || !callee_qn) {
         return NULL;
     }
-    const cbm_gbuf_node_t *direct = cbm_gbuf_find_by_qn(gbuf, callee_qn);
+    const lsm_gbuf_node_t *direct = lsm_gbuf_find_by_qn(gbuf, callee_qn);
     if (direct) {
         return direct;
     }
@@ -890,7 +890,7 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
                     memcpy(prefixed_qn, project_name, proj_len);
                     prefixed_qn[proj_len] = '.';
                     memcpy(prefixed_qn + proj_len + 1U, callee_qn, callee_len + 1U);
-                    const cbm_gbuf_node_t *prefixed = cbm_gbuf_find_by_qn(gbuf, prefixed_qn);
+                    const lsm_gbuf_node_t *prefixed = lsm_gbuf_find_by_qn(gbuf, prefixed_qn);
                     free(prefixed_qn);
                     if (prefixed) {
                         return prefixed;
@@ -905,24 +905,24 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
 
     const char *short_name = strrchr(callee_qn, '.');
     short_name = short_name ? short_name + SKIP_ONE : callee_qn;
-    const char *callee_tail = cbm_pipeline_qn_class_method_tail(callee_qn);
+    const char *callee_tail = lsm_pipeline_qn_class_method_tail(callee_qn);
     if (!callee_tail) {
         return NULL;
     }
-    const cbm_gbuf_node_t **hits = NULL;
+    const lsm_gbuf_node_t **hits = NULL;
     int hit_count = 0;
-    if (cbm_gbuf_find_by_name(gbuf, short_name, &hits, &hit_count) != 0 || hit_count == 0) {
+    if (lsm_gbuf_find_by_name(gbuf, short_name, &hits, &hit_count) != 0 || hit_count == 0) {
         return NULL;
     }
     atomic_fetch_add_explicit(&g_lsp_tail_lookups, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&g_lsp_tail_candidates, (uint64_t)hit_count, memory_order_relaxed);
 
-    const cbm_gbuf_node_t *match = NULL;
-    const cbm_gbuf_node_t *unique_callable = NULL;
+    const lsm_gbuf_node_t *match = NULL;
+    const lsm_gbuf_node_t *unique_callable = NULL;
     bool tail_ambiguous = false;
     bool callable_ambiguous = false;
     for (int i = 0; i < hit_count; i++) {
-        const cbm_gbuf_node_t *cand = hits[i];
+        const lsm_gbuf_node_t *cand = hits[i];
         if (!cand || !cand->label || !cand->qualified_name) {
             continue;
         }
@@ -934,7 +934,7 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
         } else if (unique_callable->id != cand->id) {
             callable_ambiguous = true;
         }
-        if (!cbm_pipeline_qn_class_method_tail_eq(cand->qualified_name, callee_tail)) {
+        if (!lsm_pipeline_qn_class_method_tail_eq(cand->qualified_name, callee_tail)) {
             continue;
         }
         if (match && match->id != cand->id) {
@@ -952,4 +952,4 @@ static inline const cbm_gbuf_node_t *cbm_pipeline_lsp_target_node_policy(
     return callable_ambiguous ? NULL : unique_callable;
 }
 
-#endif /* CBM_PIPELINE_LSP_RESOLVE_H */
+#endif /* LSM_PIPELINE_LSP_RESOLVE_H */

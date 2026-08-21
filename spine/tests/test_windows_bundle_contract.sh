@@ -2,8 +2,8 @@
 # INVERTED release-surface contract: Windows ships ONE binary.
 #
 # History this guards against. The Windows release used to be a PAIR — a small
-# permanent launcher (codebase-memory-mcp.exe) plus the real product binary
-# (codebase-memory-mcp.payload.exe). The launcher existed for exactly one
+# permanent launcher (logan-spine-mcp.exe) plus the real product binary
+# (logan-spine-mcp.payload.exe). The launcher existed for exactly one
 # reason: a running .exe cannot replace its own image on Windows, so an
 # in-process self-update needs a second resident binary to do the swap.
 #
@@ -14,7 +14,7 @@
 # flagged), while the product binary itself scans clean on every platform.
 #
 # The fix removed the stub and moved self-update OUT of the process into
-# install.ps1, which runs while CBM is NOT running. So this file asserts the
+# install.ps1, which runs while LSM is NOT running. So this file asserts the
 # ABSENCE of the flagged design, plus the one step that replaces it:
 # install.ps1 must RETIRE the running binary (rename it out of the way) before
 # publishing the new one — losing that step silently breaks every Windows
@@ -73,8 +73,8 @@ def yaml_run_blocks(text: str) -> list[str]:
     return blocks
 
 
-binary = "codebase-memory-mcp.exe"
-payload = "codebase-memory-mcp.payload.exe"
+binary = "logan-spine-mcp.exe"
+payload = "logan-spine-mcp.payload.exe"
 windows_archive_names = (binary, "LICENSE", "install.ps1", "THIRD_PARTY_NOTICES.md")
 
 # ── 1. The archive is exactly four files, defined in ONE place ───────────────
@@ -106,7 +106,7 @@ require(
 # of a launcher build/copy) means the flagged two-binary design is back.
 launcher_markers = (
     payload,
-    "codebase-memory-mcp-launcher",
+    "logan-spine-mcp-launcher",
     "windows_launcher_state",
     "src/launcher/",
 )
@@ -115,7 +115,7 @@ shipped_surfaces = (
     "install.ps1",
     "pkg/npm/install.js",
     "pkg/npm/bin.js",
-    "pkg/pypi/src/codebase_memory_mcp/_cli.py",
+    "pkg/pypi/src/logan_spine_mcp/_cli.py",
     ".github/workflows/_build.yml",
 )
 for relative in shipped_surfaces:
@@ -140,10 +140,10 @@ for relative in (
         not (root / relative).exists(),
         f"{relative} must stay deleted — the Windows launcher stub is gone for good",
     )
-makefile = read("Makefile.cbm")
+makefile = read("Makefile.lsm")
 require(
-    "codebase-memory-mcp-launcher" not in makefile and "WINDOWS_LAUNCHER" not in makefile,
-    "Makefile.cbm must not expose a Windows launcher target or variable",
+    "logan-spine-mcp-launcher" not in makefile and "WINDOWS_LAUNCHER" not in makefile,
+    "Makefile.lsm must not expose a Windows launcher target or variable",
 )
 
 # Every archive is produced through the ONE canonical packaging entry, so the
@@ -181,7 +181,7 @@ require(
 # ── 3. install.ps1 retires the running binary before publishing ──────────────
 # This is THE step that replaces the launcher. Windows keeps an image lock on a
 # running .exe: it cannot be overwritten, but it CAN be renamed out of the way.
-# install.ps1 runs while CBM is not running, renames the installed binary to
+# install.ps1 runs while LSM is not running, renames the installed binary to
 # "<dest>.retired-<timestamp>", then installs over the freed name. Without the
 # retire step every Windows update fails on a locked destination.
 installer = read("install.ps1")
@@ -232,16 +232,16 @@ require(
 # ── 4. Package-manager shims resolve the single Windows binary ───────────────
 single_binary_contracts = {
     "pkg/npm/install.js": (
-        r"const\s+WINDOWS_BINARY_NAME\s*=\s*['\"]codebase-memory-mcp\.exe['\"]",
+        r"const\s+WINDOWS_BINARY_NAME\s*=\s*['\"]logan-spine-mcp\.exe['\"]",
         r"installWindowsBinaryAtomically\(",
         r"windowsBinaryReady\(",
     ),
     "pkg/npm/bin.js": (
-        r"binName\s*=\s*isWindows\s*\?\s*['\"]codebase-memory-mcp\.exe['\"]",
+        r"binName\s*=\s*isWindows\s*\?\s*['\"]logan-spine-mcp\.exe['\"]",
         r"const\s+executionPath\s*=\s*binPath",
     ),
-    "pkg/pypi/src/codebase_memory_mcp/_cli.py": (
-        r"_WINDOWS_BINARY_NAME\s*=\s*['\"]codebase-memory-mcp\.exe['\"]",
+    "pkg/pypi/src/logan_spine_mcp/_cli.py": (
+        r"_WINDOWS_BINARY_NAME\s*=\s*['\"]logan-spine-mcp\.exe['\"]",
         r"def\s+_runtime_set_ready\(",
     ),
 }
@@ -252,7 +252,7 @@ for relative, patterns in single_binary_contracts.items():
         f"{relative} must resolve the single Windows binary",
     )
     require(
-        ".cbm/generations" not in source and "current-v1" not in source,
+        ".lsm/generations" not in source and "current-v1" not in source,
         f"{relative} must remain portable and not own managed launcher state",
     )
 
@@ -273,7 +273,7 @@ exact_archive_guards = {
         "'install.ps1'",
         "THIRD_PARTY_NOTICES.md",
     ),
-    "pkg/pypi/src/codebase_memory_mcp/_cli.py": (
+    "pkg/pypi/src/logan_spine_mcp/_cli.py": (
         "name not in required_set",
         "len(seen) != len(required)",
         "_WINDOWS_BINARY_NAME",
@@ -293,13 +293,13 @@ for relative, needles in exact_archive_guards.items():
 # A portable mutation refusal must point to the owning package manager.
 guidance_contracts = {
     "pkg/npm/bin.js": (
-        "npm install codebase-memory-mcp@latest",
-        "npm uninstall codebase-memory-mcp",
-        "codebase-memory-mcp install --yes",
+        "npm install logan-spine-mcp@latest",
+        "npm uninstall logan-spine-mcp",
+        "logan-spine-mcp install --yes",
     ),
-    "pkg/pypi/src/codebase_memory_mcp/_cli.py": (
-        "python -m pip install --upgrade codebase-memory-mcp",
-        "python -m pip uninstall codebase-memory-mcp",
+    "pkg/pypi/src/logan_spine_mcp/_cli.py": (
+        "python -m pip install --upgrade logan-spine-mcp",
+        "python -m pip uninstall logan-spine-mcp",
         "install --yes",
     ),
 }
@@ -343,7 +343,7 @@ require(
         for needle in (
             "[Environment+SpecialFolder]::UserProfile",
             '$guardRoot = Join-Path $userProfile '
-            '("cbm-windows-guards-root-" + [guid]::NewGuid().ToString("N"))',
+            '("lsm-windows-guards-root-" + [guid]::NewGuid().ToString("N"))',
             '$env:TEMP = $guardRoot',
             '$env:TMP = $guardRoot',
             '$env:TMPDIR = $guardRoot',
@@ -402,7 +402,7 @@ require(
             '"install.ps1" in lowered',
             "result.returncode == 0",
             "sha256_file(binary) == before",
-            "codebase-memory-mcp.payload.exe",
+            "logan-spine-mcp.payload.exe",
         )
     ),
     "the native update guard must assert exit 0, the printed install.ps1 command, an "
@@ -518,7 +518,7 @@ for relative, source in (
         f"{relative} must not disable SSH server identity verification",
     )
     require(
-        "CBM_VM_HOST_KEY_SHA256" in source,
+        "LSM_VM_HOST_KEY_SHA256" in source,
         f"{relative} must require the pinned VM SSH host-key fingerprint",
     )
 require(
@@ -538,7 +538,7 @@ require(
 )
 require(
     "mac-vm)" not in read("test-infrastructure/run.sh")
-    and "CBM_WIN_VM_SSH" not in read("test-infrastructure/run.sh"),
+    and "LSM_WIN_VM_SSH" not in read("test-infrastructure/run.sh"),
     "run.sh must not retain duplicate mutable VM drivers outside vm/win.sh",
 )
 
@@ -562,7 +562,7 @@ sync_case = re.search(r"^sync\)\n(?P<body>.*?)^\s*;;", vm_driver, re.MULTILINE |
 require(sync_case is not None, "win.sh must expose an exact local-worktree sync command")
 require(
     sync_case is not None
-    and "cbm_vm_write_untracked_manifest" in sync_case.group("body")
+    and "lsm_vm_write_untracked_manifest" in sync_case.group("body")
     and 'git -C "$ROOT" diff --binary' in sync_case.group("body")
     and "git reset --hard" in sync_case.group("body")
     and "git clean -fdx" in sync_case.group("body")
@@ -584,7 +584,7 @@ require(
     sync_case is not None
     # Assert the PROPERTY, not one spelling of it: capture the remote HEAD into
     # a local variable and compare it here. The checkout path became a variable
-    # (per-run isolation), so pinning the literal `/c/cbm` was asserting the
+    # (per-run isolation), so pinning the literal `/c/lsm` was asserting the
     # implementation rather than the contract it exists to protect.
     and re.search(
         r'remote_head="\$\(vm clangarm64 "cd \S+ && git rev-parse --verify HEAD"\)"',
@@ -605,12 +605,12 @@ require(bool(windows_smoke), "_smoke.yml must contain the smoke-windows job")
 vm_smoke = read("test-infrastructure/vm/vm-smoke.sh")
 smoke_local = read("scripts/smoke-local.sh")
 require(
-    'scripts/smoke-test.sh "$SMOKE_DIR/codebase-memory-mcp.exe"' in vm_smoke,
+    'scripts/smoke-test.sh "$SMOKE_DIR/logan-spine-mcp.exe"' in vm_smoke,
     f"Windows smoke wrapper must execute the canonical {binary}",
 )
 require(
     "bash test-infrastructure/vm/vm-smoke.sh" in windows_smoke
-    and 'CBM_SMOKE_ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/cbm-artifact"' in windows_smoke,
+    and 'LSM_SMOKE_ARTIFACT_DIR="$(cygpath -u "$RUNNER_TEMP")/lsm-artifact"' in windows_smoke,
     "Windows release smoke must call the canonical wrapper on the extracted artifact",
 )
 require(
@@ -622,9 +622,9 @@ require(
         needle in vm_smoke
         for needle in (
             'PROFILE_ROOT="$(cygpath -u "$USERPROFILE")"',
-            'SMOKE_DIR="$(mktemp -d "$PROFILE_ROOT/cbm-vm-smoke.XXXXXX")"',
-            'cp "$BINARY_SRC" "$SMOKE_DIR/codebase-memory-mcp.exe"',
-            'CBM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")"',
+            'SMOKE_DIR="$(mktemp -d "$PROFILE_ROOT/lsm-vm-smoke.XXXXXX")"',
+            'cp "$BINARY_SRC" "$SMOKE_DIR/logan-spine-mcp.exe"',
+            'LSM_CACHE_DIR="$(cygpath -m "$SMOKE_DIR/cache")"',
             'SMOKE_TEMP_ROOT="$SMOKE_DIR"',
         )
     ),
@@ -634,7 +634,7 @@ smoke_blocks = yaml_run_blocks(windows_smoke)
 windows_release_version_blocks = [
     re.sub(r"\s+", " ", re.sub(r"\\\s*\n\s*", " ", block)).strip()
     for block in smoke_blocks
-    if 'LAUNCH_DIR="$(mktemp -d "$PROFILE_ROOT/cbm-release-version.XXXXXX")"' in block
+    if 'LAUNCH_DIR="$(mktemp -d "$PROFILE_ROOT/lsm-release-version.XXXXXX")"' in block
 ]
 require(
     len(windows_release_version_blocks) == 1
@@ -642,8 +642,8 @@ require(
         needle in windows_release_version_blocks[0]
         for needle in (
             'PROFILE_ROOT="$(cygpath -u "$USERPROFILE")"',
-            'cp "$ARTIFACT_DIR/codebase-memory-mcp.exe" "$LAUNCH_DIR/"',
-            '"$LAUNCH_DIR/codebase-memory-mcp.exe" --version',
+            'cp "$ARTIFACT_DIR/logan-spine-mcp.exe" "$LAUNCH_DIR/"',
+            '"$LAUNCH_DIR/logan-spine-mcp.exe" --version',
         )
     ),
     "Windows release version checks must execute the single binary beneath the current "
@@ -652,8 +652,8 @@ require(
 # RUNNER_TEMP is legitimate ONLY for artifact provisioning/scanning; every
 # executable fixture and execution must stay beneath the account profile.
 runner_temp_allowed = (
-    re.compile(r'ARTIFACT_DIR="\$\(cygpath -u "\$RUNNER_TEMP"\)/cbm-artifact"'),
-    re.compile(r'Join-Path \$env:RUNNER_TEMP "cbm-artifact"'),
+    re.compile(r'ARTIFACT_DIR="\$\(cygpath -u "\$RUNNER_TEMP"\)/lsm-artifact"'),
+    re.compile(r'Join-Path \$env:RUNNER_TEMP "lsm-artifact"'),
 )
 runner_temp_lines = [line.strip() for line in windows_smoke.splitlines() if "RUNNER_TEMP" in line]
 require(
@@ -669,7 +669,7 @@ require(
 windows_release_security_blocks = [
     re.sub(r"\s+", " ", re.sub(r"\\\s*\n\s*", " ", block)).strip()
     for block in smoke_blocks
-    if 'scripts/security-install.sh "$SECURITY_DIR/codebase-memory-mcp.exe"' in block
+    if 'scripts/security-install.sh "$SECURITY_DIR/logan-spine-mcp.exe"' in block
 ]
 require(
     len(windows_release_security_blocks) == 1
@@ -677,10 +677,10 @@ require(
         needle in windows_release_security_blocks[0]
         for needle in (
             'PROFILE_ROOT="$(cygpath -u "$USERPROFILE")"',
-            'SECURITY_DIR="$(mktemp -d "$PROFILE_ROOT/cbm-release-security.XXXXXX")"',
-            'cp "$ARTIFACT_DIR/codebase-memory-mcp.exe" "$SECURITY_DIR/"',
+            'SECURITY_DIR="$(mktemp -d "$PROFILE_ROOT/lsm-release-security.XXXXXX")"',
+            'cp "$ARTIFACT_DIR/logan-spine-mcp.exe" "$SECURITY_DIR/"',
             'TMPDIR="$SECURITY_DIR" '
-            'scripts/security-install.sh "$SECURITY_DIR/codebase-memory-mcp.exe"',
+            'scripts/security-install.sh "$SECURITY_DIR/logan-spine-mcp.exe"',
         )
     ),
     "Windows release install audit must execute the single binary beneath the current "
@@ -690,8 +690,8 @@ require(
 # ── 9. Update transport stays HTTPS-only in production ───────────────────────
 smoke_script = read("scripts/smoke-test.sh")
 require(
-    'copy_smoke_binary "$FAKE_HOME/.local/bin/codebase-memory-mcp.exe"' not in smoke_script
-    and 'copy_smoke_binary "$UPDATE_HOME/.local/bin/codebase-memory-mcp.exe"' not in smoke_script,
+    'copy_smoke_binary "$FAKE_HOME/.local/bin/logan-spine-mcp.exe"' not in smoke_script
+    and 'copy_smoke_binary "$UPDATE_HOME/.local/bin/logan-spine-mcp.exe"' not in smoke_script,
     "Windows smoke must leave canonical targets absent for an authenticated install",
 )
 require(
@@ -704,7 +704,7 @@ require(
     "SMOKE_UPDATE_FIXTURE_DIR" in smoke_script
     and 'UPDATE_DOWNLOAD_URL="file://$UPDATE_FIXTURE_DIR"' in smoke_script
     and 'UPDATE_DOWNLOAD_URL="file:///$UPDATE_FIXTURE_DIR"' in smoke_script
-    and 'CBM_DOWNLOAD_URL="$UPDATE_DOWNLOAD_URL"' in smoke_script,
+    and 'LSM_DOWNLOAD_URL="$UPDATE_DOWNLOAD_URL"' in smoke_script,
     "Phase 14 native update must use an explicit file:// fixture override",
 )
 # The handoff contract is no longer Windows-specific: no platform replaces its
@@ -726,7 +726,7 @@ require(
     "Windows install.ps1 smoke must pass native HOME/TEMP/TMP and execute the script directly",
 )
 require(
-    'CBM_DOWNLOAD_URL="$SMOKE_DOWNLOAD_URL"' in smoke_script
+    'LSM_DOWNLOAD_URL="$SMOKE_DOWNLOAD_URL"' in smoke_script
     and '"$SMOKE_DOWNLOAD_URL/$DL_ARCHIVE"' in smoke_script,
     "installer and raw download smoke phases must retain loopback HTTP coverage",
 )
@@ -734,13 +734,13 @@ require(
     'SMOKE_UPDATE_FIXTURE_DIR="$FIXTURE_DIR"' in vm_smoke
     and 'SMOKE_UPDATE_FIXTURE_DIR="$FIXTURE_DIR"' in smoke_local
     and "scripts/smoke-local.sh" in smoke_workflow
-    and smoke_workflow.count("CBM_SMOKE_ARTIFACT_DIR") >= 2,
+    and smoke_workflow.count("LSM_SMOKE_ARTIFACT_DIR") >= 2,
     "Unix and Windows release smoke must identify their local update fixture via the "
     "canonical wrappers",
 )
 
 cli_source = read("src/cli/cli.c")
-probe_start = cli_source.find("cbm_json_mcp_probe_windows_command_path(")
+probe_start = cli_source.find("lsm_json_mcp_probe_windows_command_path(")
 probe_end = cli_source.find("#endif", probe_start)
 safe_command_probe = (
     cli_source[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
@@ -763,7 +763,7 @@ protocol_match = re.search(
 file_override = file_override_match.group(0) if file_override_match else ""
 protocol = protocol_match.group(0) if protocol_match else ""
 require(
-    re.search(r'cbm_safe_getenv\s*\(\s*"CBM_DOWNLOAD_URL"', file_override) is not None
+    re.search(r'lsm_safe_getenv\s*\(\s*"LSM_DOWNLOAD_URL"', file_override) is not None
     and 'strncmp(override, "file://", 7)' in file_override
     and "strncmp(url, override, override_length)" in file_override,
     "file:// downloads must remain restricted to the explicit test override",
@@ -777,7 +777,7 @@ require(
     "production native downloads must remain HTTPS-only",
 )
 download_helpers = cli_source[
-    cli_source.find("static int cbm_download_to_file(") : cli_source.find("/* ── macOS ad-hoc signing")
+    cli_source.find("static int lsm_download_to_file(") : cli_source.find("/* ── macOS ad-hoc signing")
 ]
 require(
     download_helpers.count('"--proto"') >= 2 and download_helpers.count('"--proto-redir"') >= 2,
@@ -786,7 +786,7 @@ require(
 
 # The Windows `update` command must hand off to install.ps1 and must NOT carry
 # an in-process self-update path (which is what required the launcher stub).
-update_start = cli_source.find("int cbm_cmd_update(int argc, char **argv) {")
+update_start = cli_source.find("int lsm_cmd_update(int argc, char **argv) {")
 update_end = cli_source.find("\n/* ── ", update_start)
 update_windows_block = (
     cli_source[update_start : update_end if update_end > update_start else len(cli_source)]
@@ -795,7 +795,7 @@ require(
     update_start >= 0
     and "install.ps1" in update_windows_block
     and "powershell -File" in update_windows_block,
-    "cbm_cmd_update must print the install.ps1 command on Windows",
+    "lsm_cmd_update must print the install.ps1 command on Windows",
 )
 # The printed command must NOT carry an execution-policy override. That is a
 # canonical malicious-loader pattern, and emitting it as a string literal put
@@ -805,11 +805,11 @@ require(
 # Unblock-File covers the common case and the README covers the rest.
 require(
     "ExecutionPolicy" not in update_windows_block,
-    "cbm_cmd_update must not print an execution-policy override "
+    "lsm_cmd_update must not print an execution-policy override "
     "(document it instead of shipping the pattern in the binary)",
 )
 require(
-    "cbm_windows_launcher" not in cli_source
+    "lsm_windows_launcher" not in cli_source
     and "windows_launcher_state.h" not in cli_source,
     "src/cli/cli.c must not retain any launcher-state API usage",
 )

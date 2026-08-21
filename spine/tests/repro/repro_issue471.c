@@ -14,7 +14,7 @@
  *
  * Why O(n^2):
  *   tree-sitter's GLR merge path in `stack_node_add_link`
- *   (internal/cbm/vendored/ts_runtime/src/stack.c, function starting at line 200)
+ *   (internal/lsm/vendored/ts_runtime/src/stack.c, function starting at line 200)
  *   is called recursively when two candidate parse-stack heads share compatible
  *   predecessor nodes (same TSStateId, same byte position, same error_cost).
  *   For an N-deep ambiguous call chain, the merge loop at the outermost level
@@ -22,7 +22,7 @@
  *   sweep over the growing link list.  The result is O(N^2) total
  *   stack_node_add_link invocations.
  *
- *   The `CBM_TS_STACK_MERGE_MAX_DEPTH` cap added in #461 bounds call-stack
+ *   The `LSM_TS_STACK_MERGE_MAX_DEPTH` cap added in #461 bounds call-stack
  *   RECURSION DEPTH (preventing SIGSEGV) but does NOT cap the total number of
  *   iterations across all recursive calls.  Hence: no crash, but superlinear
  *   parse time that grows without bound as N increases.
@@ -60,7 +60,7 @@
  *   false FAIL for a correct O(n) impl at this bound is implausible.
  *
  * Fix location (not implemented here):
- *   internal/cbm/vendored/ts_runtime/src/stack.c, `stack_node_add_link`:
+ *   internal/lsm/vendored/ts_runtime/src/stack.c, `stack_node_add_link`:
  *   bound the total merge work (an overall ambiguity-merge iteration budget
  *   or memoization of already-merged node pairs) consistent with the existing
  *   MAX_LINK_COUNT bail-out at line 249, so parse time stays near-linear for
@@ -68,7 +68,7 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -192,20 +192,20 @@ TEST(repro_issue471_glr_nested_ambiguity_terminates) {
          * If the fix bounds merge work to near-linear, extraction finishes
          * within ALARM_SECONDS and the child calls _exit(0) normally.
          *
-         * We do NOT call cbm_init() here: cbm_extract_file() is
+         * We do NOT call lsm_init() here: lsm_extract_file() is
          * self-contained for single-file extraction (mirrors rh_extract_crashes
          * pattern in repro_harness.h, which also omits a separate init call).
          */
         alarm(ALARM_SECONDS);
 
-        CBMFileResult *r = cbm_extract_file(
+        LSMFileResult *r = lsm_extract_file(
             src, (int)strlen(src),
-            CBM_LANG_PERL,
+            LSM_LANG_PERL,
             "repro",
             "deep_nested.pl",
             0, NULL, NULL
         );
-        if (r) cbm_free_result(r);
+        if (r) lsm_free_result(r);
 
         _exit(0); /* normal exit — extraction completed within the budget */
     }

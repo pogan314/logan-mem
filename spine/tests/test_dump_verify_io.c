@@ -1,8 +1,8 @@
 /*
  * test_dump_verify_io.c — I/O-level coverage for the #334 plausibility gate.
  *
- * Drives cbm_dump_verify_is_degraded against a real on-disk SQLite store and
- * the actual cbm_store_count_nodes / cbm_store_open_path_query path used by
+ * Drives lsm_dump_verify_is_degraded against a real on-disk SQLite store and
+ * the actual lsm_store_count_nodes / lsm_store_open_path_query path used by
  * resolve_store(). Includes a fork/crash port of bulk_crash_recovery proving
  * uncommitted WAL frames are discarded on the next open and the gate trips when
  * persisted rows fall short of the committed dump intent.
@@ -25,7 +25,7 @@
 #define DV_PROJECT "io_dump_verify"
 
 static void dv_temp_path(char *buf, size_t n) {
-    snprintf(buf, n, "%s/cmm_dump_verify_%d.db", cbm_tmpdir(), (int)getpid());
+    snprintf(buf, n, "%s/cmm_dump_verify_%d.db", lsm_tmpdir(), (int)getpid());
 }
 
 static void dv_cleanup(const char *path) {
@@ -39,41 +39,41 @@ static void dv_cleanup(const char *path) {
 
 /* Commit `count` distinct nodes to the on-disk store at `path`. */
 static int dv_write_nodes(const char *path, int count) {
-    cbm_store_t *s = cbm_store_open_path(path);
+    lsm_store_t *s = lsm_store_open_path(path);
     if (!s)
         return -1;
-    if (cbm_store_upsert_project(s, DV_PROJECT, "/tmp/io_dump_verify") != CBM_STORE_OK) {
-        cbm_store_close(s);
+    if (lsm_store_upsert_project(s, DV_PROJECT, "/tmp/io_dump_verify") != LSM_STORE_OK) {
+        lsm_store_close(s);
         return -1;
     }
-    cbm_store_begin(s);
+    lsm_store_begin(s);
     for (int i = 0; i < count; i++) {
         char qn[64];
         snprintf(qn, sizeof(qn), "io.node.%d", i);
-        cbm_node_t node = {.project = DV_PROJECT,
+        lsm_node_t node = {.project = DV_PROJECT,
                            .label = "Function",
                            .name = "n",
                            .qualified_name = qn,
                            .file_path = "io.c",
                            .start_line = i,
                            .end_line = i};
-        if (cbm_store_upsert_node(s, &node) < 0) {
-            cbm_store_close(s);
+        if (lsm_store_upsert_node(s, &node) < 0) {
+            lsm_store_close(s);
             return -1;
         }
     }
-    cbm_store_commit(s);
-    cbm_store_close(s);
+    lsm_store_commit(s);
+    lsm_store_close(s);
     return count;
 }
 
 /* Persisted node count via the same query path resolve_store() uses. */
 static int dv_persisted_nodes(const char *path) {
-    cbm_store_t *s = cbm_store_open_path_query(path);
+    lsm_store_t *s = lsm_store_open_path_query(path);
     if (!s)
-        return CBM_STORE_ERR;
-    int n = cbm_store_count_nodes(s, DV_PROJECT);
-    cbm_store_close(s);
+        return LSM_STORE_ERR;
+    int n = lsm_store_count_nodes(s, DV_PROJECT);
+    lsm_store_close(s);
     return n;
 }
 
@@ -86,8 +86,8 @@ TEST(dump_verify_io_full_persist_ok) {
     int persisted = dv_persisted_nodes(path);
     ASSERT_EQ(persisted, 200);
     /* committed == persisted: a faithful dump is never degraded. */
-    ASSERT_FALSE(cbm_dump_verify_is_degraded(200, persisted, CBM_DUMP_VERIFY_DEFAULT_RATIO,
-                                             CBM_DUMP_VERIFY_MIN_FLOOR));
+    ASSERT_FALSE(lsm_dump_verify_is_degraded(200, persisted, LSM_DUMP_VERIFY_DEFAULT_RATIO,
+                                             LSM_DUMP_VERIFY_MIN_FLOOR));
 
     dv_cleanup(path);
     PASS();
@@ -99,21 +99,21 @@ TEST(dump_verify_io_shortfall_after_delete) {
     dv_cleanup(path);
 
     ASSERT_EQ(dv_write_nodes(path, 1000), 1000);
-    ASSERT_FALSE(cbm_dump_verify_is_degraded(1000, dv_persisted_nodes(path),
-                                             CBM_DUMP_VERIFY_DEFAULT_RATIO,
-                                             CBM_DUMP_VERIFY_MIN_FLOOR));
+    ASSERT_FALSE(lsm_dump_verify_is_degraded(1000, dv_persisted_nodes(path),
+                                             LSM_DUMP_VERIFY_DEFAULT_RATIO,
+                                             LSM_DUMP_VERIFY_MIN_FLOOR));
 
     /* Simulate persisted loss: most rows vanish while the committed intent
      * (1000) is unchanged — the #334 silent-degradation signature. */
-    cbm_store_t *s = cbm_store_open_path(path);
+    lsm_store_t *s = lsm_store_open_path(path);
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_exec(s, "DELETE FROM nodes WHERE start_line >= 100"), CBM_STORE_OK);
-    cbm_store_close(s);
+    ASSERT_EQ(lsm_store_exec(s, "DELETE FROM nodes WHERE start_line >= 100"), LSM_STORE_OK);
+    lsm_store_close(s);
 
     int persisted = dv_persisted_nodes(path);
     ASSERT_EQ(persisted, 100);
-    ASSERT_TRUE(cbm_dump_verify_is_degraded(1000, persisted, CBM_DUMP_VERIFY_DEFAULT_RATIO,
-                                            CBM_DUMP_VERIFY_MIN_FLOOR));
+    ASSERT_TRUE(lsm_dump_verify_is_degraded(1000, persisted, LSM_DUMP_VERIFY_DEFAULT_RATIO,
+                                            LSM_DUMP_VERIFY_MIN_FLOOR));
 
     dv_cleanup(path);
     PASS();
@@ -132,21 +132,21 @@ TEST(dump_verify_io_fork_crash_uncommitted_discarded) {
     ASSERT_TRUE(pid >= 0);
     if (pid == 0) {
         /* Child: write a large uncommitted batch then crash without commit. */
-        cbm_store_t *s = cbm_store_open_path(path);
+        lsm_store_t *s = lsm_store_open_path(path);
         if (!s)
             _exit(2);
-        cbm_store_begin(s);
+        lsm_store_begin(s);
         for (int i = 1000; i < 6000; i++) {
             char qn[64];
             snprintf(qn, sizeof(qn), "io.node.%d", i);
-            cbm_node_t node = {.project = DV_PROJECT,
+            lsm_node_t node = {.project = DV_PROJECT,
                                .label = "Function",
                                .name = "n",
                                .qualified_name = qn,
                                .file_path = "io.c",
                                .start_line = i,
                                .end_line = i};
-            cbm_store_upsert_node(s, &node);
+            lsm_store_upsert_node(s, &node);
         }
         /* No commit, no clean close: simulate a crash mid-dump. */
         _exit(0);
@@ -159,8 +159,8 @@ TEST(dump_verify_io_fork_crash_uncommitted_discarded) {
      * survives, so persisted (60) falls far short of the dump intent (5060). */
     int persisted = dv_persisted_nodes(path);
     ASSERT_EQ(persisted, 60);
-    ASSERT_TRUE(cbm_dump_verify_is_degraded(5060, persisted, CBM_DUMP_VERIFY_DEFAULT_RATIO,
-                                            CBM_DUMP_VERIFY_MIN_FLOOR));
+    ASSERT_TRUE(lsm_dump_verify_is_degraded(5060, persisted, LSM_DUMP_VERIFY_DEFAULT_RATIO,
+                                            LSM_DUMP_VERIFY_MIN_FLOOR));
 
     dv_cleanup(path);
     PASS();

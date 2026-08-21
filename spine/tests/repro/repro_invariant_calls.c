@@ -8,15 +8,15 @@
  *   Zero CALLS edges may be sourced at a "Module" node.
  *
  * BASIS (QUALITY_ANALYSIS.md, 2026-06-24):
- *   Graph quality audit over the real codebase-memory-mcp repo showed only
+ *   Graph quality audit over the real logan-spine-mcp repo showed only
  *   3.69% of CALLS edges are callable-sourced (207/5607). The dominant
- *   failure mode is cbm_enclosing_func_qn returning the module QN when
- *   cbm_find_enclosing_func cannot walk the TSNode ancestry back to a
+ *   failure mode is lsm_enclosing_func_qn returning the module QN when
+ *   lsm_find_enclosing_func cannot walk the TSNode ancestry back to a
  *   function node. Root cause: func_kinds_for_lang (helpers.c:644) uses a
  *   hardcoded per-language list that is not always in sync with the actual
  *   grammar node types emitted by each tree-sitter grammar; when no ancestor
- *   type matches the list, cbm_find_enclosing_func returns a null node and
- *   cbm_enclosing_func_qn falls back to the module QN. The LSP rescue path
+ *   type matches the list, lsm_find_enclosing_func returns a null node and
+ *   lsm_enclosing_func_qn falls back to the module QN. The LSP rescue path
  *   (pass_lsp_cross.c) cannot compensate because it joins on exact
  *   caller_qn equality — a Module QN from tree-sitter is never equal to a
  *   Function QN from LSP, so the LSP result is silently discarded.
@@ -63,16 +63,16 @@
  *                  the minimal case, but marked as potentially RED per breadth
  *                  suite evidence.
  *     Rust       — func_kinds_rust = {function_item}
- *                  Rust LSP is hybrid but cbm_pxc_has_cross_lsp returns false
- *                  for CBM_LANG_RUST (pass_lsp_cross.c:281). The enclosing-
+ *                  Rust LSP is hybrid but lsm_pxc_has_cross_lsp returns false
+ *                  for LSM_LANG_RUST (pass_lsp_cross.c:281). The enclosing-
  *                  func walk uses only tree-sitter. Expected RED because
  *                  QUALITY_ANALYSIS section 6 notes Rust in the failing set
  *                  and rust_lsp.h: 102 Module-sourced CALLS appears in the
  *                  top-file list.
  *
  * ASSERTION (per edge):
- *   For every cbm_edge_t e where e.type == "CALLS":
- *     cbm_store_find_node_by_id(store, e.source_id, &src) == CBM_STORE_OK
+ *   For every lsm_edge_t e where e.type == "CALLS":
+ *     lsm_store_find_node_by_id(store, e.source_id, &src) == LSM_STORE_OK
  *     AND (strcmp(src.label, "Function") == 0 || strcmp(src.label, "Method") == 0)
  *   Equivalently: module_sourced_count == 0.
  *
@@ -103,19 +103,19 @@
 static int assert_calls_callable_sourced(const char *lang_tag,
                                          const RFile *files, int nfiles) {
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     if (!store) {
         printf("  %sFAIL%s  [%s] rh_index_files returned NULL\n",
                "\033[31m", "\033[0m", lang_tag);
         return 1;
     }
 
-    cbm_edge_t *edges   = NULL;
+    lsm_edge_t *edges   = NULL;
     int         nedges  = 0;
-    int rc = cbm_store_find_edges_by_type(store, lp.project, "CALLS",
+    int rc = lsm_store_find_edges_by_type(store, lp.project, "CALLS",
                                           &edges, &nedges);
-    if (rc != CBM_STORE_OK) {
-        printf("  %sFAIL%s  [%s] cbm_store_find_edges_by_type rc=%d\n",
+    if (rc != LSM_STORE_OK) {
+        printf("  %sFAIL%s  [%s] lsm_store_find_edges_by_type rc=%d\n",
                "\033[31m", "\033[0m", lang_tag, rc);
         rh_cleanup(&lp, store);
         return 1;
@@ -130,16 +130,16 @@ static int assert_calls_callable_sourced(const char *lang_tag,
         printf("  %sFAIL%s  [%s] no CALLS edges found (fixture problem: "
                "expected >= 1)\n",
                "\033[31m", "\033[0m", lang_tag);
-        cbm_store_free_edges(edges, nedges);
+        lsm_store_free_edges(edges, nedges);
         rh_cleanup(&lp, store);
         return 1;
     }
 
     int module_sourced = 0;
     for (int i = 0; i < nedges; i++) {
-        cbm_node_t src;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id, &src)
-                != CBM_STORE_OK) {
+        lsm_node_t src;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id, &src)
+                != LSM_STORE_OK) {
             continue; /* dangling edge — ignore for this invariant */
         }
         const char *lbl = src.label ? src.label : "(null)";
@@ -148,7 +148,7 @@ static int assert_calls_callable_sourced(const char *lang_tag,
         }
     }
 
-    cbm_store_free_edges(edges, nedges);
+    lsm_store_free_edges(edges, nedges);
     rh_cleanup(&lp, store);
 
     if (module_sourced > 0) {
@@ -170,7 +170,7 @@ static int assert_calls_callable_sourced(const char *lang_tag,
  * The C files dominate the Module-sourced CALLS list in QUALITY_ANALYSIS
  * (extract_defs.c: 182, c_lsp.c: 86). Even the simplest intra-file call
  * between two C functions falls back to Module sourcing because the
- * cbm_enclosing_func_qn path does not correctly resolve the caller QN and
+ * lsm_enclosing_func_qn path does not correctly resolve the caller QN and
  * the LSP rescue is blocked by the exact-QN equality join requirement.
  */
 TEST(repro_invariant_calls_c) {
@@ -195,7 +195,7 @@ TEST(repro_invariant_calls_c) {
  *
  * Expected: RED on current code.
  * Shares the same func_kinds as C. Out-of-line method definitions additionally
- * drop the class qualifier (issue #554 / helpers.c cbm_enclosing_func_qn).
+ * drop the class qualifier (issue #554 / helpers.c lsm_enclosing_func_qn).
  * Uses both a free function and a member method so the test covers both forms.
  */
 TEST(repro_invariant_calls_cpp) {
@@ -366,7 +366,7 @@ TEST(repro_invariant_calls_csharp) {
  *
  * Expected: RED on current code.
  * func_kinds_rust = {function_item}.
- * cbm_pxc_has_cross_lsp returns false for CBM_LANG_RUST (pass_lsp_cross.c:281)
+ * lsm_pxc_has_cross_lsp returns false for LSM_LANG_RUST (pass_lsp_cross.c:281)
  * so the cross-file LSP rescue path never runs for Rust. rust_lsp.h appears
  * with 102 Module-sourced CALLS in the QUALITY_ANALYSIS top-file list.
  * Even a single-file intra-function call will fall back to Module sourcing

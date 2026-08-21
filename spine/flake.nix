@@ -1,5 +1,5 @@
 {
-  description = "codebase-memory-mcp — C11 MCP server for codebase indexing";
+  description = "logan-spine-mcp — C11 MCP server for codebase indexing";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -11,7 +11,7 @@
     {
       packages = forAllSystems (pkgs: {
         default = pkgs.stdenv.mkDerivation {
-          pname = "codebase-memory-mcp";
+          pname = "logan-spine-mcp";
           version = "0.6.0";
 
           src = ./.;
@@ -24,18 +24,18 @@
           # directly to bypass that check; the Nix stdenv already guarantees the
           # correct compiler and target architecture.
           buildPhase = ''
-            make -j$NIX_BUILD_CORES -f Makefile.cbm cbm
+            make -j$NIX_BUILD_CORES -f Makefile.lsm lsm
           '';
 
           installPhase = ''
-            install -Dm755 build/c/codebase-memory-mcp $out/bin/codebase-memory-mcp
+            install -Dm755 build/c/logan-spine-mcp $out/bin/logan-spine-mcp
           '';
 
           meta = {
             description = "MCP server that builds and queries a semantic graph of your codebase";
-            homepage = "https://github.com/DeusData/codebase-memory-mcp";
+            homepage = "https://github.com/DeusData/logan-spine-mcp";
             license = nixpkgs.lib.licenses.mit;
-            mainProgram = "codebase-memory-mcp";
+            mainProgram = "logan-spine-mcp";
             platforms = systems;
           };
         };

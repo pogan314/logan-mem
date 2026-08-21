@@ -56,7 +56,7 @@ typedef struct {
 #endif
 } activation_file_identity_t;
 
-struct cbm_activation_transaction {
+struct lsm_activation_transaction {
     activation_action_t action;
     activation_state_t state;
     char *target_path;
@@ -123,14 +123,14 @@ static void activation_note_refusal_detail(const char *predicate, const char *de
 }
 #endif
 
-const char *cbm_activation_transaction_refusal_note(void) {
+const char *lsm_activation_transaction_refusal_note(void) {
     return g_activation_refusal_note;
 }
 
-#ifdef CBM_ENABLE_TEST_SEAMS
+#ifdef LSM_ENABLE_TEST_SEAMS
 /* #1416 test seam: install a refusal note so the CLI attribution path is
  * testable without constructing a real Windows ACL refusal. */
-void cbm_activation_transaction_note_refusal_for_testing(const char *predicate,
+void lsm_activation_transaction_note_refusal_for_testing(const char *predicate,
                                                          unsigned long os_error) {
     activation_refusal_clear();
     if (predicate && predicate[0]) {
@@ -148,12 +148,12 @@ typedef int activation_native_file_t;
 #endif
 
 static atomic_uint_fast64_t activation_unique_sequence = ATOMIC_VAR_INIT(0);
-static cbm_activation_transaction_before_absent_publish_for_test_fn
+static lsm_activation_transaction_before_absent_publish_for_test_fn
     activation_before_absent_publish_for_test;
 static void *activation_before_absent_publish_context_for_test;
 
-void cbm_activation_transaction_set_before_absent_publish_for_test(
-    cbm_activation_transaction_before_absent_publish_for_test_fn hook, void *context) {
+void lsm_activation_transaction_set_before_absent_publish_for_test(
+    lsm_activation_transaction_before_absent_publish_for_test_fn hook, void *context) {
     activation_before_absent_publish_context_for_test = context;
     activation_before_absent_publish_for_test = hook;
 }
@@ -259,7 +259,7 @@ static char *activation_unique_path(const char *directory, const char *tag) {
     const char *separator = "/";
 #endif
     int written =
-        snprintf(path, needed, "%s%s.cbm-%s-%lu-%" PRIu64, directory,
+        snprintf(path, needed, "%s%s.lsm-%s-%lu-%" PRIu64, directory,
                  directory[directory_length - 1U] == '/' || directory[directory_length - 1U] == '\\'
                      ? ""
                      : separator,
@@ -774,7 +774,7 @@ static bool activation_directory_secure(const char *directory, int *unused,
 #else
 
 static bool activation_posix_acl_empty(int descriptor) {
-    return cbm_macos_extended_acl_fd_is_empty(descriptor);
+    return lsm_macos_extended_acl_fd_is_empty(descriptor);
 }
 
 static char *activation_posix_walk_path(const char *directory) {
@@ -890,7 +890,7 @@ static bool activation_directory_secure(const char *directory, int *directory_fd
                     char mode_text[16];
                     (void)snprintf(mode_text, sizeof(mode_text), "%04o",
                                    (unsigned)(next_status.st_mode & 07777));
-                    cbm_log_warn("activation.ancestor_group_writable", "path", walk_path, "mode",
+                    lsm_log_warn("activation.ancestor_group_writable", "path", walk_path, "mode",
                                  mode_text);
                 }
             }
@@ -955,7 +955,7 @@ static bool activation_directory_secure(const char *directory, int *directory_fd
 
 #endif
 
-static bool activation_directory_still_valid(const cbm_activation_transaction_t *transaction) {
+static bool activation_directory_still_valid(const lsm_activation_transaction_t *transaction) {
 #ifdef _WIN32
     int ignored = 0;
     activation_file_identity_t current;
@@ -1041,7 +1041,7 @@ typedef enum {
 } activation_create_status_t;
 
 static activation_create_status_t activation_private_file_create(
-    const cbm_activation_transaction_t *transaction, const char *path, const char *name,
+    const lsm_activation_transaction_t *transaction, const char *path, const char *name,
     activation_native_file_t *file_out, activation_file_identity_t *identity_out) {
     *file_out = ACTIVATION_INVALID_FILE;
     if (!activation_directory_still_valid(transaction)) {
@@ -1107,8 +1107,8 @@ static activation_create_status_t activation_private_file_create(
 #endif
 }
 
-static cbm_activation_transaction_status_t activation_create_unique(
-    const cbm_activation_transaction_t *transaction, const char *tag, char **path_out,
+static lsm_activation_transaction_status_t activation_create_unique(
+    const lsm_activation_transaction_t *transaction, const char *tag, char **path_out,
     char **name_out, activation_native_file_t *file_out, activation_file_identity_t *identity_out) {
     *path_out = NULL;
     *name_out = NULL;
@@ -1116,27 +1116,27 @@ static cbm_activation_transaction_status_t activation_create_unique(
     for (unsigned int attempt = 0; attempt < 1024U; attempt++) {
         char *candidate = activation_unique_path(transaction->directory_path, tag);
         if (!candidate) {
-            return CBM_ACTIVATION_TRANSACTION_NO_MEMORY;
+            return LSM_ACTIVATION_TRANSACTION_NO_MEMORY;
         }
         char *name = activation_path_name_copy(candidate);
         if (!name) {
             free(candidate);
-            return CBM_ACTIVATION_TRANSACTION_NO_MEMORY;
+            return LSM_ACTIVATION_TRANSACTION_NO_MEMORY;
         }
         activation_create_status_t created =
             activation_private_file_create(transaction, candidate, name, file_out, identity_out);
         if (created == ACTIVATION_CREATE_OK) {
             *path_out = candidate;
             *name_out = name;
-            return CBM_ACTIVATION_TRANSACTION_OK;
+            return LSM_ACTIVATION_TRANSACTION_OK;
         }
         free(candidate);
         free(name);
         if (created != ACTIVATION_CREATE_EXISTS) {
-            return CBM_ACTIVATION_TRANSACTION_IO;
+            return LSM_ACTIVATION_TRANSACTION_IO;
         }
     }
-    return CBM_ACTIVATION_TRANSACTION_IO;
+    return LSM_ACTIVATION_TRANSACTION_IO;
 }
 
 #ifdef _WIN32
@@ -1180,7 +1180,7 @@ static bool activation_external_snapshot_with_owner(const char *path, bool requi
 
 #ifndef _WIN32
 static bool activation_posix_entry_snapshot_with_links(
-    const cbm_activation_transaction_t *transaction, const char *name, nlink_t required_links,
+    const lsm_activation_transaction_t *transaction, const char *name, nlink_t required_links,
     bool *exists_out, activation_file_identity_t *identity_out) {
     *exists_out = false;
     if (!activation_directory_still_valid(transaction)) {
@@ -1220,7 +1220,7 @@ static bool activation_posix_entry_snapshot_with_links(
 }
 #endif
 
-static bool activation_entry_snapshot(const cbm_activation_transaction_t *transaction,
+static bool activation_entry_snapshot(const lsm_activation_transaction_t *transaction,
                                       const char *path, const char *name, bool *exists_out,
                                       activation_file_identity_t *identity_out) {
 #ifdef _WIN32
@@ -1233,7 +1233,7 @@ static bool activation_entry_snapshot(const cbm_activation_transaction_t *transa
 #endif
 }
 
-static bool activation_path_matches(const cbm_activation_transaction_t *transaction,
+static bool activation_path_matches(const lsm_activation_transaction_t *transaction,
                                     const char *path, const char *name,
                                     const activation_file_identity_t *expected, bool *exists_out) {
     activation_file_identity_t actual;
@@ -1245,7 +1245,7 @@ static bool activation_path_matches(const cbm_activation_transaction_t *transact
     return !exists || activation_identity_equal(&actual, expected);
 }
 
-static bool activation_sync_directory(const cbm_activation_transaction_t *transaction) {
+static bool activation_sync_directory(const lsm_activation_transaction_t *transaction) {
 #ifdef _WIN32
     /* MoveFileExW(MOVEFILE_WRITE_THROUGH) is the strongest portable
      * directory-entry durability primitive available here. */
@@ -1286,7 +1286,7 @@ static bool activation_rename_error_is_transient(DWORD error) {
 }
 #endif
 
-void cbm_activation_transaction_rename_failures_set_for_test(unsigned int count) {
+void lsm_activation_transaction_rename_failures_set_for_test(unsigned int count) {
 #ifdef _WIN32
     activation_rename_failures_for_test = count;
 #else
@@ -1294,7 +1294,7 @@ void cbm_activation_transaction_rename_failures_set_for_test(unsigned int count)
 #endif
 }
 
-static bool activation_rename(const cbm_activation_transaction_t *transaction, const char *source,
+static bool activation_rename(const lsm_activation_transaction_t *transaction, const char *source,
                               const char *source_name, const char *destination,
                               const char *destination_name, bool replace_destination) {
     if (!activation_directory_still_valid(transaction)) {
@@ -1344,7 +1344,7 @@ typedef enum {
 } activation_unlink_status_t;
 
 static activation_unlink_status_t activation_unlink_expected(
-    const cbm_activation_transaction_t *transaction, const char *path, const char *name,
+    const lsm_activation_transaction_t *transaction, const char *path, const char *name,
     const activation_file_identity_t *expected, bool allow_windows_deferred) {
     bool exists = false;
     if (!activation_path_matches(transaction, path, name, expected, &exists)) {
@@ -1379,7 +1379,7 @@ static activation_unlink_status_t activation_unlink_expected(
 #endif
 }
 
-static void activation_transaction_destroy(cbm_activation_transaction_t *transaction) {
+static void activation_transaction_destroy(lsm_activation_transaction_t *transaction) {
     if (!transaction) {
         return;
     }
@@ -1398,8 +1398,8 @@ static void activation_transaction_destroy(cbm_activation_transaction_t *transac
     free(transaction);
 }
 
-static cbm_activation_transaction_status_t activation_discard_staged_assets(
-    cbm_activation_transaction_t *transaction) {
+static lsm_activation_transaction_status_t activation_discard_staged_assets(
+    lsm_activation_transaction_t *transaction) {
     bool ok = true;
     if (transaction->staged_exists) {
         activation_unlink_status_t removed = activation_unlink_expected(
@@ -1420,17 +1420,17 @@ static cbm_activation_transaction_status_t activation_discard_staged_assets(
         }
     }
     ok = activation_sync_directory(transaction) && ok;
-    return ok ? CBM_ACTIVATION_TRANSACTION_OK : CBM_ACTIVATION_TRANSACTION_IO;
+    return ok ? LSM_ACTIVATION_TRANSACTION_OK : LSM_ACTIVATION_TRANSACTION_IO;
 }
 
-static cbm_activation_transaction_status_t activation_transaction_prepare(
+static lsm_activation_transaction_status_t activation_transaction_prepare(
     const char *target_path, activation_action_t action,
-    cbm_activation_transaction_t **transaction_out) {
+    lsm_activation_transaction_t **transaction_out) {
     *transaction_out = NULL;
     activation_refusal_clear();
-    cbm_activation_transaction_t *transaction = calloc(1, sizeof(*transaction));
+    lsm_activation_transaction_t *transaction = calloc(1, sizeof(*transaction));
     if (!transaction) {
-        return CBM_ACTIVATION_TRANSACTION_NO_MEMORY;
+        return LSM_ACTIVATION_TRANSACTION_NO_MEMORY;
     }
 #ifndef _WIN32
     transaction->directory_fd = -1;
@@ -1440,12 +1440,12 @@ static cbm_activation_transaction_status_t activation_transaction_prepare(
     transaction->target_path = activation_string_copy(target_path);
     if (!transaction->target_path) {
         activation_transaction_destroy(transaction);
-        return CBM_ACTIVATION_TRANSACTION_NO_MEMORY;
+        return LSM_ACTIVATION_TRANSACTION_NO_MEMORY;
     }
     if (!activation_target_parts(target_path, &transaction->directory_path,
                                  &transaction->target_name)) {
         activation_transaction_destroy(transaction);
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
 #ifdef _WIN32
     int ignored = 0;
@@ -1456,20 +1456,20 @@ static cbm_activation_transaction_status_t activation_transaction_prepare(
                                      &transaction->directory_identity)) {
 #endif
         activation_transaction_destroy(transaction);
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     if (!activation_entry_snapshot(transaction, transaction->target_path, transaction->target_name,
                                    &transaction->target_existed, &transaction->target_identity)) {
         activation_note_refusal("target-entry-snapshot", 0UL);
         activation_transaction_destroy(transaction);
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     if (transaction->target_existed) {
         activation_native_file_t reservation = ACTIVATION_INVALID_FILE;
-        cbm_activation_transaction_status_t status = activation_create_unique(
+        lsm_activation_transaction_status_t status = activation_create_unique(
             transaction, "backup", &transaction->backup_path, &transaction->backup_name,
             &reservation, &transaction->backup_identity);
-        if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+        if (status != LSM_ACTIVATION_TRANSACTION_OK) {
             activation_transaction_destroy(transaction);
             return status;
         }
@@ -1479,40 +1479,40 @@ static cbm_activation_transaction_status_t activation_transaction_prepare(
         if (!durable || !closed || !activation_sync_directory(transaction)) {
             (void)activation_discard_staged_assets(transaction);
             activation_transaction_destroy(transaction);
-            return CBM_ACTIVATION_TRANSACTION_IO;
+            return LSM_ACTIVATION_TRANSACTION_IO;
         }
     }
     *transaction_out = transaction;
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
-static void activation_failed_stage_cleanup(cbm_activation_transaction_t *transaction) {
+static void activation_failed_stage_cleanup(lsm_activation_transaction_t *transaction) {
     if (transaction) {
         (void)activation_discard_staged_assets(transaction);
         activation_transaction_destroy(transaction);
     }
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_stage_bytes(
+lsm_activation_transaction_status_t lsm_activation_transaction_stage_bytes(
     const char *target_path, const void *candidate, size_t candidate_size,
-    cbm_activation_transaction_t **transaction_out) {
+    lsm_activation_transaction_t **transaction_out) {
     if (transaction_out) {
         *transaction_out = NULL;
     }
     if (!target_path || !candidate || candidate_size == 0 || !transaction_out) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
-    cbm_activation_transaction_t *transaction = NULL;
-    cbm_activation_transaction_status_t status =
+    lsm_activation_transaction_t *transaction = NULL;
+    lsm_activation_transaction_status_t status =
         activation_transaction_prepare(target_path, ACTIVATION_REPLACE, &transaction);
-    if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+    if (status != LSM_ACTIVATION_TRANSACTION_OK) {
         return status;
     }
     activation_native_file_t staged = ACTIVATION_INVALID_FILE;
     status =
         activation_create_unique(transaction, "stage", &transaction->staged_path,
                                  &transaction->staged_name, &staged, &transaction->staged_identity);
-    if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+    if (status != LSM_ACTIVATION_TRANSACTION_OK) {
         activation_failed_stage_cleanup(transaction);
         return status;
     }
@@ -1522,10 +1522,10 @@ cbm_activation_transaction_status_t cbm_activation_transaction_stage_bytes(
     bool closed = activation_native_close(staged);
     if (!written || !durable || !closed || !activation_sync_directory(transaction)) {
         activation_failed_stage_cleanup(transaction);
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     *transaction_out = transaction;
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
 static bool activation_source_open(const char *path, activation_native_file_t *file_out) {
@@ -1639,31 +1639,31 @@ static bool activation_native_read(activation_native_file_t file, void *buffer, 
 #endif
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_stage_file(
+lsm_activation_transaction_status_t lsm_activation_transaction_stage_file(
     const char *target_path, const char *candidate_path,
-    cbm_activation_transaction_t **transaction_out) {
+    lsm_activation_transaction_t **transaction_out) {
     if (transaction_out) {
         *transaction_out = NULL;
     }
     if (!target_path || !candidate_path || !candidate_path[0] || !transaction_out) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
-    cbm_activation_transaction_t *transaction = NULL;
-    cbm_activation_transaction_status_t status =
+    lsm_activation_transaction_t *transaction = NULL;
+    lsm_activation_transaction_status_t status =
         activation_transaction_prepare(target_path, ACTIVATION_REPLACE, &transaction);
-    if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+    if (status != LSM_ACTIVATION_TRANSACTION_OK) {
         return status;
     }
     activation_native_file_t source = ACTIVATION_INVALID_FILE;
     if (!activation_source_open(candidate_path, &source)) {
         activation_failed_stage_cleanup(transaction);
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     activation_native_file_t staged = ACTIVATION_INVALID_FILE;
     status =
         activation_create_unique(transaction, "stage", &transaction->staged_path,
                                  &transaction->staged_name, &staged, &transaction->staged_identity);
-    if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+    if (status != LSM_ACTIVATION_TRANSACTION_OK) {
         (void)activation_native_close(source);
         activation_failed_stage_cleanup(transaction);
         return status;
@@ -1693,25 +1693,25 @@ cbm_activation_transaction_status_t cbm_activation_transaction_stage_file(
     if (!copied || total == 0 || !durable || !source_closed || !staged_closed ||
         !activation_sync_directory(transaction)) {
         activation_failed_stage_cleanup(transaction);
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     *transaction_out = transaction;
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_stage_removal(
-    const char *target_path, cbm_activation_transaction_t **transaction_out) {
+lsm_activation_transaction_status_t lsm_activation_transaction_stage_removal(
+    const char *target_path, lsm_activation_transaction_t **transaction_out) {
     if (transaction_out) {
         *transaction_out = NULL;
     }
     if (!target_path || !transaction_out) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
     return activation_transaction_prepare(target_path, ACTIVATION_REMOVE, transaction_out);
 }
 
 #ifdef _WIN32
-static bool activation_windows_copy_target_to_backup(cbm_activation_transaction_t *transaction) {
+static bool activation_windows_copy_target_to_backup(lsm_activation_transaction_t *transaction) {
     if (!activation_directory_still_valid(transaction)) {
         return false;
     }
@@ -1786,7 +1786,7 @@ static bool activation_noreplace_primitive_unavailable(int error) {
  * transaction's staged_exists flag records that partial publication so
  * rollback can remove only the target link. */
 static activation_publish_status_t activation_publish_absent_link_fallback(
-    cbm_activation_transaction_t *transaction) {
+    lsm_activation_transaction_t *transaction) {
     if (!activation_directory_still_valid(transaction)) {
         return ACTIVATION_PUBLISH_UNCHANGED_ERROR;
     }
@@ -1839,7 +1839,7 @@ static activation_publish_status_t activation_publish_absent_link_fallback(
 
 #if defined(_WIN32) || defined(__APPLE__) || (defined(__linux__) && defined(SYS_renameat2))
 static activation_publish_status_t activation_finish_absent_publish(
-    cbm_activation_transaction_t *transaction) {
+    lsm_activation_transaction_t *transaction) {
     transaction->staged_exists = false;
     bool target_exists = false;
     return activation_path_matches(transaction, transaction->target_path, transaction->target_name,
@@ -1851,7 +1851,7 @@ static activation_publish_status_t activation_finish_absent_publish(
 #endif
 
 static activation_publish_status_t activation_publish_absent_replacement(
-    cbm_activation_transaction_t *transaction) {
+    lsm_activation_transaction_t *transaction) {
     if (!activation_directory_still_valid(transaction)) {
         return ACTIVATION_PUBLISH_UNCHANGED_ERROR;
     }
@@ -1905,7 +1905,7 @@ static activation_publish_status_t activation_publish_absent_replacement(
 }
 
 #ifndef _WIN32
-static bool activation_linked_backup_pair_valid(const cbm_activation_transaction_t *transaction) {
+static bool activation_linked_backup_pair_valid(const lsm_activation_transaction_t *transaction) {
     activation_file_identity_t target_identity;
     activation_file_identity_t backup_identity;
     bool target_exists = false;
@@ -1922,7 +1922,7 @@ static bool activation_linked_backup_pair_valid(const cbm_activation_transaction
            activation_identity_equal(&backup_identity, &transaction->target_identity);
 }
 
-static bool activation_remove_linked_backup(cbm_activation_transaction_t *transaction) {
+static bool activation_remove_linked_backup(lsm_activation_transaction_t *transaction) {
     if (!activation_linked_backup_pair_valid(transaction)) {
         return false;
     }
@@ -1943,7 +1943,7 @@ static bool activation_remove_linked_backup(cbm_activation_transaction_t *transa
  * Windows copies the verified old bytes into the already-private backup, then
  * MoveFileExW atomically replaces the target with the private staged file. */
 static activation_publish_status_t activation_publish_existing_replacement(
-    cbm_activation_transaction_t *transaction) {
+    lsm_activation_transaction_t *transaction) {
 #ifdef _WIN32
     transaction->backup_contains_target = false;
     if (!activation_windows_copy_target_to_backup(transaction)) {
@@ -1999,7 +1999,7 @@ static activation_publish_status_t activation_publish_existing_replacement(
     return ACTIVATION_PUBLISH_OK;
 }
 
-static bool activation_target_still_original(const cbm_activation_transaction_t *transaction) {
+static bool activation_target_still_original(const lsm_activation_transaction_t *transaction) {
     activation_file_identity_t current;
     bool exists = false;
     if (!activation_entry_snapshot(transaction, transaction->target_path, transaction->target_name,
@@ -2010,7 +2010,7 @@ static bool activation_target_still_original(const cbm_activation_transaction_t 
     return !exists || activation_identity_equal(&current, &transaction->target_identity);
 }
 
-static bool activation_absent_target_snapshot(const cbm_activation_transaction_t *transaction,
+static bool activation_absent_target_snapshot(const lsm_activation_transaction_t *transaction,
                                               bool *exists_out, bool *linked_pair_out) {
     *exists_out = false;
     *linked_pair_out = false;
@@ -2044,7 +2044,7 @@ static bool activation_absent_target_snapshot(const cbm_activation_transaction_t
 #endif
 }
 
-static bool activation_remove_absent_published_target(cbm_activation_transaction_t *transaction,
+static bool activation_remove_absent_published_target(lsm_activation_transaction_t *transaction,
                                                       bool linked_pair) {
     if (!linked_pair) {
         return activation_unlink_expected(transaction, transaction->target_path,
@@ -2083,8 +2083,8 @@ static bool activation_remove_absent_published_target(cbm_activation_transaction
 #endif
 }
 
-static cbm_activation_transaction_status_t activation_rollback_internal(
-    cbm_activation_transaction_t *transaction) {
+static lsm_activation_transaction_status_t activation_rollback_internal(
+    lsm_activation_transaction_t *transaction) {
     if (transaction->target_existed) {
         bool backup_exists = false;
         if (!transaction->backup_contains_target ||
@@ -2093,25 +2093,25 @@ static cbm_activation_transaction_status_t activation_rollback_internal(
                                      &backup_exists) ||
             !backup_exists) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
         bool target_exists = false;
         activation_file_identity_t current_target;
         if (!activation_entry_snapshot(transaction, transaction->target_path,
                                        transaction->target_name, &target_exists, &current_target)) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
         if (target_exists &&
             (transaction->action != ACTIVATION_REPLACE ||
              !activation_identity_equal(&current_target, &transaction->staged_identity))) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
         if (!activation_rename(transaction, transaction->backup_path, transaction->backup_name,
                                transaction->target_path, transaction->target_name, target_exists)) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
         transaction->backup_exists = false;
         transaction->backup_contains_target = false;
@@ -2120,29 +2120,29 @@ static cbm_activation_transaction_status_t activation_rollback_internal(
         bool linked_pair = false;
         if (!activation_absent_target_snapshot(transaction, &target_exists, &linked_pair)) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
         if (target_exists && !activation_remove_absent_published_target(transaction, linked_pair)) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            return CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
     }
     transaction->state = ACTIVATION_ROLLED_BACK;
-    return activation_sync_directory(transaction) ? CBM_ACTIVATION_TRANSACTION_OK
-                                                  : CBM_ACTIVATION_TRANSACTION_IO;
+    return activation_sync_directory(transaction) ? LSM_ACTIVATION_TRANSACTION_OK
+                                                  : LSM_ACTIVATION_TRANSACTION_IO;
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_commit(
-    cbm_activation_transaction_t *transaction, cbm_activation_transaction_validator_fn validator,
+lsm_activation_transaction_status_t lsm_activation_transaction_commit(
+    lsm_activation_transaction_t *transaction, lsm_activation_transaction_validator_fn validator,
     void *validator_context) {
     if (!transaction) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
     if (transaction->state != ACTIVATION_STAGED) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_STATE;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_STATE;
     }
     if (!activation_target_still_original(transaction)) {
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     if (transaction->action == ACTIVATION_REPLACE) {
         bool staged_exists = false;
@@ -2151,7 +2151,7 @@ cbm_activation_transaction_status_t cbm_activation_transaction_commit(
                                      transaction->staged_name, &transaction->staged_identity,
                                      &staged_exists) ||
             !staged_exists) {
-            return CBM_ACTIVATION_TRANSACTION_IO;
+            return LSM_ACTIVATION_TRANSACTION_IO;
         }
     }
     if (transaction->target_existed) {
@@ -2159,15 +2159,15 @@ cbm_activation_transaction_status_t cbm_activation_transaction_commit(
             activation_publish_status_t published =
                 activation_publish_existing_replacement(transaction);
             if (published == ACTIVATION_PUBLISH_UNCHANGED_ERROR) {
-                return CBM_ACTIVATION_TRANSACTION_IO;
+                return LSM_ACTIVATION_TRANSACTION_IO;
             }
             if (published == ACTIVATION_PUBLISH_CHANGED_ERROR) {
                 transaction->state = ACTIVATION_RECOVERY_NEEDED;
-                cbm_activation_transaction_status_t restored =
+                lsm_activation_transaction_status_t restored =
                     activation_rollback_internal(transaction);
-                return restored == CBM_ACTIVATION_TRANSACTION_OK
-                           ? CBM_ACTIVATION_TRANSACTION_IO
-                           : CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+                return restored == LSM_ACTIVATION_TRANSACTION_OK
+                           ? LSM_ACTIVATION_TRANSACTION_IO
+                           : LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
             }
         } else {
             bool reservation_exists = false;
@@ -2178,7 +2178,7 @@ cbm_activation_transaction_status_t cbm_activation_transaction_commit(
                 !reservation_exists ||
                 !activation_rename(transaction, transaction->target_path, transaction->target_name,
                                    transaction->backup_path, transaction->backup_name, true)) {
-                return CBM_ACTIVATION_TRANSACTION_IO;
+                return LSM_ACTIVATION_TRANSACTION_IO;
             }
             transaction->backup_identity = transaction->target_identity;
             transaction->backup_contains_target = true;
@@ -2191,139 +2191,139 @@ cbm_activation_transaction_status_t cbm_activation_transaction_commit(
         }
         activation_publish_status_t published = activation_publish_absent_replacement(transaction);
         if (published == ACTIVATION_PUBLISH_UNCHANGED_ERROR) {
-            return CBM_ACTIVATION_TRANSACTION_IO;
+            return LSM_ACTIVATION_TRANSACTION_IO;
         }
         if (published == ACTIVATION_PUBLISH_CHANGED_ERROR) {
             transaction->state = ACTIVATION_RECOVERY_NEEDED;
-            cbm_activation_transaction_status_t restored =
+            lsm_activation_transaction_status_t restored =
                 activation_rollback_internal(transaction);
-            return restored == CBM_ACTIVATION_TRANSACTION_OK
-                       ? CBM_ACTIVATION_TRANSACTION_IO
-                       : CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+            return restored == LSM_ACTIVATION_TRANSACTION_OK
+                       ? LSM_ACTIVATION_TRANSACTION_IO
+                       : LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
         }
     }
     transaction->state = ACTIVATION_COMMITTED;
     if (!activation_directory_still_valid(transaction) || !activation_sync_directory(transaction)) {
-        cbm_activation_transaction_status_t restored = activation_rollback_internal(transaction);
-        return restored == CBM_ACTIVATION_TRANSACTION_OK
-                   ? CBM_ACTIVATION_TRANSACTION_IO
-                   : CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+        lsm_activation_transaction_status_t restored = activation_rollback_internal(transaction);
+        return restored == LSM_ACTIVATION_TRANSACTION_OK
+                   ? LSM_ACTIVATION_TRANSACTION_IO
+                   : LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
     }
     if (validator && !validator(transaction->target_path, validator_context)) {
-        cbm_activation_transaction_status_t restored = activation_rollback_internal(transaction);
-        return restored == CBM_ACTIVATION_TRANSACTION_OK
-                   ? CBM_ACTIVATION_TRANSACTION_VALIDATION_FAILED
-                   : CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
+        lsm_activation_transaction_status_t restored = activation_rollback_internal(transaction);
+        return restored == LSM_ACTIVATION_TRANSACTION_OK
+                   ? LSM_ACTIVATION_TRANSACTION_VALIDATION_FAILED
+                   : LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED;
     }
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_rollback(
-    cbm_activation_transaction_t *transaction) {
+lsm_activation_transaction_status_t lsm_activation_transaction_rollback(
+    lsm_activation_transaction_t *transaction) {
     if (!transaction) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
     if (transaction->state != ACTIVATION_COMMITTED &&
         transaction->state != ACTIVATION_RECOVERY_NEEDED) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_STATE;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_STATE;
     }
     return activation_rollback_internal(transaction);
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_finalize(
-    cbm_activation_transaction_t *transaction) {
+lsm_activation_transaction_status_t lsm_activation_transaction_finalize(
+    lsm_activation_transaction_t *transaction) {
     if (!transaction) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
     if (transaction->state != ACTIVATION_COMMITTED) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_STATE;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_STATE;
     }
     if (!activation_directory_still_valid(transaction)) {
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     if (transaction->backup_contains_target) {
         activation_unlink_status_t removed = activation_unlink_expected(
             transaction, transaction->backup_path, transaction->backup_name,
             &transaction->backup_identity, true);
         if (removed == ACTIVATION_UNLINK_ERROR) {
-            return CBM_ACTIVATION_TRANSACTION_IO;
+            return LSM_ACTIVATION_TRANSACTION_IO;
         }
         if (removed == ACTIVATION_UNLINK_DEFERRED) {
             transaction->deferred_cleanup = true;
             transaction->state = ACTIVATION_FINALIZED_DEFERRED;
-            return CBM_ACTIVATION_TRANSACTION_DEFERRED;
+            return LSM_ACTIVATION_TRANSACTION_DEFERRED;
         }
         transaction->backup_exists = false;
         transaction->backup_contains_target = false;
     }
     if (!activation_sync_directory(transaction)) {
-        return CBM_ACTIVATION_TRANSACTION_IO;
+        return LSM_ACTIVATION_TRANSACTION_IO;
     }
     transaction->state = ACTIVATION_FINALIZED;
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
-cbm_activation_transaction_status_t cbm_activation_transaction_close(
-    cbm_activation_transaction_t **transaction_io) {
+lsm_activation_transaction_status_t lsm_activation_transaction_close(
+    lsm_activation_transaction_t **transaction_io) {
     if (!transaction_io || !*transaction_io) {
-        return CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
+        return LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT;
     }
-    cbm_activation_transaction_t *transaction = *transaction_io;
+    lsm_activation_transaction_t *transaction = *transaction_io;
     if (transaction->state == ACTIVATION_COMMITTED ||
         transaction->state == ACTIVATION_RECOVERY_NEEDED) {
-        cbm_activation_transaction_status_t status = activation_rollback_internal(transaction);
-        if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+        lsm_activation_transaction_status_t status = activation_rollback_internal(transaction);
+        if (status != LSM_ACTIVATION_TRANSACTION_OK) {
             return status;
         }
     }
     if (transaction->state == ACTIVATION_STAGED || transaction->state == ACTIVATION_ROLLED_BACK) {
-        cbm_activation_transaction_status_t status = activation_discard_staged_assets(transaction);
-        if (status != CBM_ACTIVATION_TRANSACTION_OK) {
+        lsm_activation_transaction_status_t status = activation_discard_staged_assets(transaction);
+        if (status != LSM_ACTIVATION_TRANSACTION_OK) {
             return status;
         }
     }
     activation_transaction_destroy(transaction);
     *transaction_io = NULL;
-    return CBM_ACTIVATION_TRANSACTION_OK;
+    return LSM_ACTIVATION_TRANSACTION_OK;
 }
 
-const char *cbm_activation_transaction_target_path(
-    const cbm_activation_transaction_t *transaction) {
+const char *lsm_activation_transaction_target_path(
+    const lsm_activation_transaction_t *transaction) {
     return transaction ? transaction->target_path : NULL;
 }
 
-const char *cbm_activation_transaction_staged_path(
-    const cbm_activation_transaction_t *transaction) {
+const char *lsm_activation_transaction_staged_path(
+    const lsm_activation_transaction_t *transaction) {
     return transaction ? transaction->staged_path : NULL;
 }
 
-const char *cbm_activation_transaction_backup_path(
-    const cbm_activation_transaction_t *transaction) {
+const char *lsm_activation_transaction_backup_path(
+    const lsm_activation_transaction_t *transaction) {
     return transaction ? transaction->backup_path : NULL;
 }
 
-const char *cbm_activation_transaction_deferred_path(
-    const cbm_activation_transaction_t *transaction) {
+const char *lsm_activation_transaction_deferred_path(
+    const lsm_activation_transaction_t *transaction) {
     return transaction && transaction->deferred_cleanup ? transaction->backup_path : NULL;
 }
 
-const char *cbm_activation_transaction_status_message(cbm_activation_transaction_status_t status) {
+const char *lsm_activation_transaction_status_message(lsm_activation_transaction_status_t status) {
     switch (status) {
-    case CBM_ACTIVATION_TRANSACTION_OK:
+    case LSM_ACTIVATION_TRANSACTION_OK:
         return "activation transaction completed";
-    case CBM_ACTIVATION_TRANSACTION_DEFERRED:
+    case LSM_ACTIVATION_TRANSACTION_DEFERRED:
         return "activation completed; old executable cleanup was deferred";
-    case CBM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT:
+    case LSM_ACTIVATION_TRANSACTION_INVALID_ARGUMENT:
         return "invalid activation transaction argument";
-    case CBM_ACTIVATION_TRANSACTION_NO_MEMORY:
+    case LSM_ACTIVATION_TRANSACTION_NO_MEMORY:
         return "activation transaction allocation failed";
-    case CBM_ACTIVATION_TRANSACTION_IO:
+    case LSM_ACTIVATION_TRANSACTION_IO:
         return "activation transaction I/O failed";
-    case CBM_ACTIVATION_TRANSACTION_INVALID_STATE:
+    case LSM_ACTIVATION_TRANSACTION_INVALID_STATE:
         return "activation transaction is in the wrong state";
-    case CBM_ACTIVATION_TRANSACTION_VALIDATION_FAILED:
+    case LSM_ACTIVATION_TRANSACTION_VALIDATION_FAILED:
         return "activated candidate failed validation and was rolled back";
-    case CBM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED:
+    case LSM_ACTIVATION_TRANSACTION_ROLLBACK_FAILED:
         return "activation failed and the retained backup could not be restored";
     default:
         return "unknown activation transaction status";

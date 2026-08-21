@@ -28,7 +28,7 @@ enum {
 #include "foundation/compat_fs.h"
 #include "foundation/compat.h"
 #include "foundation/log.h"
-#include "foundation/str_util.h" /* cbm_validate_shell_arg — git shell-out hardening */
+#include "foundation/str_util.h" /* lsm_validate_shell_arg — git shell-out hardening */
 
 #include "zstd_store.h"
 
@@ -53,10 +53,10 @@ enum {
 /* Thread-local rotating buffers for small int→string conversions (logging).
  * Rotating allows multiple itoa_buf() calls in a single log statement. */
 enum { ART_RING = 4, ART_RING_MASK = 3 };
-static _Thread_local char g_export_error[CBM_SZ_512];
+static _Thread_local char g_export_error[LSM_SZ_512];
 
 static const char *itoa_buf(int v) {
-    static _Thread_local char bufs[ART_RING][CBM_SZ_32];
+    static _Thread_local char bufs[ART_RING][LSM_SZ_32];
     static _Thread_local int idx = 0;
     int i = idx;
     idx = (idx + ART_NUL) & ART_RING_MASK;
@@ -64,7 +64,7 @@ static const char *itoa_buf(int v) {
     return bufs[i];
 }
 
-const char *cbm_artifact_export_last_error(void) {
+const char *lsm_artifact_export_last_error(void) {
     return g_export_error[0] ? g_export_error : NULL;
 }
 
@@ -90,17 +90,17 @@ static int artifact_export_fail(const char *stage, const char *path, const char 
     }
 
     if (path && err_no != 0) {
-        cbm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "errno",
+        lsm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "errno",
                       itoa_buf(err_no), "path", path);
     } else if (path) {
-        cbm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "path", path);
+        lsm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "path", path);
     } else if (err_no != 0) {
-        cbm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "errno",
+        lsm_log_error("artifact.export", "stage", safe_stage, "err", safe_err, "errno",
                       itoa_buf(err_no));
     } else {
-        cbm_log_error("artifact.export", "stage", safe_stage, "err", safe_err);
+        lsm_log_error("artifact.export", "stage", safe_stage, "err", safe_err);
     }
-    return CBM_NOT_FOUND;
+    return LSM_NOT_FOUND;
 }
 
 typedef struct {
@@ -122,15 +122,15 @@ static void file_error_set(artifact_file_error_t *out, const char *err, int err_
     }
 }
 
-/* Build path: <repo>/.codebase-memory/<name> into caller-owned buf. */
+/* Build path: <repo>/.logan-spine/<name> into caller-owned buf. */
 static bool artifact_path(char *buf, size_t bufsz, const char *repo_path, const char *name) {
-    int n = snprintf(buf, bufsz, "%s/%s/%s", repo_path, CBM_ARTIFACT_DIR, name);
+    int n = snprintf(buf, bufsz, "%s/%s/%s", repo_path, LSM_ARTIFACT_DIR, name);
     return n >= 0 && (size_t)n < bufsz;
 }
 
 /* Read entire file into malloc'd buffer. Sets *out_len. Returns NULL on error. */
 static char *read_file_alloc(const char *path, size_t *out_len) {
-    FILE *fp = cbm_fopen(path, "rb");
+    FILE *fp = lsm_fopen(path, "rb");
     if (!fp) {
         return NULL;
     }
@@ -161,49 +161,49 @@ static int write_file_atomic(const char *path, const char *data, size_t len,
                              artifact_file_error_t *out_err) {
     file_error_clear(out_err);
 
-    char tmp[CBM_SZ_4K];
+    char tmp[LSM_SZ_4K];
     int n = snprintf(tmp, sizeof(tmp), "%s.tmp", path);
     if (n < 0 || (size_t)n >= sizeof(tmp)) {
         file_error_set(out_err, "path_too_long", 0);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     FILE *fp = fopen(tmp, "wb");
     if (!fp) {
         file_error_set(out_err, "open_temp", errno);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     size_t wr = fwrite(data, ART_NUL, len, fp);
     if (wr != len) {
         int saved_errno = ferror(fp) ? errno : 0;
         (void)fclose(fp);
-        cbm_unlink(tmp);
+        lsm_unlink(tmp);
         file_error_set(out_err, "write_temp", saved_errno);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     if (fclose(fp) != 0) {
         int saved_errno = errno;
-        cbm_unlink(tmp);
+        lsm_unlink(tmp);
         file_error_set(out_err, "close_temp", saved_errno);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
 #ifdef _WIN32
     /* MoveFileEx replace approach suggested by @Ayush7Ranjan in #492. */
     if (!MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         DWORD saved_error = GetLastError();
-        cbm_unlink(tmp);
+        lsm_unlink(tmp);
         file_error_set(out_err, "rename_temp", (int)saved_error);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 #else
     if (rename(tmp, path) != 0) {
         int saved_errno = errno;
-        cbm_unlink(tmp);
+        lsm_unlink(tmp);
         file_error_set(out_err, "rename_temp", saved_errno);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 #endif
     return 0;
@@ -216,18 +216,18 @@ static int write_file_atomic(const char *path, const char *data, size_t len,
 #endif
 
 /* See artifact.h. Mirrors git_context.c's git_validate_repo_path (the best-hardened
- * git shell-out): cbm_validate_shell_arg rejects quote / backslash / substitution
+ * git shell-out): lsm_validate_shell_arg rejects quote / backslash / substitution
  * metacharacters, and on Windows we also reject the cmd.exe expansion metacharacters
  * % ! ^. Callers then use DOUBLE quotes (honored by both POSIX sh and cmd.exe, unlike
  * single quotes on cmd.exe), so a repo path may legitimately contain spaces. */
-bool cbm_artifact_repo_path_is_shell_safe(const char *repo_path) {
-    return cbm_validate_shell_path_arg(repo_path);
+bool lsm_artifact_repo_path_is_shell_safe(const char *repo_path) {
+    return lsm_validate_shell_path_arg(repo_path);
 }
 
-/* Get current git HEAD hash. buf must be >= CBM_SZ_64. Returns false on error. */
+/* Get current git HEAD hash. buf must be >= LSM_SZ_64. Returns false on error. */
 static bool git_head_hash(const char *repo_path, char *buf, size_t bufsz) {
-    char cmd[CBM_SZ_1K];
-    if (!cbm_artifact_repo_path_is_shell_safe(repo_path)) {
+    char cmd[LSM_SZ_1K];
+    if (!lsm_artifact_repo_path_is_shell_safe(repo_path)) {
         buf[0] = '\0';
         return false;
     }
@@ -238,7 +238,7 @@ static bool git_head_hash(const char *repo_path, char *buf, size_t bufsz) {
                           git_context.c) */
         return false;
     }
-    FILE *fp = cbm_popen(cmd, "r");
+    FILE *fp = lsm_popen(cmd, "r");
     if (!fp) {
         buf[0] = '\0';
         return false;
@@ -251,7 +251,7 @@ static bool git_head_hash(const char *repo_path, char *buf, size_t bufsz) {
             buf[--len] = '\0';
         }
     }
-    (void)cbm_pclose(fp);
+    (void)lsm_pclose(fp);
     return buf[0] != '\0';
 }
 
@@ -271,32 +271,32 @@ static void iso_timestamp(char *buf, size_t bufsz) {
 
 /* Read schema_version from artifact.json. Returns -1 if missing/invalid. */
 static int read_metadata_version(const char *repo_path) {
-    char meta_path[CBM_SZ_4K];
-    artifact_path(meta_path, sizeof(meta_path), repo_path, CBM_ARTIFACT_META);
+    char meta_path[LSM_SZ_4K];
+    artifact_path(meta_path, sizeof(meta_path), repo_path, LSM_ARTIFACT_META);
 
     size_t len = 0;
     char *json = read_file_alloc(meta_path, &len);
     if (!json) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     yyjson_doc *doc = yyjson_read(json, len, 0);
     free(json);
     if (!doc) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     yyjson_val *root = yyjson_doc_get_root(doc);
     yyjson_val *ver = yyjson_obj_get(root, "schema_version");
-    int version = ver ? yyjson_get_int(ver) : CBM_NOT_FOUND;
+    int version = ver ? yyjson_get_int(ver) : LSM_NOT_FOUND;
     yyjson_doc_free(doc);
     return version;
 }
 
 /* Read original_size from artifact.json. Returns 0 on error. */
 static size_t read_metadata_original_size(const char *repo_path) {
-    char meta_path[CBM_SZ_4K];
-    artifact_path(meta_path, sizeof(meta_path), repo_path, CBM_ARTIFACT_META);
+    char meta_path[LSM_SZ_4K];
+    artifact_path(meta_path, sizeof(meta_path), repo_path, LSM_ARTIFACT_META);
 
     size_t len = 0;
     char *json = read_file_alloc(meta_path, &len);
@@ -320,17 +320,17 @@ static size_t read_metadata_original_size(const char *repo_path) {
 /* Write artifact.json metadata. */
 static int write_metadata(const char *repo_path, const char *project_name, int nodes, int edges,
                           size_t original_size, size_t compressed_size, int compression_level) {
-    char commit[CBM_SZ_64] = "";
+    char commit[LSM_SZ_64] = "";
     git_head_hash(repo_path, commit, sizeof(commit));
 
-    char ts[CBM_SZ_64];
+    char ts[LSM_SZ_64];
     iso_timestamp(ts, sizeof(ts));
 
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
     yyjson_mut_val *root = yyjson_mut_obj(doc);
     yyjson_mut_doc_set_root(doc, root);
 
-    yyjson_mut_obj_add_int(doc, root, "schema_version", CBM_ARTIFACT_SCHEMA_VERSION);
+    yyjson_mut_obj_add_int(doc, root, "schema_version", LSM_ARTIFACT_SCHEMA_VERSION);
     yyjson_mut_obj_add_str(doc, root, "commit", commit);
     yyjson_mut_obj_add_str(doc, root, "indexed_at", ts);
     yyjson_mut_obj_add_str(doc, root, "project", project_name);
@@ -347,8 +347,8 @@ static int write_metadata(const char *repo_path, const char *project_name, int n
         return artifact_export_fail("write_metadata", NULL, "json_encode", 0);
     }
 
-    char meta_path[CBM_SZ_4K];
-    if (!artifact_path(meta_path, sizeof(meta_path), repo_path, CBM_ARTIFACT_META)) {
+    char meta_path[LSM_SZ_4K];
+    if (!artifact_path(meta_path, sizeof(meta_path), repo_path, LSM_ARTIFACT_META)) {
         free(json);
         return artifact_export_fail("write_metadata", repo_path, "path_too_long", 0);
     }
@@ -364,7 +364,7 @@ static int write_metadata(const char *repo_path, const char *project_name, int n
 /* ── .gitattributes setup ────────────────────────────────────────── */
 
 static void ensure_gitattributes(const char *repo_path) {
-    char ga_path[CBM_SZ_4K];
+    char ga_path[LSM_SZ_4K];
     artifact_path(ga_path, sizeof(ga_path), repo_path, ".gitattributes");
 
     /* Atomic create-only-if-absent: O_EXCL closes the TOCTOU window
@@ -373,7 +373,7 @@ static void ensure_gitattributes(const char *repo_path) {
     int fd = open(ga_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         if (errno != EEXIST) {
-            cbm_log_warn("artifact.gitattributes.open path=%s err=%s", ga_path, strerror(errno));
+            lsm_log_warn("artifact.gitattributes.open path=%s err=%s", ga_path, strerror(errno));
         }
         /* fall through to merge driver setup either way */
     } else {
@@ -383,8 +383,8 @@ static void ensure_gitattributes(const char *repo_path) {
              * macro expands to `-diff -merge -text`, so a trailing `binary`
              * unsets `merge=ours` and the conflict prevention this file
              * exists for never engages. The macro must come first. */
-            (void)fputs("# Auto-generated by codebase-memory-mcp\n"
-                        "# Prevent merge conflicts on compressed artifact\n" CBM_ARTIFACT_FILENAME
+            (void)fputs("# Auto-generated by logan-spine-mcp\n"
+                        "# Prevent merge conflicts on compressed artifact\n" LSM_ARTIFACT_FILENAME
                         " binary merge=ours\n",
                         fp);
             (void)fclose(fp);
@@ -394,18 +394,18 @@ static void ensure_gitattributes(const char *repo_path) {
     }
 
     /* Best-effort: configure merge driver */
-    if (!cbm_artifact_repo_path_is_shell_safe(repo_path)) {
+    if (!lsm_artifact_repo_path_is_shell_safe(repo_path)) {
         return;
     }
-    char cmd[CBM_SZ_1K];
+    char cmd[LSM_SZ_1K];
     int n = snprintf(cmd, sizeof(cmd),
                      "git -C \"%s\" config merge.ours.driver true 2>" ARTIFACT_NULL_DEV, repo_path);
     if (n < 0 || (size_t)n >= sizeof(cmd)) {
         return; /* truncated command → skip (parity with git_context.c) */
     }
-    FILE *p = cbm_popen(cmd, "r");
+    FILE *p = lsm_popen(cmd, "r");
     if (p) {
-        (void)cbm_pclose(p);
+        (void)lsm_pclose(p);
     }
 }
 
@@ -428,29 +428,29 @@ static const char *DROP_INDEXES_SQL = "DROP INDEX IF EXISTS idx_nodes_label;"
  *
  * VACUUM INTO refuses to write a destination that already exists, so the
  * destination file cannot be pre-created with exclusive semantics the way
- * cbm_mkstemp would — sqlite has to be the one that creates it. Containing it in
- * a directory only this user can enter buys the same protection: cbm_mkdtemp
+ * lsm_mkstemp would — sqlite has to be the one that creates it. Containing it in
+ * a directory only this user can enter buys the same protection: lsm_mkdtemp
  * creates with 0700 on POSIX and an explicit owner-only DACL on Windows, and the
  * XXXXXX suffix makes the path unguessable. The old fixed
- * "<tmp>/cbm_artifact_tmp.db" was vulnerable on both counts — another local user
+ * "<tmp>/lsm_artifact_tmp.db" was vulnerable on both counts — another local user
  * could pre-plant a symlink there to redirect the copy, and two concurrent
  * exports collided on the one name. */
 typedef struct {
-    char dir[CBM_SZ_512]; /* cbm_mkdtemp copies its result back into this buffer */
-    char db[CBM_SZ_4K];
+    char dir[LSM_SZ_512]; /* lsm_mkdtemp copies its result back into this buffer */
+    char db[LSM_SZ_4K];
 } artifact_snapshot_tmp_t;
 
 static bool artifact_snapshot_tmp_open(artifact_snapshot_tmp_t *tmp) {
     tmp->dir[0] = '\0';
     tmp->db[0] = '\0';
-    int written = snprintf(tmp->dir, sizeof(tmp->dir), "%s/cbm-artifact-XXXXXX", cbm_tmpdir());
-    if (written <= 0 || (size_t)written >= sizeof(tmp->dir) || !cbm_mkdtemp(tmp->dir)) {
+    int written = snprintf(tmp->dir, sizeof(tmp->dir), "%s/lsm-artifact-XXXXXX", lsm_tmpdir());
+    if (written <= 0 || (size_t)written >= sizeof(tmp->dir) || !lsm_mkdtemp(tmp->dir)) {
         tmp->dir[0] = '\0';
         return false;
     }
     written = snprintf(tmp->db, sizeof(tmp->db), "%s/snapshot.db", tmp->dir);
     if (written <= 0 || (size_t)written >= sizeof(tmp->db)) {
-        (void)cbm_rmdir(tmp->dir);
+        (void)lsm_rmdir(tmp->dir);
         tmp->dir[0] = '\0';
         return false;
     }
@@ -467,14 +467,14 @@ static void artifact_snapshot_tmp_close(artifact_snapshot_tmp_t *tmp) {
     }
     static const char *const suffixes[] = {"-wal", "-shm"};
     for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
-        char sidecar[CBM_SZ_4K];
+        char sidecar[LSM_SZ_4K];
         int written = snprintf(sidecar, sizeof(sidecar), "%s%s", tmp->db, suffixes[i]);
         if (written > 0 && (size_t)written < sizeof(sidecar)) {
-            (void)cbm_unlink(sidecar);
+            (void)lsm_unlink(sidecar);
         }
     }
-    (void)cbm_unlink(tmp->db);
-    (void)cbm_rmdir(tmp->dir);
+    (void)lsm_unlink(tmp->db);
+    (void)lsm_rmdir(tmp->dir);
     tmp->dir[0] = '\0';
 }
 
@@ -487,7 +487,7 @@ static void artifact_snapshot_tmp_close(artifact_snapshot_tmp_t *tmp) {
 static char *prepare_snapshot_db(const char *db_path, size_t *out_size, bool strip_indexes) {
     artifact_snapshot_tmp_t tmp;
     if (!artifact_snapshot_tmp_open(&tmp)) {
-        artifact_export_fail("prepare_snapshot_dir", cbm_tmpdir(), "private_tmpdir_failed", errno);
+        artifact_export_fail("prepare_snapshot_dir", lsm_tmpdir(), "private_tmpdir_failed", errno);
         return NULL;
     }
     /* Fresh private directory ⇒ the destination is absent by construction, which
@@ -506,7 +506,7 @@ static char *prepare_snapshot_db(const char *db_path, size_t *out_size, bool str
         return NULL;
     }
 
-    char vacuum_sql[CBM_SZ_4K];
+    char vacuum_sql[LSM_SZ_4K];
     snprintf(vacuum_sql, sizeof(vacuum_sql), "VACUUM INTO '%s';", tmp_path);
     char *errmsg = NULL;
     int vrc = sqlite3_exec(raw_db, vacuum_sql, NULL, NULL, &errmsg);
@@ -543,7 +543,7 @@ static char *prepare_snapshot_db(const char *db_path, size_t *out_size, bool str
 
 /* ── Export ───────────────────────────────────────────────────────── */
 
-int cbm_artifact_export(const char *db_path, const char *repo_path, const char *project_name,
+int lsm_artifact_export(const char *db_path, const char *repo_path, const char *project_name,
                         int quality) {
     clear_export_error();
 
@@ -551,18 +551,18 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
         return artifact_export_fail("validate_args", NULL, "missing_argument", 0);
     }
 
-    /* Ensure .codebase-memory/ directory exists */
-    char art_dir[CBM_SZ_4K];
-    int dir_len = snprintf(art_dir, sizeof(art_dir), "%s/%s", repo_path, CBM_ARTIFACT_DIR);
+    /* Ensure .logan-spine/ directory exists */
+    char art_dir[LSM_SZ_4K];
+    int dir_len = snprintf(art_dir, sizeof(art_dir), "%s/%s", repo_path, LSM_ARTIFACT_DIR);
     if (dir_len < 0 || (size_t)dir_len >= sizeof(art_dir)) {
         return artifact_export_fail("prepare_artifact_dir", repo_path, "path_too_long", 0);
     }
     errno = 0;
-    if (!cbm_mkdir_p(art_dir, ART_DIR_PERMS)) {
+    if (!lsm_mkdir_p(art_dir, ART_DIR_PERMS)) {
         return artifact_export_fail("prepare_artifact_dir", art_dir, "mkdir_or_not_directory",
                                     errno);
     }
-    if (!cbm_is_dir(art_dir)) {
+    if (!lsm_is_dir(art_dir)) {
         return artifact_export_fail("prepare_artifact_dir", art_dir, "not_directory", 0);
     }
 
@@ -570,7 +570,7 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
     char *db_data = NULL;
     int compression_level = ART_ZSTD_FAST;
 
-    if (quality == CBM_ARTIFACT_BEST) {
+    if (quality == LSM_ARTIFACT_BEST) {
         compression_level = ART_ZSTD_BEST;
         db_data = prepare_snapshot_db(db_path, &db_size, true);
     } else {
@@ -582,21 +582,21 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
 
     if (!db_data || db_size == 0) {
         free(db_data);
-        if (cbm_artifact_export_last_error()) {
-            return CBM_NOT_FOUND;
+        if (lsm_artifact_export_last_error()) {
+            return LSM_NOT_FOUND;
         }
         return artifact_export_fail("read_db", db_path, "empty_or_unreadable", errno);
     }
 
     /* Compress with zstd */
-    size_t bound = cbm_zstd_compress_bound(db_size);
+    size_t bound = lsm_zstd_compress_bound(db_size);
     char *compressed = malloc(bound);
     if (!compressed) {
         free(db_data);
         return artifact_export_fail("compress", NULL, "alloc_compressed_buffer", 0);
     }
 
-    int64_t clen = cbm_zstd_compress(db_data, db_size, compressed, bound, compression_level);
+    int64_t clen = lsm_zstd_compress(db_data, db_size, compressed, bound, compression_level);
     free(db_data);
 
     if (clen <= 0) {
@@ -605,8 +605,8 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
     }
 
     /* Write compressed artifact */
-    char zst_path[CBM_SZ_4K];
-    if (!artifact_path(zst_path, sizeof(zst_path), repo_path, CBM_ARTIFACT_FILENAME)) {
+    char zst_path[LSM_SZ_4K];
+    if (!artifact_path(zst_path, sizeof(zst_path), repo_path, LSM_ARTIFACT_FILENAME)) {
         free(compressed);
         return artifact_export_fail("write_artifact", repo_path, "path_too_long", 0);
     }
@@ -621,25 +621,25 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
     /* Get node/edge counts for metadata */
     int nodes = 0;
     int edges = 0;
-    cbm_store_t *count_store = cbm_store_open_path_query(db_path);
+    lsm_store_t *count_store = lsm_store_open_path_query(db_path);
     if (count_store) {
-        nodes = cbm_store_count_nodes(count_store, project_name);
-        edges = cbm_store_count_edges(count_store, project_name);
-        cbm_store_close(count_store);
+        nodes = lsm_store_count_nodes(count_store, project_name);
+        edges = lsm_store_count_edges(count_store, project_name);
+        lsm_store_close(count_store);
     }
 
     /* Write metadata */
     if (write_metadata(repo_path, project_name, nodes, edges, db_size, (size_t)clen,
                        compression_level) != 0) {
-        cbm_unlink(zst_path);
-        return CBM_NOT_FOUND;
+        lsm_unlink(zst_path);
+        return LSM_NOT_FOUND;
     }
 
     /* Ensure .gitattributes for merge conflict prevention */
     ensure_gitattributes(repo_path);
 
     double ratio = db_size > 0 ? (double)db_size / (double)clen : 0.0;
-    cbm_log_info("artifact.export", "quality", quality == CBM_ARTIFACT_BEST ? "best" : "fast",
+    lsm_log_info("artifact.export", "quality", quality == LSM_ARTIFACT_BEST ? "best" : "fast",
                  "original_mb", itoa_buf((int)(db_size / ART_BYTES_PER_MB)), "compressed_mb",
                  itoa_buf((int)((size_t)clen / ART_BYTES_PER_MB)), "ratio",
                  itoa_buf((int)(ratio * ART_RATIO_SCALE)));
@@ -649,35 +649,35 @@ int cbm_artifact_export(const char *db_path, const char *repo_path, const char *
 
 /* ── Import ──────────────────────────────────────────────────────── */
 
-int cbm_artifact_import(const char *repo_path, const char *cache_db_path) {
+int lsm_artifact_import(const char *repo_path, const char *cache_db_path) {
     if (!repo_path || !cache_db_path) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
     /* Check schema version compatibility */
     int version = read_metadata_version(repo_path);
-    if (version < 0 || version > CBM_ARTIFACT_SCHEMA_VERSION) {
-        cbm_log_info("artifact.import", "skip", "schema_version_mismatch", "artifact_ver",
-                     itoa_buf(version), "current_ver", itoa_buf(CBM_ARTIFACT_SCHEMA_VERSION));
-        return CBM_NOT_FOUND;
+    if (version < 0 || version > LSM_ARTIFACT_SCHEMA_VERSION) {
+        lsm_log_info("artifact.import", "skip", "schema_version_mismatch", "artifact_ver",
+                     itoa_buf(version), "current_ver", itoa_buf(LSM_ARTIFACT_SCHEMA_VERSION));
+        return LSM_NOT_FOUND;
     }
 
     /* Get original_size for decompression buffer */
     size_t original_size = read_metadata_original_size(repo_path);
     if (original_size == 0) {
-        cbm_log_error("artifact.import", "err", "missing_original_size");
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "missing_original_size");
+        return LSM_NOT_FOUND;
     }
 
     /* Read compressed artifact */
-    char zst_path[CBM_SZ_4K];
-    artifact_path(zst_path, sizeof(zst_path), repo_path, CBM_ARTIFACT_FILENAME);
+    char zst_path[LSM_SZ_4K];
+    artifact_path(zst_path, sizeof(zst_path), repo_path, LSM_ARTIFACT_FILENAME);
 
     size_t clen = 0;
     char *compressed = read_file_alloc(zst_path, &clen);
     if (!compressed) {
-        cbm_log_error("artifact.import", "err", "read_artifact");
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "read_artifact");
+        return LSM_NOT_FOUND;
     }
 
     /* Decompress */
@@ -687,39 +687,39 @@ int cbm_artifact_import(const char *repo_path, const char *cache_db_path) {
      * so a crafted size can never make the capacity exceed the real buffer
      * (the int-truncation that used to do exactly that is gone with the size_t
      * signature). Require the metadata field to agree, and cap the total. */
-    size_t frame_size = cbm_zstd_frame_content_size(compressed, clen);
+    size_t frame_size = lsm_zstd_frame_content_size(compressed, clen);
     if (frame_size == 0 || frame_size > ART_MAX_DECOMPRESSED_BYTES || frame_size != original_size) {
         free(compressed);
-        cbm_log_error("artifact.import", "err", "bad_decompressed_size");
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "bad_decompressed_size");
+        return LSM_NOT_FOUND;
     }
 
     char *decompressed = malloc(frame_size);
     if (!decompressed) {
         free(compressed);
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
-    int64_t dlen = cbm_zstd_decompress(compressed, clen, decompressed, frame_size);
+    int64_t dlen = lsm_zstd_decompress(compressed, clen, decompressed, frame_size);
     free(compressed);
 
     if (dlen <= 0 || (size_t)dlen != frame_size) {
         free(decompressed);
-        cbm_log_error("artifact.import", "err", "zstd_decompress");
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "zstd_decompress");
+        return LSM_NOT_FOUND;
     }
 
     /* Write to temp file, then rename for atomicity */
-    char tmp_path[CBM_SZ_4K];
+    char tmp_path[LSM_SZ_4K];
     snprintf(tmp_path, sizeof(tmp_path), "%s.import_tmp", cache_db_path);
 
     /* Ensure cache directory exists */
-    char cache_dir[CBM_SZ_1K];
+    char cache_dir[LSM_SZ_1K];
     snprintf(cache_dir, sizeof(cache_dir), "%s", cache_db_path);
     char *last_slash = strrchr(cache_dir, '/');
     if (last_slash) {
         *last_slash = '\0';
-        cbm_mkdir_p(cache_dir, ART_DIR_PERMS);
+        lsm_mkdir_p(cache_dir, ART_DIR_PERMS);
     }
 
     artifact_file_error_t ioerr;
@@ -728,55 +728,55 @@ int cbm_artifact_import(const char *repo_path, const char *cache_db_path) {
 
     if (wrc != 0) {
         if (ioerr.err_no != 0) {
-            cbm_log_error("artifact.import", "err", "write_temp_db", "detail", ioerr.err, "errno",
+            lsm_log_error("artifact.import", "err", "write_temp_db", "detail", ioerr.err, "errno",
                           itoa_buf(ioerr.err_no), "path", tmp_path);
         } else {
-            cbm_log_error("artifact.import", "err", "write_temp_db", "detail", ioerr.err, "path",
+            lsm_log_error("artifact.import", "err", "write_temp_db", "detail", ioerr.err, "path",
                           tmp_path);
         }
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
 
-    /* Open with cbm_store_open_path to auto-create missing indexes + FTS5 */
-    cbm_store_t *store = cbm_store_open_path(tmp_path);
+    /* Open with lsm_store_open_path to auto-create missing indexes + FTS5 */
+    lsm_store_t *store = lsm_store_open_path(tmp_path);
     if (!store) {
-        cbm_log_error("artifact.import", "err", "open_imported_db");
-        cbm_unlink(tmp_path);
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "open_imported_db");
+        lsm_unlink(tmp_path);
+        return LSM_NOT_FOUND;
     }
 
     /* Deep integrity check — refuse corrupted artifacts. The shallow check
      * only sanity-checks the projects table, so page-corrupted (torn)
      * artifacts installed cleanly (#895); quick_check catches them. */
-    if (!cbm_store_check_integrity_deep(store)) {
-        cbm_log_error("artifact.import", "err", "integrity_check_failed");
-        cbm_store_close(store);
-        cbm_unlink(tmp_path);
-        return CBM_NOT_FOUND;
+    if (!lsm_store_check_integrity_deep(store)) {
+        lsm_log_error("artifact.import", "err", "integrity_check_failed");
+        lsm_store_close(store);
+        lsm_unlink(tmp_path);
+        return LSM_NOT_FOUND;
     }
 
-    cbm_store_close(store);
+    lsm_store_close(store);
 
     /* Atomic rename to final path. Drop the DESTINATION's leftover
      * -wal/-shm first: the import cleans the tmp file's sidecars, but a
      * stale WAL next to the cache path would be replayed on top of the
      * imported file at the next open (#897). */
-    cbm_remove_db_sidecars(cache_db_path);
+    lsm_remove_db_sidecars(cache_db_path);
     if (rename(tmp_path, cache_db_path) != 0) {
-        cbm_log_error("artifact.import", "err", "rename_to_cache");
-        cbm_unlink(tmp_path);
-        return CBM_NOT_FOUND;
+        lsm_log_error("artifact.import", "err", "rename_to_cache");
+        lsm_unlink(tmp_path);
+        return LSM_NOT_FOUND;
     }
 
     /* Clean up any stale WAL/SHM from the temp open */
-    char wal[CBM_SZ_4K];
-    char shm[CBM_SZ_4K];
+    char wal[LSM_SZ_4K];
+    char shm[LSM_SZ_4K];
     snprintf(wal, sizeof(wal), "%s-wal", tmp_path);
     snprintf(shm, sizeof(shm), "%s-shm", tmp_path);
-    cbm_unlink(wal);
-    cbm_unlink(shm);
+    lsm_unlink(wal);
+    lsm_unlink(shm);
 
-    cbm_log_info("artifact.import", "db", cache_db_path, "size_mb",
+    lsm_log_info("artifact.import", "db", cache_db_path, "size_mb",
                  itoa_buf((int)((size_t)dlen / ART_BYTES_PER_MB)));
 
     return 0;
@@ -784,13 +784,13 @@ int cbm_artifact_import(const char *repo_path, const char *cache_db_path) {
 
 /* ── Existence check ─────────────────────────────────────────────── */
 
-bool cbm_artifact_exists(const char *repo_path) {
+bool lsm_artifact_exists(const char *repo_path) {
     if (!repo_path) {
         return false;
     }
 
-    char zst_path[CBM_SZ_4K];
-    artifact_path(zst_path, sizeof(zst_path), repo_path, CBM_ARTIFACT_FILENAME);
+    char zst_path[LSM_SZ_4K];
+    artifact_path(zst_path, sizeof(zst_path), repo_path, LSM_ARTIFACT_FILENAME);
 
     struct stat st;
     if (stat(zst_path, &st) != 0 || st.st_size == 0) {
@@ -799,18 +799,18 @@ bool cbm_artifact_exists(const char *repo_path) {
 
     /* Check schema version is compatible */
     int version = read_metadata_version(repo_path);
-    return version >= 0 && version <= CBM_ARTIFACT_SCHEMA_VERSION;
+    return version >= 0 && version <= LSM_ARTIFACT_SCHEMA_VERSION;
 }
 
 /* ── Commit hash extraction ──────────────────────────────────────── */
 
-char *cbm_artifact_commit(const char *repo_path) {
+char *lsm_artifact_commit(const char *repo_path) {
     if (!repo_path) {
         return NULL;
     }
 
-    char meta_path[CBM_SZ_4K];
-    artifact_path(meta_path, sizeof(meta_path), repo_path, CBM_ARTIFACT_META);
+    char meta_path[LSM_SZ_4K];
+    artifact_path(meta_path, sizeof(meta_path), repo_path, LSM_ARTIFACT_META);
 
     size_t len = 0;
     char *json = read_file_alloc(meta_path, &len);

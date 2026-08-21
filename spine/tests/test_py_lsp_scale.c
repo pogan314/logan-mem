@@ -4,7 +4,7 @@
  * 4x the runtime (catches accidental O(n^2) in the resolver).
  */
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "lsp/py_lsp.h"
 #include <time.h>
 
@@ -57,8 +57,8 @@ static double measure(int n_classes, int *out_calls, int *out_resolved) {
         return -1.0;
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    CBMFileResult *r =
-        cbm_extract_file(src, slen, CBM_LANG_PYTHON, "test", "scale.py", 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(src, slen, LSM_LANG_PYTHON, "test", "scale.py", 0, NULL, NULL);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double ms = elapsed_ms(t0, t1);
     if (out_calls)
@@ -66,7 +66,7 @@ static double measure(int n_classes, int *out_calls, int *out_resolved) {
     if (out_resolved)
         *out_resolved = r ? r->resolved_calls.count : 0;
     if (r)
-        cbm_free_result(r);
+        lsm_free_result(r);
     free(src);
     return ms;
 }

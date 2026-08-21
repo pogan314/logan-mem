@@ -19,7 +19,7 @@
  * shipped v0.9.1-rc.1 binaries confirm it: linux-arm64 (glibc AND musl-static)
  * and darwin-arm64 all reported 0/6 allocator-owned size classes.
  *
- * Linux PROD builds now set MI_MALLOC_OVERRIDE (see Makefile.cbm), so the strong
+ * Linux PROD builds now set MI_MALLOC_OVERRIDE (see Makefile.lsm), so the strong
  * symbols exist there and ordinary malloc genuinely reaches mimalloc. macOS
  * stays off permanently — its two-level namespace would split this binary's
  * free from the system libraries' malloc — and test builds stay off everywhere
@@ -46,22 +46,22 @@
 
 void *__wrap_malloc(size_t size) {
     void *block = mi_malloc(size);
-    cbm_mem_profile_alloc(block, size);
+    lsm_mem_profile_alloc(block, size);
     return block;
 }
 
 void *__wrap_calloc(size_t count, size_t size) {
     void *block = mi_calloc(count, size);
-    cbm_mem_profile_alloc(block, count * size);
+    lsm_mem_profile_alloc(block, count * size);
     return block;
 }
 
 void *__wrap_realloc(void *block, size_t size) {
     if (block) {
-        cbm_mem_profile_free(block);
+        lsm_mem_profile_free(block);
     }
     void *grown = mi_realloc(block, size);
-    cbm_mem_profile_alloc(grown, size);
+    lsm_mem_profile_alloc(grown, size);
     return grown;
 }
 
@@ -71,14 +71,14 @@ void __wrap_free(void *block) {
     }
     /* Unlike Windows there is no foreign-allocator hazard to route around:
      * every malloc in this image is already mimalloc's. */
-    cbm_mem_profile_free(block);
+    lsm_mem_profile_free(block);
     mi_free(block);
 }
 
 char *__wrap_strdup(const char *text) {
     char *copy = mi_strdup(text);
     if (copy) {
-        cbm_mem_profile_alloc(copy, mi_usable_size(copy));
+        lsm_mem_profile_alloc(copy, mi_usable_size(copy));
     }
     return copy;
 }

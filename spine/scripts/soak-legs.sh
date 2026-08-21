@@ -26,7 +26,7 @@ Legs (default: quick,query-leak — the release-gating sequence):
   quick        scripts/soak-test.sh <binary> <minutes>
                Default soak: periodic reindex + query churn + crash-recovery.
                Results in soak-results/.
-  query-leak   CBM_SOAK_MODE=query-leak, --skip-crash-test, results in
+  query-leak   LSM_SOAK_MODE=query-leak, --skip-crash-test, results in
                soak-results-query-leak/. The #581 detector: after the initial
                index it NEVER reindexes or mutates, so any RSS growth is a
                query-path leak, not WAL/indexing churn.
@@ -42,8 +42,8 @@ Environment:
   RESULTS_DIR is owned by this script (per-leg); do not pre-set it.
 
 Examples:
-  scripts/soak-legs.sh build/c/codebase-memory-mcp 10          # both legs, 10m each
-  scripts/soak-legs.sh --legs quick build/c/codebase-memory-mcp 15   # ASan-style
+  scripts/soak-legs.sh build/c/logan-spine-mcp 10          # both legs, 10m each
+  scripts/soak-legs.sh --legs quick build/c/logan-spine-mcp 15   # ASan-style
 EOF
 }
 
@@ -69,7 +69,7 @@ esac
 # same plain path and carries no per-platform binary-name logic of its own.
 # Resolve whenever the .exe EXISTS, not only when the plain name fails -x:
 # msys resolves the suffix-less name transparently (it IS -x), but soak-test
-# keys its native-Windows handling — cygpath'd CBM_CACHE_DIR, coproc stdio —
+# keys its native-Windows handling — cygpath'd LSM_CACHE_DIR, coproc stdio —
 # off the literal .exe suffix. A suffix-less native binary therefore received
 # a POSIX-form cache path, mis-rooting the daemon logs and silently disabling
 # diagnostics (both hosted-runner Windows soak legs; reproduced on the VM's
@@ -87,7 +87,7 @@ run_leg() {
     # No suffix after the X run: BSD mktemp substitutes only TRAILING X's, so
     # a template like ...XXXXXX.log creates a near-literal file on macOS and
     # every second run collides with the first run's leftover ("File exists").
-    log="$(mktemp "${TMPDIR:-/tmp}/cbm-soak-leg-XXXXXX")"
+    log="$(mktemp "${TMPDIR:-/tmp}/lsm-soak-leg-XXXXXX")"
     echo "=== soak-legs: leg=${leg} binary=${BINARY} duration=${DURATION}m ==="
     local rc=0
     case "$leg" in
@@ -96,7 +96,7 @@ run_leg() {
         rc="${PIPESTATUS[0]}"
         ;;
     query-leak)
-        CBM_SOAK_MODE=query-leak RESULTS_DIR=soak-results-query-leak \
+        LSM_SOAK_MODE=query-leak RESULTS_DIR=soak-results-query-leak \
             "$ROOT/scripts/soak-test.sh" "$BINARY" "$DURATION" --skip-crash-test 2>&1 | tee "$log"
         rc="${PIPESTATUS[0]}"
         ;;

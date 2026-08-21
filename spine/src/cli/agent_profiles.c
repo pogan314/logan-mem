@@ -57,24 +57,24 @@ static const char *const tool_base_names[PROFILE_TOOL_COUNT] = {
     "index_status",     "detect_changes", "check_index_coverage",
 };
 
-static bool tier_valid(cbm_graph_tier_t tier) {
-    return tier >= CBM_GRAPH_TIER_SCOUT && tier < CBM_GRAPH_TIER_COUNT;
+static bool tier_valid(lsm_graph_tier_t tier) {
+    return tier >= LSM_GRAPH_TIER_SCOUT && tier < LSM_GRAPH_TIER_COUNT;
 }
 
-static bool access_valid(cbm_graph_access_t access) {
-    return access >= CBM_GRAPH_ACCESS_DIRECT && access < CBM_GRAPH_ACCESS_COUNT;
+static bool access_valid(lsm_graph_access_t access) {
+    return access >= LSM_GRAPH_ACCESS_DIRECT && access < LSM_GRAPH_ACCESS_COUNT;
 }
 
-static bool dialect_valid(cbm_graph_profile_dialect_t dialect) {
-    return dialect >= CBM_GRAPH_DIALECT_CLAUDE && dialect < CBM_GRAPH_DIALECT_COUNT;
+static bool dialect_valid(lsm_graph_profile_dialect_t dialect) {
+    return dialect >= LSM_GRAPH_DIALECT_CLAUDE && dialect < LSM_GRAPH_DIALECT_COUNT;
 }
 
-bool cbm_graph_dialect_direct_capable(cbm_graph_profile_dialect_t dialect) {
+bool lsm_graph_dialect_direct_capable(lsm_graph_profile_dialect_t dialect) {
     switch (dialect) {
-    case CBM_GRAPH_DIALECT_AUGMENT:
-    case CBM_GRAPH_DIALECT_CURSOR:
-    case CBM_GRAPH_DIALECT_ROVO:
-    case CBM_GRAPH_DIALECT_POCHI:
+    case LSM_GRAPH_DIALECT_AUGMENT:
+    case LSM_GRAPH_DIALECT_CURSOR:
+    case LSM_GRAPH_DIALECT_ROVO:
+    case LSM_GRAPH_DIALECT_POCHI:
         return false;
     default:
         return dialect_valid(dialect);
@@ -146,33 +146,33 @@ static void profile_buffer_discard(profile_buffer_t *buffer) {
     profile_buffer_init(buffer);
 }
 
-const char *cbm_graph_tier_slug(cbm_graph_tier_t tier) {
-    static const char *const slugs[CBM_GRAPH_TIER_COUNT] = {
-        "codebase-memory-scout",
-        "codebase-memory",
-        "codebase-memory-auditor",
+const char *lsm_graph_tier_slug(lsm_graph_tier_t tier) {
+    static const char *const slugs[LSM_GRAPH_TIER_COUNT] = {
+        "logan-spine-scout",
+        "logan-spine",
+        "logan-spine-auditor",
     };
     return tier_valid(tier) ? slugs[tier] : NULL;
 }
 
-const char *cbm_graph_tier_display_name(cbm_graph_tier_t tier) {
-    static const char *const names[CBM_GRAPH_TIER_COUNT] = {
-        "Codebase Memory Scout",
-        "Codebase Memory Verify",
-        "Codebase Memory Auditor",
+const char *lsm_graph_tier_display_name(lsm_graph_tier_t tier) {
+    static const char *const names[LSM_GRAPH_TIER_COUNT] = {
+        "Logan Spine Scout",
+        "Logan Spine Verify",
+        "Logan Spine Auditor",
     };
     return tier_valid(tier) ? names[tier] : NULL;
 }
 
-static const char *profile_description(cbm_graph_tier_t tier, cbm_graph_access_t access) {
-    static const char *const direct[CBM_GRAPH_TIER_COUNT] = {
+static const char *profile_description(lsm_graph_tier_t tier, lsm_graph_access_t access) {
+    static const char *const direct[LSM_GRAPH_TIER_COUNT] = {
         "Fast positive, provisional graph lookup with check_index_coverage and source read/grep "
         "fallback.",
         "Default task-directed graph verification with check_index_coverage and source read/grep "
         "fallback.",
         "Bounded-scope graph audit with check_index_coverage and source read/grep fallback.",
     };
-    static const char *const handoff[CBM_GRAPH_TIER_COUNT] = {
+    static const char *const handoff[LSM_GRAPH_TIER_COUNT] = {
         "Fast read-only handoff; parent agent must supply coverage evidence; child must not call "
         "or claim access to MCP.",
         "Verified read-only handoff; parent agent must supply coverage evidence; child must not "
@@ -180,18 +180,18 @@ static const char *profile_description(cbm_graph_tier_t tier, cbm_graph_access_t
         "Audit read-only handoff; parent agent must supply coverage evidence; child must not call "
         "or claim access to MCP.",
     };
-    return access == CBM_GRAPH_ACCESS_DIRECT ? direct[tier] : handoff[tier];
+    return access == LSM_GRAPH_ACCESS_DIRECT ? direct[tier] : handoff[tier];
 }
 
-char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) {
+char *lsm_render_graph_prompt(lsm_graph_tier_t tier, lsm_graph_access_t access) {
     if (!tier_valid(tier) || !access_valid(access)) {
         return NULL;
     }
     profile_buffer_t buffer;
     profile_buffer_init(&buffer);
-    if (access == CBM_GRAPH_ACCESS_DIRECT) {
+    if (access == LSM_GRAPH_ACCESS_DIRECT) {
         switch (tier) {
-        case CBM_GRAPH_TIER_SCOUT:
+        case LSM_GRAPH_TIER_SCOUT:
             profile_buffer_append(
                 &buffer,
                 "Tier 1 — Scout. Perform positive, provisional discovery with about 3-4 narrow "
@@ -199,7 +199,7 @@ char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) 
                 "two exact snippets. Do not make all/none claims, absence claims, complete impact "
                 "claims, or dead-code claims. Label findings provisional.\n\n");
             break;
-        case CBM_GRAPH_TIER_VERIFY:
+        case LSM_GRAPH_TIER_VERIFY:
             profile_buffer_append(
                 &buffer,
                 "Tier 2 — Verify is the default tier. Gather task-directed evidence with narrow "
@@ -208,7 +208,7 @@ char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) 
                 "coverage "
                 "before negative claims.\n\n");
             break;
-        case CBM_GRAPH_TIER_AUDIT:
+        case LSM_GRAPH_TIER_AUDIT:
             profile_buffer_append(
                 &buffer,
                 "Tier 3 — Auditor. Require a bounded scope, current graph generation, and complete "
@@ -221,7 +221,7 @@ char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) 
         }
         profile_buffer_append(
             &buffer,
-            "Use codebase-memory-mcp in the exact graph project. Use only read-only graph and "
+            "Use logan-spine-mcp in the exact graph project. Use only read-only graph and "
             "source tools. Locate candidates with search_graph, "
             "inspect relationships with trace_path, and verify material definitions with "
             "get_code_snippet. Use query_graph or get_architecture only when available and "
@@ -237,21 +237,21 @@ char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) 
             "graph evidence, source fallback, and limitations.\n");
     } else {
         switch (tier) {
-        case CBM_GRAPH_TIER_SCOUT:
+        case LSM_GRAPH_TIER_SCOUT:
             profile_buffer_append(
                 &buffer,
                 "Tier 1 — Scout handoff. Summarize only positive supplied evidence, make at most "
                 "targeted source checks, and label the result provisional. Never make all/none, "
                 "absence, complete-impact, or dead-code claims.\n\n");
             break;
-        case CBM_GRAPH_TIER_VERIFY:
+        case LSM_GRAPH_TIER_VERIFY:
             profile_buffer_append(
                 &buffer,
                 "Tier 2 — Verify handoff is the default. Cross-check supplied graph findings and "
                 "coverage alerts against exact source, and identify the precise missing parent "
                 "query instead of guessing.\n\n");
             break;
-        case CBM_GRAPH_TIER_AUDIT:
+        case LSM_GRAPH_TIER_AUDIT:
             profile_buffer_append(
                 &buffer,
                 "Tier 3 — Auditor handoff. Require a bounded scope, current generation, complete "
@@ -277,8 +277,8 @@ char *cbm_render_graph_prompt(cbm_graph_tier_t tier, cbm_graph_access_t access) 
     return profile_buffer_finish(&buffer);
 }
 
-static void tier_tool_set(cbm_graph_tier_t tier, const profile_tool_t **tools, size_t *count) {
-    if (tier == CBM_GRAPH_TIER_SCOUT) {
+static void tier_tool_set(lsm_graph_tier_t tier, const profile_tool_t **tools, size_t *count) {
+    if (tier == LSM_GRAPH_TIER_SCOUT) {
         *tools = scout_tools;
         *count = sizeof(scout_tools) / sizeof(scout_tools[0]);
     } else {
@@ -287,36 +287,36 @@ static void tier_tool_set(cbm_graph_tier_t tier, const profile_tool_t **tools, s
     }
 }
 
-static const char *tier_server_profile(cbm_graph_tier_t tier) {
-    return tier == CBM_GRAPH_TIER_SCOUT ? "scout" : "analysis";
+static const char *tier_server_profile(lsm_graph_tier_t tier) {
+    return tier == LSM_GRAPH_TIER_SCOUT ? "scout" : "analysis";
 }
 
-static const char *dialect_tool_prefix(cbm_graph_profile_dialect_t dialect) {
+static const char *dialect_tool_prefix(lsm_graph_profile_dialect_t dialect) {
     switch (dialect) {
-    case CBM_GRAPH_DIALECT_CLAUDE:
-    case CBM_GRAPH_DIALECT_QWEN:
-    case CBM_GRAPH_DIALECT_QODER:
-    case CBM_GRAPH_DIALECT_CODEBUDDY:
-    case CBM_GRAPH_DIALECT_FACTORY:
-        return "mcp__codebase-memory-mcp__";
-    case CBM_GRAPH_DIALECT_CODEX:
+    case LSM_GRAPH_DIALECT_CLAUDE:
+    case LSM_GRAPH_DIALECT_QWEN:
+    case LSM_GRAPH_DIALECT_QODER:
+    case LSM_GRAPH_DIALECT_CODEBUDDY:
+    case LSM_GRAPH_DIALECT_FACTORY:
+        return "mcp__logan-spine-mcp__";
+    case LSM_GRAPH_DIALECT_CODEX:
         return "";
-    case CBM_GRAPH_DIALECT_GEMINI:
-        return "mcp_codebase-memory-mcp_";
-    case CBM_GRAPH_DIALECT_COPILOT:
-        return "codebase-memory-mcp/";
-    case CBM_GRAPH_DIALECT_OPENCODE:
-    case CBM_GRAPH_DIALECT_KILO:
-    case CBM_GRAPH_DIALECT_VIBE:
-        return "codebase-memory-mcp_";
-    case CBM_GRAPH_DIALECT_KIRO:
-        return "@codebase-memory-mcp/";
+    case LSM_GRAPH_DIALECT_GEMINI:
+        return "mcp_logan-spine-mcp_";
+    case LSM_GRAPH_DIALECT_COPILOT:
+        return "logan-spine-mcp/";
+    case LSM_GRAPH_DIALECT_OPENCODE:
+    case LSM_GRAPH_DIALECT_KILO:
+    case LSM_GRAPH_DIALECT_VIBE:
+        return "logan-spine-mcp_";
+    case LSM_GRAPH_DIALECT_KIRO:
+        return "@logan-spine-mcp/";
     default:
         return NULL;
     }
 }
 
-static bool tool_identifier(cbm_graph_profile_dialect_t dialect, profile_tool_t tool, char *output,
+static bool tool_identifier(lsm_graph_profile_dialect_t dialect, profile_tool_t tool, char *output,
                             size_t output_size) {
     const char *prefix = dialect_tool_prefix(dialect);
     if (!prefix || tool < PROFILE_TOOL_SEARCH_GRAPH || tool >= PROFILE_TOOL_COUNT || !output ||
@@ -327,8 +327,8 @@ static bool tool_identifier(cbm_graph_profile_dialect_t dialect, profile_tool_t 
     return written >= 0 && (size_t)written < output_size;
 }
 
-static bool append_yaml_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_dialect_t dialect,
-                                  cbm_graph_tier_t tier) {
+static bool append_yaml_mcp_tools(profile_buffer_t *buffer, lsm_graph_profile_dialect_t dialect,
+                                  lsm_graph_tier_t tier) {
     const profile_tool_t *tools = NULL;
     size_t count = 0U;
     tier_tool_set(tier, &tools, &count);
@@ -343,8 +343,8 @@ static bool append_yaml_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_di
     return true;
 }
 
-static bool append_csv_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_dialect_t dialect,
-                                 cbm_graph_tier_t tier) {
+static bool append_csv_mcp_tools(profile_buffer_t *buffer, lsm_graph_profile_dialect_t dialect,
+                                 lsm_graph_tier_t tier) {
     const profile_tool_t *tools = NULL;
     size_t count = 0U;
     tier_tool_set(tier, &tools, &count);
@@ -359,8 +359,8 @@ static bool append_csv_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_dia
     return true;
 }
 
-static bool append_toml_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_dialect_t dialect,
-                                  cbm_graph_tier_t tier, bool leading_items) {
+static bool append_toml_mcp_tools(profile_buffer_t *buffer, lsm_graph_profile_dialect_t dialect,
+                                  lsm_graph_tier_t tier, bool leading_items) {
     const profile_tool_t *tools = NULL;
     size_t count = 0U;
     tier_tool_set(tier, &tools, &count);
@@ -377,8 +377,8 @@ static bool append_toml_mcp_tools(profile_buffer_t *buffer, cbm_graph_profile_di
 }
 
 static bool append_permission_mcp_tools(profile_buffer_t *buffer,
-                                        cbm_graph_profile_dialect_t dialect,
-                                        cbm_graph_tier_t tier) {
+                                        lsm_graph_profile_dialect_t dialect,
+                                        lsm_graph_tier_t tier) {
     const profile_tool_t *tools = NULL;
     size_t count = 0U;
     tier_tool_set(tier, &tools, &count);
@@ -400,9 +400,9 @@ static bool append_yaml_identity(profile_buffer_t *buffer, const char *slug,
            profile_buffer_append(buffer, description) && profile_buffer_append(buffer, "\n");
 }
 
-static char *render_kiro_profile(cbm_graph_tier_t tier, cbm_graph_access_t access,
+static char *render_kiro_profile(lsm_graph_tier_t tier, lsm_graph_access_t access,
                                  const char *binary_path, const char *prompt) {
-    if (access == CBM_GRAPH_ACCESS_DIRECT && (!binary_path || !binary_path[0])) {
+    if (access == LSM_GRAPH_ACCESS_DIRECT && (!binary_path || !binary_path[0])) {
         return NULL;
     }
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
@@ -415,27 +415,27 @@ static char *render_kiro_profile(cbm_graph_tier_t tier, cbm_graph_access_t acces
         return NULL;
     }
     yyjson_mut_doc_set_root(doc, root);
-    const char *slug = cbm_graph_tier_slug(tier);
+    const char *slug = lsm_graph_tier_slug(tier);
     bool ok =
         yyjson_mut_obj_add_strcpy(doc, root, "name", slug) &&
         yyjson_mut_obj_add_strcpy(doc, root, "description", profile_description(tier, access)) &&
         yyjson_mut_obj_add_strcpy(doc, root, "prompt", prompt) &&
         yyjson_mut_arr_add_str(doc, tools, "read") && yyjson_mut_arr_add_str(doc, tools, "grep") &&
         yyjson_mut_arr_add_str(doc, tools, "glob");
-    if (ok && access == CBM_GRAPH_ACCESS_DIRECT) {
+    if (ok && access == LSM_GRAPH_ACCESS_DIRECT) {
         const profile_tool_t *tier_tools = NULL;
         size_t count = 0U;
         tier_tool_set(tier, &tier_tools, &count);
         for (size_t i = 0U; ok && i < count; i++) {
             char identifier[160];
-            ok = tool_identifier(CBM_GRAPH_DIALECT_KIRO, tier_tools[i], identifier,
+            ok = tool_identifier(LSM_GRAPH_DIALECT_KIRO, tier_tools[i], identifier,
                                  sizeof(identifier)) &&
                  yyjson_mut_arr_add_strcpy(doc, tools, identifier);
         }
     }
     ok = ok && yyjson_mut_obj_add_val(doc, root, "tools", tools) &&
          yyjson_mut_obj_add_bool(doc, root, "includeMcpJson", false);
-    if (ok && access == CBM_GRAPH_ACCESS_DIRECT) {
+    if (ok && access == LSM_GRAPH_ACCESS_DIRECT) {
         yyjson_mut_val *servers = yyjson_mut_obj(doc);
         yyjson_mut_val *server = yyjson_mut_obj(doc);
         yyjson_mut_val *args = yyjson_mut_arr(doc);
@@ -444,7 +444,7 @@ static char *render_kiro_profile(cbm_graph_tier_t tier, cbm_graph_access_t acces
              yyjson_mut_arr_add_str(doc, args, "--tool-profile") &&
              yyjson_mut_arr_add_strcpy(doc, args, tier_server_profile(tier)) &&
              yyjson_mut_obj_add_val(doc, server, "args", args) &&
-             yyjson_mut_obj_add_val(doc, servers, "codebase-memory-mcp", server) &&
+             yyjson_mut_obj_add_val(doc, servers, "logan-spine-mcp", server) &&
              yyjson_mut_obj_add_val(doc, root, "mcpServers", servers);
     }
     char *result = ok ? yyjson_mut_write(doc, YYJSON_WRITE_PRETTY, NULL) : NULL;
@@ -456,11 +456,11 @@ static char *render_kiro_profile(cbm_graph_tier_t tier, cbm_graph_access_t acces
  * is rejected as "invalid transport" and the whole role is dropped, so direct
  * profiles must declare the transport. rc1_transportless reproduces the
  * v0.9.1-rc.1 rendering so installs can migrate those files. */
-static bool append_codex_profile(profile_buffer_t *buffer, cbm_graph_tier_t tier,
-                                 cbm_graph_access_t access, const char *binary_path,
+static bool append_codex_profile(profile_buffer_t *buffer, lsm_graph_tier_t tier,
+                                 lsm_graph_access_t access, const char *binary_path,
                                  const char *prompt, bool rc1_transportless) {
     if (!profile_buffer_append(buffer, "name = \"") ||
-        !profile_buffer_append(buffer, cbm_graph_tier_slug(tier)) ||
+        !profile_buffer_append(buffer, lsm_graph_tier_slug(tier)) ||
         !profile_buffer_append(buffer, "\"\ndescription = \"") ||
         !profile_buffer_append(buffer, profile_description(tier, access)) ||
         !profile_buffer_append(buffer, "\"\nsandbox_mode = \"read-only\"\ndeveloper_instructions = "
@@ -468,16 +468,16 @@ static bool append_codex_profile(profile_buffer_t *buffer, cbm_graph_tier_t tier
         !profile_buffer_append(buffer, prompt) || !profile_buffer_append(buffer, "\"\"\"\n")) {
         return false;
     }
-    if (access != CBM_GRAPH_ACCESS_DIRECT) {
+    if (access != LSM_GRAPH_ACCESS_DIRECT) {
         return true;
     }
-    if (!profile_buffer_append(buffer, "\n[mcp_servers.codebase-memory-mcp]\n")) {
+    if (!profile_buffer_append(buffer, "\n[mcp_servers.logan-spine-mcp]\n")) {
         return false;
     }
     if (!rc1_transportless) {
         char escaped_binary[8192];
         if (!binary_path || !binary_path[0] ||
-            cbm_toml_escape_basic_string(binary_path, escaped_binary, sizeof(escaped_binary)) !=
+            lsm_toml_escape_basic_string(binary_path, escaped_binary, sizeof(escaped_binary)) !=
                 0) {
             return false;
         }
@@ -490,32 +490,32 @@ static bool append_codex_profile(profile_buffer_t *buffer, cbm_graph_tier_t tier
         }
     }
     return profile_buffer_append(buffer, "enabled_tools = [") &&
-           append_toml_mcp_tools(buffer, CBM_GRAPH_DIALECT_CODEX, tier, false) &&
+           append_toml_mcp_tools(buffer, LSM_GRAPH_DIALECT_CODEX, tier, false) &&
            profile_buffer_append(buffer, "]\n");
 }
 
-static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dialect_t dialect,
-                                cbm_graph_tier_t tier, cbm_graph_access_t access,
+static bool render_profile_text(profile_buffer_t *buffer, lsm_graph_profile_dialect_t dialect,
+                                lsm_graph_tier_t tier, lsm_graph_access_t access,
                                 const char *binary_path, const char *prompt) {
-    const char *slug = cbm_graph_tier_slug(tier);
-    const char *display = cbm_graph_tier_display_name(tier);
+    const char *slug = lsm_graph_tier_slug(tier);
+    const char *display = lsm_graph_tier_display_name(tier);
     const char *description = profile_description(tier, access);
-    bool direct = access == CBM_GRAPH_ACCESS_DIRECT;
+    bool direct = access == LSM_GRAPH_ACCESS_DIRECT;
     switch (dialect) {
-    case CBM_GRAPH_DIALECT_CLAUDE:
+    case LSM_GRAPH_DIALECT_CLAUDE:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer, "tools:\n  - Read\n  - Grep\n  - Glob\n") ||
             (direct && !append_yaml_mcp_tools(buffer, dialect, tier)) ||
-            (direct && !profile_buffer_append(buffer, "mcpServers: [codebase-memory-mcp]\n")) ||
+            (direct && !profile_buffer_append(buffer, "mcpServers: [logan-spine-mcp]\n")) ||
             !profile_buffer_append(buffer,
-                                   "permissionMode: plan\nskills: [codebase-memory]\n---\n") ||
+                                   "permissionMode: plan\nskills: [logan-spine]\n---\n") ||
             !profile_buffer_append(buffer, prompt)) {
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_CODEX:
+    case LSM_GRAPH_DIALECT_CODEX:
         return append_codex_profile(buffer, tier, access, binary_path, prompt, false);
-    case CBM_GRAPH_DIALECT_GEMINI:
+    case LSM_GRAPH_DIALECT_GEMINI:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer,
                                    "kind: local\ntools:\n  - read_file\n  - grep_search\n") ||
@@ -524,7 +524,7 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_QWEN:
+    case LSM_GRAPH_DIALECT_QWEN:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer,
                                    "model: inherit\napprovalMode: plan\ntools:\n  - read_file\n  - "
@@ -534,7 +534,7 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_COPILOT:
+    case LSM_GRAPH_DIALECT_COPILOT:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer, "tools:\n  - read\n  - search\n") ||
             (direct && !append_yaml_mcp_tools(buffer, dialect, tier)) ||
@@ -542,8 +542,8 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_OPENCODE:
-    case CBM_GRAPH_DIALECT_KILO:
+    case LSM_GRAPH_DIALECT_OPENCODE:
+    case LSM_GRAPH_DIALECT_KILO:
         if (!profile_buffer_append(buffer, "---\ndescription: ") ||
             !profile_buffer_append(buffer, description) ||
             !profile_buffer_append(
@@ -554,13 +554,13 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_JUNIE:
+    case LSM_GRAPH_DIALECT_JUNIE:
         if (!profile_buffer_append(buffer, "---\nname: \"") ||
             !profile_buffer_append(buffer, slug) ||
             !profile_buffer_append(buffer, "\"\ndescription: \"") ||
             !profile_buffer_append(buffer, description) ||
             !profile_buffer_append(buffer, "\"\ntools: [\"Read\", \"Grep\", \"Glob\"]\n") ||
-            (direct && !profile_buffer_append(buffer, "mcpServers: [\"codebase-memory-")) ||
+            (direct && !profile_buffer_append(buffer, "mcpServers: [\"logan-spine-")) ||
             (direct && !profile_buffer_append(buffer, tier_server_profile(tier))) ||
             (direct && !profile_buffer_append(buffer, "\"]\n")) ||
             !profile_buffer_append(buffer, "---\n") ||
@@ -573,29 +573,29 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_QODER:
+    case LSM_GRAPH_DIALECT_QODER:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer, "tools: Read,Grep,Glob") ||
             (direct && (!profile_buffer_append(buffer, ",") ||
                         !append_csv_mcp_tools(buffer, dialect, tier))) ||
             !profile_buffer_append(buffer, "\n") ||
-            (direct && !profile_buffer_append(buffer, "mcpServers:\n  - codebase-memory-mcp\n")) ||
+            (direct && !profile_buffer_append(buffer, "mcpServers:\n  - logan-spine-mcp\n")) ||
             !profile_buffer_append(buffer, "---\n") || !profile_buffer_append(buffer, prompt)) {
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_CODEBUDDY:
+    case LSM_GRAPH_DIALECT_CODEBUDDY:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(buffer, "tools: Read,Grep,Glob") ||
             (direct && (!profile_buffer_append(buffer, ",") ||
                         !append_csv_mcp_tools(buffer, dialect, tier))) ||
             !profile_buffer_append(
-                buffer, "\nmodel: inherit\npermissionMode: plan\nskills: codebase-memory\n---\n") ||
+                buffer, "\nmodel: inherit\npermissionMode: plan\nskills: logan-spine\n---\n") ||
             !profile_buffer_append(buffer, prompt)) {
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_FACTORY:
+    case LSM_GRAPH_DIALECT_FACTORY:
         if (!append_yaml_identity(buffer, slug, description) ||
             !profile_buffer_append(
                 buffer, "model: inherit\ntools: [\"Read\", \"LS\", \"Grep\", \"Glob\"") ||
@@ -605,7 +605,7 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_VIBE:
+    case LSM_GRAPH_DIALECT_VIBE:
         if (!profile_buffer_append(buffer, "agent_type = \"subagent\"\ndisplay_name = \"") ||
             !profile_buffer_append(buffer, display) ||
             !profile_buffer_append(buffer, "\"\ndescription = \"") ||
@@ -618,19 +618,19 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
             return false;
         }
         return true;
-    case CBM_GRAPH_DIALECT_AUGMENT:
+    case LSM_GRAPH_DIALECT_AUGMENT:
         return append_yaml_identity(buffer, slug, description) &&
                profile_buffer_append(buffer, "---\n") && profile_buffer_append(buffer, prompt);
-    case CBM_GRAPH_DIALECT_CURSOR:
+    case LSM_GRAPH_DIALECT_CURSOR:
         return append_yaml_identity(buffer, slug, description) &&
                profile_buffer_append(buffer, "model: inherit\nreadonly: true\n---\n") &&
                profile_buffer_append(buffer, prompt);
-    case CBM_GRAPH_DIALECT_ROVO:
+    case LSM_GRAPH_DIALECT_ROVO:
         return append_yaml_identity(buffer, slug, description) &&
                profile_buffer_append(buffer, "tools:\n  - open_files\n  - expand_code_chunks\n  - "
                                              "expand_folder\n  - grep\n---\n") &&
                profile_buffer_append(buffer, prompt);
-    case CBM_GRAPH_DIALECT_POCHI:
+    case LSM_GRAPH_DIALECT_POCHI:
         return append_yaml_identity(buffer, slug, description) &&
                profile_buffer_append(buffer, "tools:\n  - readFile\n---\n") &&
                profile_buffer_append(buffer, prompt);
@@ -639,17 +639,17 @@ static bool render_profile_text(profile_buffer_t *buffer, cbm_graph_profile_dial
     }
 }
 
-char *cbm_render_graph_profile(cbm_graph_profile_dialect_t dialect, cbm_graph_tier_t tier,
-                               cbm_graph_access_t access, const char *binary_path) {
+char *lsm_render_graph_profile(lsm_graph_profile_dialect_t dialect, lsm_graph_tier_t tier,
+                               lsm_graph_access_t access, const char *binary_path) {
     if (!dialect_valid(dialect) || !tier_valid(tier) || !access_valid(access) ||
-        (access == CBM_GRAPH_ACCESS_DIRECT && !cbm_graph_dialect_direct_capable(dialect))) {
+        (access == LSM_GRAPH_ACCESS_DIRECT && !lsm_graph_dialect_direct_capable(dialect))) {
         return NULL;
     }
-    char *prompt = cbm_render_graph_prompt(tier, access);
+    char *prompt = lsm_render_graph_prompt(tier, access);
     if (!prompt) {
         return NULL;
     }
-    if (dialect == CBM_GRAPH_DIALECT_KIRO) {
+    if (dialect == LSM_GRAPH_DIALECT_KIRO) {
         char *result = render_kiro_profile(tier, access, binary_path, prompt);
         free(prompt);
         return result;
@@ -665,17 +665,17 @@ char *cbm_render_graph_profile(cbm_graph_profile_dialect_t dialect, cbm_graph_ti
     return profile_buffer_finish(&buffer);
 }
 
-char *cbm_render_graph_profile_codex_rc1(cbm_graph_tier_t tier) {
+char *lsm_render_graph_profile_codex_rc1(lsm_graph_tier_t tier) {
     if (!tier_valid(tier)) {
         return NULL;
     }
-    char *prompt = cbm_render_graph_prompt(tier, CBM_GRAPH_ACCESS_DIRECT);
+    char *prompt = lsm_render_graph_prompt(tier, LSM_GRAPH_ACCESS_DIRECT);
     if (!prompt) {
         return NULL;
     }
     profile_buffer_t buffer;
     profile_buffer_init(&buffer);
-    bool ok = append_codex_profile(&buffer, tier, CBM_GRAPH_ACCESS_DIRECT, NULL, prompt, true);
+    bool ok = append_codex_profile(&buffer, tier, LSM_GRAPH_ACCESS_DIRECT, NULL, prompt, true);
     free(prompt);
     if (!ok) {
         profile_buffer_discard(&buffer);

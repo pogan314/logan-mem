@@ -8,9 +8,9 @@ command -v python3 >/dev/null 2>&1 || {
     exit 1
 }
 # Reproducibility: every payload derives from a logged seed, so any crash is
-# re-runnable by construction (CBM_FUZZ_SEED overrides for replay).
-FUZZ_SEED="${CBM_FUZZ_SEED:-$$}"
-echo "fuzz seed: $FUZZ_SEED (replay: CBM_FUZZ_SEED=$FUZZ_SEED)"
+# re-runnable by construction (LSM_FUZZ_SEED overrides for replay).
+FUZZ_SEED="${LSM_FUZZ_SEED:-$$}"
+echo "fuzz seed: $FUZZ_SEED (replay: LSM_FUZZ_SEED=$FUZZ_SEED)"
 
 # Fuzz testing: feeds random/mutated inputs to the MCP server and CLI
 # to find crashes, hangs, and memory errors. Runs for a limited time.
@@ -29,9 +29,9 @@ echo "=== Fuzz Testing ($DURATION seconds) ==="
 
 # shellcheck source=test-runtime.sh
 source "$(dirname "${BASH_SOURCE[0]}")/test-runtime.sh"
-cbm_test_runtime_init
-FUZZ_TMPDIR="$CBM_TEST_RUNTIME_ROOT"
-trap 'cbm_test_runtime_cleanup "$BINARY"' EXIT
+lsm_test_runtime_init
+FUZZ_TMPDIR="$LSM_TEST_RUNTIME_ROOT"
+trap 'lsm_test_runtime_cleanup "$BINARY"' EXIT
 
 CRASHES=0
 ITERATIONS=0

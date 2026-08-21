@@ -100,7 +100,7 @@ export const DISPLAY_LIMITS = {
   bloom: { min: 0, max: 2 },
 } as const;
 
-const DISPLAY_STORAGE_KEY = "cbm-display";
+const DISPLAY_STORAGE_KEY = "lsm-display";
 
 function clampSetting(key: keyof DisplaySettings, value: unknown): number {
   const { min, max } = DISPLAY_LIMITS[key];

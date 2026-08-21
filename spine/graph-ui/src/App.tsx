@@ -71,7 +71,7 @@ export function App() {
           <div className="flex items-center gap-2.5">
             <div className="w-[7px] h-[7px] rounded-full bg-primary" />
             <span className="text-[13px] font-semibold text-foreground/90 tracking-tight">
-              Codebase Memory
+              Logan Spine
             </span>
           </div>
 

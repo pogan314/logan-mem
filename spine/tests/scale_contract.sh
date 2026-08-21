@@ -8,21 +8,21 @@
 #                         Module node instead of the enclosing Function).
 #   - Kotlin            : 0 IMPORTS edges (package -> module resolution).
 #
-# This tier runs the COMPILED binary on the cbm-bench-validate repos and asserts
+# This tier runs the COMPILED binary on the lsm-bench-validate repos and asserts
 # invariants at scale. It is SLOW and needs the local bench repos, so it is
 # OPT-IN — not part of the fast `scripts/test.sh` unit run.
 #
 # Usage:
 #   bash tests/scale_contract.sh [lang ...]      # default: kotlin java ts
-#   CBM_SCALE_INCLUDE_C=1 bash tests/scale_contract.sh c   # add the slow C tier
-#   CBM_BENCH_DIR=/path bash tests/scale_contract.sh       # override repo root
+#   LSM_SCALE_INCLUDE_C=1 bash tests/scale_contract.sh c   # add the slow C tier
+#   LSM_BENCH_DIR=/path bash tests/scale_contract.sh       # override repo root
 # Exit 0 if all selected contracts pass, non-zero otherwise.
 
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/build/c/codebase-memory-mcp"
-BENCH="${CBM_BENCH_DIR:-$HOME/cbm-bench-validate}"
+BIN="$ROOT/build/c/logan-spine-mcp"
+BENCH="${LSM_BENCH_DIR:-$HOME/lsm-bench-validate}"
 PY="${PYTHON:-python3.9}"
 FAILURES=0
 RAN=0
@@ -38,7 +38,7 @@ repo_for() {
     esac
 }
 
-# project name == cbm_project_name_from_path(): strip leading '/', map every
+# project name == lsm_project_name_from_path(): strip leading '/', map every
 # char outside [A-Za-z0-9._-] to '-'.
 project_name() { printf '%s' "$1" | sed 's#^/##; s#[^A-Za-z0-9._-]#-#g'; }
 
@@ -62,7 +62,7 @@ assert_lang() {
     RAN=$((RAN + 1))
     local proj
     proj="$(project_name "$repo")"
-    rm -f "$HOME/.cache/codebase-memory-mcp/$proj.db"*
+    rm -f "$HOME/.cache/logan-spine-mcp/$proj.db"*
 
     echo "[scale] $lang — indexing $repo ..."
     "$BIN" cli index_repository "{\"repo_path\":\"$repo\"}" >/dev/null 2>&1
@@ -116,7 +116,7 @@ fi
 LANGS=("$@")
 if [ "${#LANGS[@]}" -eq 0 ]; then
     LANGS=(kotlin java ts)
-    [ "${CBM_SCALE_INCLUDE_C:-0}" = "1" ] && LANGS+=(c)
+    [ "${LSM_SCALE_INCLUDE_C:-0}" = "1" ] && LANGS+=(c)
 fi
 
 for lang in "${LANGS[@]}"; do

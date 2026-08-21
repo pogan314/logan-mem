@@ -9,7 +9,7 @@
  *   5. Language detection for accepted files
  */
 #include "discover/discover.h"
-#include "cbm.h" // CBMLanguage, CBM_LANG_COUNT, CBM_LANG_JSON
+#include "lsm.h" // LSMLanguage, LSM_LANG_COUNT, LSM_LANG_JSON
 
 #include "foundation/constants.h"
 #include "foundation/compat_fs.h"
@@ -25,7 +25,7 @@
 #include <string.h> // strdup
 #include <sys/stat.h>
 
-int cbm_gitignore_match_result(const cbm_gitignore_t *gi, const char *rel_path, bool is_dir);
+int lsm_gitignore_match_result(const lsm_gitignore_t *gi, const char *rel_path, bool is_dir);
 
 /* ── Hardcoded always-skip directories ──────────────────────────── */
 
@@ -49,7 +49,7 @@ static const char *ALWAYS_SKIP_DIRS[] = {
     /* Deploy */
     ".vercel", ".netlify", "deploy", "deployed",
     /* Misc */
-    ".codebase-memory", ".qdrant_code_embeddings", ".tmp", "vendor", "vendored", NULL};
+    ".logan-spine", ".qdrant_code_embeddings", ".tmp", "vendor", "vendored", NULL};
 
 static const char *FAST_SKIP_DIRS[] = {
     "generated", "gen",           "auto-generated", "fixtures",     "testdata",    "test_data",
@@ -185,7 +185,7 @@ static void strip_inline_comment(char *s) {
 
 static char *strip_matching_quotes(char *s) {
     size_t len = strlen(s);
-    if (len >= CBM_QUOTE_PAIR && ((s[0] == '"' && s[len - SKIP_ONE] == '"') ||
+    if (len >= LSM_QUOTE_PAIR && ((s[0] == '"' && s[len - SKIP_ONE] == '"') ||
                                   (s[0] == '\'' && s[len - SKIP_ONE] == '\''))) {
         s[len - SKIP_ONE] = '\0';
         return s + SKIP_ONE;
@@ -211,20 +211,20 @@ static void path_join(char *out, size_t out_sz, const char *base, const char *re
     } else {
         snprintf(out, out_sz, "%s/%s", base, rel);
     }
-    cbm_normalize_path_sep(out);
+    lsm_normalize_path_sep(out);
 }
 
 static bool expand_git_path(const char *path, char *out, size_t out_sz) {
     if (!path || !path[0] || !out || out_sz == 0) {
         return false;
     }
-    char normalized[CBM_SZ_4K];
+    char normalized[LSM_SZ_4K];
     snprintf(normalized, sizeof(normalized), "%s", path);
-    cbm_normalize_path_sep(normalized);
+    lsm_normalize_path_sep(normalized);
 
     if (normalized[0] != '~') {
         snprintf(out, out_sz, "%s", normalized);
-        cbm_normalize_path_sep(out);
+        lsm_normalize_path_sep(out);
         return out[0] != '\0';
     }
 
@@ -232,13 +232,13 @@ static bool expand_git_path(const char *path, char *out, size_t out_sz) {
         return false; /* ~user expansion is intentionally not supported. */
     }
 
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (!home || home[0] == '\0') {
         return false;
     }
     if (normalized[1] == '\0') {
         snprintf(out, out_sz, "%s", home);
-        cbm_normalize_path_sep(out);
+        lsm_normalize_path_sep(out);
     } else {
         path_join(out, out_sz, home, normalized + GIT_TILDE_PREFIX_LEN);
     }
@@ -246,14 +246,14 @@ static bool expand_git_path(const char *path, char *out, size_t out_sz) {
 }
 
 static bool read_core_excludes_file(const char *config_path, char *out, size_t out_sz) {
-    FILE *f = cbm_fopen(config_path, "r");
+    FILE *f = lsm_fopen(config_path, "r");
     if (!f) {
         return false;
     }
 
     bool in_core = false;
     bool found = false;
-    char line[CBM_SZ_4K];
+    char line[LSM_SZ_4K];
     while (fgets(line, sizeof(line), f)) {
         char *s = trim_ws(line);
         if (s[0] == '\0' || s[0] == '#' || s[0] == ';') {
@@ -296,14 +296,14 @@ static bool read_core_excludes_file(const char *config_path, char *out, size_t o
 }
 
 static bool resolve_xdg_git_config_dir(char *out, size_t out_sz) {
-    char env[CBM_SZ_4K];
-    if (cbm_safe_getenv("XDG_CONFIG_HOME", env, sizeof(env), NULL) && env[0] != '\0') {
+    char env[LSM_SZ_4K];
+    if (lsm_safe_getenv("XDG_CONFIG_HOME", env, sizeof(env), NULL) && env[0] != '\0') {
         snprintf(out, out_sz, "%s", env);
-        cbm_normalize_path_sep(out);
+        lsm_normalize_path_sep(out);
         return true;
     }
 
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (!home || home[0] == '\0') {
         return false;
     }
@@ -312,9 +312,9 @@ static bool resolve_xdg_git_config_dir(char *out, size_t out_sz) {
 }
 
 static bool resolve_global_excludes_path(char *out, size_t out_sz) {
-    char config_path[CBM_SZ_4K];
+    char config_path[LSM_SZ_4K];
 
-    const char *home = cbm_get_home_dir();
+    const char *home = lsm_get_home_dir();
     if (home && home[0] != '\0') {
         path_join(config_path, sizeof(config_path), home, ".gitconfig");
         if (read_core_excludes_file(config_path, out, out_sz)) {
@@ -322,7 +322,7 @@ static bool resolve_global_excludes_path(char *out, size_t out_sz) {
         }
     }
 
-    char xdg_config[CBM_SZ_4K];
+    char xdg_config[LSM_SZ_4K];
     if (resolve_xdg_git_config_dir(xdg_config, sizeof(xdg_config))) {
         path_join(config_path, sizeof(config_path), xdg_config, "git/config");
         if (read_core_excludes_file(config_path, out, out_sz)) {
@@ -337,7 +337,7 @@ static bool resolve_global_excludes_path(char *out, size_t out_sz) {
 
 /* ── Public filter functions ─────────────────────── */
 
-bool cbm_should_skip_dir(const char *dirname, cbm_index_mode_t mode) {
+bool lsm_should_skip_dir(const char *dirname, lsm_index_mode_t mode) {
     if (!dirname) {
         return false;
     }
@@ -347,7 +347,7 @@ bool cbm_should_skip_dir(const char *dirname, cbm_index_mode_t mode) {
     }
 
     /* Fast discovery applies to both MODERATE and FAST — only FULL keeps everything. */
-    if (mode != CBM_MODE_FULL) {
+    if (mode != LSM_MODE_FULL) {
         if (str_in_list(dirname, FAST_SKIP_DIRS)) {
             return true;
         }
@@ -356,7 +356,7 @@ bool cbm_should_skip_dir(const char *dirname, cbm_index_mode_t mode) {
     return false;
 }
 
-bool cbm_has_ignored_suffix(const char *filename, cbm_index_mode_t mode) {
+bool lsm_has_ignored_suffix(const char *filename, lsm_index_mode_t mode) {
     if (!filename) {
         return false;
     }
@@ -367,7 +367,7 @@ bool cbm_has_ignored_suffix(const char *filename, cbm_index_mode_t mode) {
         }
     }
 
-    if (mode != CBM_MODE_FULL) {
+    if (mode != LSM_MODE_FULL) {
         for (int i = 0; FAST_IGNORED_SUFFIXES[i]; i++) {
             if (ends_with(filename, FAST_IGNORED_SUFFIXES[i])) {
                 return true;
@@ -378,12 +378,12 @@ bool cbm_has_ignored_suffix(const char *filename, cbm_index_mode_t mode) {
     return false;
 }
 
-bool cbm_should_skip_filename(const char *filename, cbm_index_mode_t mode) {
+bool lsm_should_skip_filename(const char *filename, lsm_index_mode_t mode) {
     if (!filename) {
         return false;
     }
 
-    if (mode != CBM_MODE_FULL) {
+    if (mode != LSM_MODE_FULL) {
         if (str_in_list(filename, FAST_SKIP_FILENAMES)) {
             return true;
         }
@@ -392,8 +392,8 @@ bool cbm_should_skip_filename(const char *filename, cbm_index_mode_t mode) {
     return false;
 }
 
-bool cbm_matches_fast_pattern(const char *filename, cbm_index_mode_t mode) {
-    if (!filename || mode == CBM_MODE_FULL) {
+bool lsm_matches_fast_pattern(const char *filename, lsm_index_mode_t mode) {
+    if (!filename || mode == LSM_MODE_FULL) {
         return false;
     }
 
@@ -409,7 +409,7 @@ bool cbm_matches_fast_pattern(const char *filename, cbm_index_mode_t mode) {
 /* ── Dynamic file list ────────────────────────── */
 
 typedef struct {
-    cbm_file_info_t *files;
+    lsm_file_info_t *files;
     int count;
     int capacity;
     int max_files;
@@ -420,16 +420,16 @@ typedef struct {
     bool failed;
     /* Directories skipped during the walk (rel paths), so callers can surface
      * which subtrees were dropped (#411). strdup'd; freed by the caller via
-     * cbm_discover_free_excluded or internally when not requested. */
+     * lsm_discover_free_excluded or internally when not requested. */
     char **excluded;
     int excluded_count;
     int excluded_cap;
     /* Individual files dropped by ignore rules (#963 "purposely not
      * indexed"). Collected only when requested (collect_ignored); stored
-     * entries are capped at CBM_DISCOVER_IGNORED_CAP while ignored_total
+     * entries are capped at LSM_DISCOVER_IGNORED_CAP while ignored_total
      * keeps counting so truncation is explicit. */
     bool collect_ignored;
-    cbm_ignored_file_t *ignored;
+    lsm_ignored_file_t *ignored;
     int ignored_count;
     int ignored_cap;
     int ignored_total;
@@ -439,7 +439,7 @@ static bool file_list_should_stop(file_list_t *fl) {
     if (!fl) {
         return true;
     }
-    if (!fl->failed && fl->deadline_ms != 0 && cbm_now_ms() >= fl->deadline_ms) {
+    if (!fl->failed && fl->deadline_ms != 0 && lsm_now_ms() >= fl->deadline_ms) {
         fl->failed = true;
     }
     return fl->failed || fl->limit_exceeded;
@@ -450,7 +450,7 @@ static void file_list_add_excluded(file_list_t *fl, const char *rel_path) {
         return;
     }
     if (fl->excluded_count >= fl->excluded_cap) {
-        int new_cap = fl->excluded_cap ? fl->excluded_cap * PAIR_LEN : CBM_SZ_64;
+        int new_cap = fl->excluded_cap ? fl->excluded_cap * PAIR_LEN : LSM_SZ_64;
         char **grown = realloc(fl->excluded, new_cap * sizeof(char *));
         if (!grown) {
             fl->failed = true;
@@ -472,12 +472,12 @@ static void file_list_add_ignored(file_list_t *fl, const char *rel_path, const c
         return;
     }
     fl->ignored_total++;
-    if (fl->ignored_count >= CBM_DISCOVER_IGNORED_CAP) {
+    if (fl->ignored_count >= LSM_DISCOVER_IGNORED_CAP) {
         return; /* counted above — truncation stays visible via the total */
     }
     if (fl->ignored_count >= fl->ignored_cap) {
-        int new_cap = fl->ignored_cap ? fl->ignored_cap * PAIR_LEN : CBM_SZ_64;
-        cbm_ignored_file_t *grown = realloc(fl->ignored, new_cap * sizeof(cbm_ignored_file_t));
+        int new_cap = fl->ignored_cap ? fl->ignored_cap * PAIR_LEN : LSM_SZ_64;
+        lsm_ignored_file_t *grown = realloc(fl->ignored, new_cap * sizeof(lsm_ignored_file_t));
         if (!grown) {
             fl->failed = true;
             return;
@@ -498,7 +498,7 @@ static void file_list_add_ignored(file_list_t *fl, const char *rel_path, const c
     fl->ignored_count++;
 }
 
-static void fl_add(file_list_t *fl, const char *abs_path, const char *rel_path, CBMLanguage lang,
+static void fl_add(file_list_t *fl, const char *abs_path, const char *rel_path, LSMLanguage lang,
                    int64_t size) {
     if (fl->max_files >= 0 && fl->count >= fl->max_files) {
         fl->limit_exceeded = true;
@@ -509,8 +509,8 @@ static void fl_add(file_list_t *fl, const char *abs_path, const char *rel_path, 
         return;
     }
     if (fl->count >= fl->capacity) {
-        int new_cap = fl->capacity ? fl->capacity * PAIR_LEN : CBM_SZ_256;
-        cbm_file_info_t *new_files = realloc(fl->files, new_cap * sizeof(cbm_file_info_t));
+        int new_cap = fl->capacity ? fl->capacity * PAIR_LEN : LSM_SZ_256;
+        lsm_file_info_t *new_files = realloc(fl->files, new_cap * sizeof(lsm_file_info_t));
         if (!new_files) {
             fl->failed = true;
             return;
@@ -527,7 +527,7 @@ static void fl_add(file_list_t *fl, const char *abs_path, const char *rel_path, 
         fl->failed = true;
         return;
     }
-    cbm_file_info_t *fi = &fl->files[fl->count++];
+    lsm_file_info_t *fi = &fl->files[fl->count++];
     fi->path = path_copy;
     fi->rel_path = relative_copy;
     fi->language = lang;
@@ -549,8 +549,8 @@ static const char *local_rel_path(const char *rel_path, const char *local_prefix
     return rel_path;
 }
 
-/* Non-negatable safety core: built-in skip dirs that a .cbmignore negation
- * can NEVER un-skip. A repo-committed .cbmignore must not be able to defeat
+/* Non-negatable safety core: built-in skip dirs that a .lsmignore negation
+ * can NEVER un-skip. A repo-committed .lsmignore must not be able to defeat
  * OOM/safety skips: .git holds VCS internals (and the info/exclude sources,
  * #489), node_modules explodes discovery, and the worktree-internal dirs
  * (.worktrees / .claude-worktrees, the worktree entries in ALWAYS_SKIP_DIRS)
@@ -565,19 +565,19 @@ static bool is_safety_core_dir(const char *name) {
 /* Check if a directory entry should be skipped (hardcoded dirs + gitignore). */
 /* Snapshot of the cache directory for the current walk.
  *
- * cbm_resolve_cache_dir() returns a pointer to a static thread-local buffer, so
+ * lsm_resolve_cache_dir() returns a pointer to a static thread-local buffer, so
  * calling it once per directory — as an earlier version of this prune did —
  * rewrites a buffer other code may still be holding. Resolve once at the entry
  * point and compare against the copy. */
-static _Thread_local char g_walk_cache_dir[CBM_SZ_4K];
+static _Thread_local char g_walk_cache_dir[LSM_SZ_4K];
 
 static void walk_cache_dir_snapshot(void) {
-    const char *cache = cbm_workspace_cache_dir();
+    const char *cache = lsm_workspace_cache_dir();
     snprintf(g_walk_cache_dir, sizeof(g_walk_cache_dir), "%s", cache ? cache : "");
 }
 
 /* The cache directory holds every indexed project's graph database. When a custom
- * CBM_CACHE_DIR sits inside a repository — which happens in tests and is legal in
+ * LSM_CACHE_DIR sits inside a repository — which happens in tests and is legal in
  * production — walking into it would pull other projects' databases into this
  * project's file list. Prune it by absolute path.
  *
@@ -601,37 +601,37 @@ static bool dir_is_cache_tree(const char *abs_path) {
 }
 
 static bool should_skip_directory(const char *entry_name, const char *rel_path,
-                                  const cbm_discover_opts_t *opts, const cbm_gitignore_t *gitignore,
-                                  const cbm_gitignore_t *global_gi,
-                                  const cbm_gitignore_t *cbmignore, const cbm_gitignore_t *local_gi,
+                                  const lsm_discover_opts_t *opts, const lsm_gitignore_t *gitignore,
+                                  const lsm_gitignore_t *global_gi,
+                                  const lsm_gitignore_t *lsmignore, const lsm_gitignore_t *local_gi,
                                   const char *local_gi_prefix) {
-    if (cbm_should_skip_dir(entry_name, opts ? opts->mode : CBM_MODE_FULL)) {
-        /* #500: a .cbmignore negation (e.g. "!obj/") whose rule is the last
+    if (lsm_should_skip_dir(entry_name, opts ? opts->mode : LSM_MODE_FULL)) {
+        /* #500: a .lsmignore negation (e.g. "!obj/") whose rule is the last
          * match for this dir un-skips a built-in skip-list dir — except the
          * non-negatable safety core. Fall through so .gitignore/global/local
          * rules still apply to the un-skipped dir. */
-        bool unskipped = cbmignore && !is_safety_core_dir(entry_name) &&
-                         cbm_gitignore_match_result(cbmignore, rel_path, true) < 0;
+        bool unskipped = lsmignore && !is_safety_core_dir(entry_name) &&
+                         lsm_gitignore_match_result(lsmignore, rel_path, true) < 0;
         if (!unskipped) {
             return true;
         }
     }
-    if (gitignore && cbm_gitignore_matches(gitignore, rel_path, true)) {
+    if (gitignore && lsm_gitignore_matches(gitignore, rel_path, true)) {
         return true;
     }
-    bool global_ignored = global_gi && cbm_gitignore_matches(global_gi, rel_path, true);
+    bool global_ignored = global_gi && lsm_gitignore_matches(global_gi, rel_path, true);
     if (local_gi) {
         const char *lrel = local_rel_path(rel_path, local_gi_prefix);
-        if (cbm_gitignore_matches(local_gi, lrel, true)) {
+        if (lsm_gitignore_matches(local_gi, lrel, true)) {
             return true;
         }
     }
-    if (cbmignore) {
-        int cbm_result = cbm_gitignore_match_result(cbmignore, rel_path, true);
-        if (cbm_result > 0) {
+    if (lsmignore) {
+        int lsm_result = lsm_gitignore_match_result(lsmignore, rel_path, true);
+        if (lsm_result > 0) {
             return true;
         }
-        if (cbm_result < 0 && global_ignored) {
+        if (lsm_result < 0 && global_ignored) {
             return false;
         }
     }
@@ -641,41 +641,41 @@ static bool should_skip_directory(const char *entry_name, const char *rel_path,
 /* Check if a regular file should be skipped (filters + gitignore + size). */
 /* Classify why a file is skipped. Returns a static reason string (the #963
  * "purposely not indexed" class) or NULL to keep the file. Check order and
- * semantics — including the .cbmignore negation un-ignoring a global-gitignore
+ * semantics — including the .lsmignore negation un-ignoring a global-gitignore
  * match — are IDENTICAL to the original boolean predicate. */
 static const char *file_skip_reason(const char *entry_name, const char *rel_path,
-                                    const cbm_discover_opts_t *opts,
-                                    const cbm_gitignore_t *gitignore,
-                                    const cbm_gitignore_t *global_gi,
-                                    const cbm_gitignore_t *cbmignore,
-                                    const cbm_gitignore_t *local_gi, const char *local_gi_prefix,
+                                    const lsm_discover_opts_t *opts,
+                                    const lsm_gitignore_t *gitignore,
+                                    const lsm_gitignore_t *global_gi,
+                                    const lsm_gitignore_t *lsmignore,
+                                    const lsm_gitignore_t *local_gi, const char *local_gi_prefix,
                                     off_t file_size) {
-    cbm_index_mode_t mode = opts ? opts->mode : CBM_MODE_FULL;
-    if (cbm_has_ignored_suffix(entry_name, mode)) {
+    lsm_index_mode_t mode = opts ? opts->mode : LSM_MODE_FULL;
+    if (lsm_has_ignored_suffix(entry_name, mode)) {
         return "ignored-suffix";
     }
-    if (cbm_should_skip_filename(entry_name, mode)) {
+    if (lsm_should_skip_filename(entry_name, mode)) {
         return "skip-list";
     }
-    if (cbm_matches_fast_pattern(entry_name, mode)) {
+    if (lsm_matches_fast_pattern(entry_name, mode)) {
         return "fast-pattern";
     }
-    if (gitignore && cbm_gitignore_matches(gitignore, rel_path, false)) {
+    if (gitignore && lsm_gitignore_matches(gitignore, rel_path, false)) {
         return "gitignore";
     }
-    bool global_ignored = global_gi && cbm_gitignore_matches(global_gi, rel_path, false);
+    bool global_ignored = global_gi && lsm_gitignore_matches(global_gi, rel_path, false);
     if (local_gi) {
         const char *lrel = local_rel_path(rel_path, local_gi_prefix);
-        if (cbm_gitignore_matches(local_gi, lrel, false)) {
+        if (lsm_gitignore_matches(local_gi, lrel, false)) {
             return "gitignore";
         }
     }
-    if (cbmignore) {
-        int cbm_result = cbm_gitignore_match_result(cbmignore, rel_path, false);
-        if (cbm_result > 0) {
-            return "cbmignore";
+    if (lsmignore) {
+        int lsm_result = lsm_gitignore_match_result(lsmignore, rel_path, false);
+        if (lsm_result > 0) {
+            return "lsmignore";
         }
-        if (cbm_result < 0 && global_ignored) {
+        if (lsm_result < 0 && global_ignored) {
             global_ignored = false;
         }
     }
@@ -686,45 +686,45 @@ static const char *file_skip_reason(const char *entry_name, const char *rel_path
 }
 
 /* Detect language for a file, handling .m disambiguation and JSON filtering. */
-static CBMLanguage detect_file_language(const char *entry_name, const char *abs_path) {
-    CBMLanguage lang = cbm_language_for_filename(entry_name);
-    if (lang == CBM_LANG_COUNT) {
+static LSMLanguage detect_file_language(const char *entry_name, const char *abs_path) {
+    LSMLanguage lang = lsm_language_for_filename(entry_name);
+    if (lang == LSM_LANG_COUNT) {
         /* Filename/extension detection failed: fall back to a conservative
          * shebang probe so extensionless scripts get indexed (#1199). Filename
          * detection stays authoritative — this runs only when it returns
          * unknown. */
-        return cbm_language_from_shebang(abs_path);
+        return lsm_language_from_shebang(abs_path);
     }
     /* Special: .m files need content-based disambiguation */
     const char *dot = strrchr(entry_name, '.');
     if (dot && strcmp(dot, ".m") == 0) {
-        lang = cbm_disambiguate_m(abs_path);
+        lang = lsm_disambiguate_m(abs_path);
     }
     /* Special: .cls is shared by ObjectScript UDL and Apex */
     if (dot && strcmp(dot, ".cls") == 0) {
-        lang = cbm_disambiguate_cls(abs_path);
+        lang = lsm_disambiguate_cls(abs_path);
     }
     /* Special: .inc is shared by BitBake and ObjectScript include files */
     if (dot && strcmp(dot, ".inc") == 0) {
-        lang = cbm_disambiguate_inc(abs_path);
+        lang = lsm_disambiguate_inc(abs_path);
     }
     /* Special: ObjectScript Studio Export XML (<Export generator="...">) is
      * detected by content; otherwise .xml stays XML. */
-    if (lang == CBM_LANG_XML) {
-        FILE *xf = cbm_fopen(abs_path, "r");
+    if (lang == LSM_LANG_XML) {
+        FILE *xf = lsm_fopen(abs_path, "r");
         if (xf) {
-            char xbuf[CBM_SZ_256];
+            char xbuf[LSM_SZ_256];
             size_t xn = fread(xbuf, SKIP_ONE, sizeof(xbuf) - SKIP_ONE, xf);
             (void)fclose(xf);
             xbuf[xn] = '\0';
             if (strstr(xbuf, "<Export generator=")) {
-                return CBM_LANG_OBJECTSCRIPT_EXPORT;
+                return LSM_LANG_OBJECTSCRIPT_EXPORT;
             }
         }
     }
     /* Check ignored JSON files */
-    if (lang == CBM_LANG_JSON && str_in_list(entry_name, IGNORED_JSON_FILES)) {
-        return CBM_LANG_COUNT;
+    if (lang == LSM_LANG_JSON && str_in_list(entry_name, IGNORED_JSON_FILES)) {
+        return LSM_LANG_COUNT;
     }
     return lang;
 }
@@ -732,15 +732,15 @@ static CBMLanguage detect_file_language(const char *entry_name, const char *abs_
 /* UTF-8-safe stat: wide API on Windows, regular stat on POSIX. */
 static int wide_stat(const char *path, struct stat *st) {
 #ifdef _WIN32
-    wchar_t *wpath = cbm_path_to_wide(path);
+    wchar_t *wpath = lsm_path_to_wide(path);
     if (!wpath) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     struct _stat64 wst;
     int ret = _wstat64(wpath, &wst);
     free(wpath);
     if (ret != 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     st->st_mode = wst.st_mode;
     st->st_size = wst.st_size;
@@ -757,21 +757,21 @@ static int wide_stat(const char *path, struct stat *st) {
  * root, mirroring the POSIX S_ISLNK skip. */
 static int safe_stat(const char *abs_path, struct stat *st) {
 #ifdef _WIN32
-    wchar_t *wpath = cbm_path_to_wide(abs_path);
+    wchar_t *wpath = lsm_path_to_wide(abs_path);
     if (wpath) {
         DWORD attr = GetFileAttributesW(wpath);
         free(wpath);
         if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_REPARSE_POINT)) {
-            return CBM_NOT_FOUND;
+            return LSM_NOT_FOUND;
         }
     }
     return wide_stat(abs_path, st);
 #else
     if (lstat(abs_path, st) != 0) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     if (S_ISLNK(st->st_mode)) {
-        return CBM_NOT_FOUND;
+        return LSM_NOT_FOUND;
     }
     return 0;
 #endif
@@ -779,12 +779,12 @@ static int safe_stat(const char *abs_path, struct stat *st) {
 
 /* Process a single regular file entry during directory walk. */
 static void walk_dir_process_file(const char *abs_path, const char *rel_path, const char *name,
-                                  const cbm_discover_opts_t *opts, const cbm_gitignore_t *gitignore,
-                                  const cbm_gitignore_t *global_gi,
-                                  const cbm_gitignore_t *cbmignore, const cbm_gitignore_t *local_gi,
+                                  const lsm_discover_opts_t *opts, const lsm_gitignore_t *gitignore,
+                                  const lsm_gitignore_t *global_gi,
+                                  const lsm_gitignore_t *lsmignore, const lsm_gitignore_t *local_gi,
                                   const char *local_gi_prefix, off_t size, file_list_t *out) {
     const char *skip_reason = file_skip_reason(name, rel_path, opts, gitignore, global_gi,
-                                               cbmignore, local_gi, local_gi_prefix, size);
+                                               lsmignore, local_gi, local_gi_prefix, size);
     if (skip_reason) {
         /* Deliberately not indexed (#963) — record so callers can surface it.
          * Unsupported-language files below are NOT recorded: "no grammar for
@@ -793,18 +793,18 @@ static void walk_dir_process_file(const char *abs_path, const char *rel_path, co
         file_list_add_ignored(out, rel_path, skip_reason);
         return;
     }
-    CBMLanguage lang = detect_file_language(name, abs_path);
-    if (lang == CBM_LANG_COUNT) {
+    LSMLanguage lang = detect_file_language(name, abs_path);
+    if (lang == LSM_LANG_COUNT) {
         return;
     }
     fl_add(out, abs_path, rel_path, lang, size);
 }
 
 typedef struct {
-    char dir[CBM_SZ_4K];
-    char prefix[CBM_SZ_4K];
-    cbm_gitignore_t *local_gi;       /* nested .gitignore for this subtree */
-    char local_gi_prefix[CBM_SZ_4K]; /* rel_prefix when local_gi was loaded */
+    char dir[LSM_SZ_4K];
+    char prefix[LSM_SZ_4K];
+    lsm_gitignore_t *local_gi;       /* nested .gitignore for this subtree */
+    char local_gi_prefix[LSM_SZ_4K]; /* rel_prefix when local_gi was loaded */
 } walk_frame_t;
 /* Initial capacity only — the stack grows on demand. A single directory can
  * hold more pending sibling frames than any fixed cap (dotnet/runtime has 855
@@ -819,15 +819,15 @@ typedef struct {
 } walk_stack_t;
 /* Build abs/rel paths and process one directory entry. */
 /* Try to load a nested .gitignore from this directory. Returns owned pointer or NULL. */
-static cbm_gitignore_t *try_load_nested_gitignore(const walk_frame_t *frame) {
+static lsm_gitignore_t *try_load_nested_gitignore(const walk_frame_t *frame) {
     if (frame->local_gi || frame->prefix[0] == '\0') {
         return NULL;
     }
-    char gi_path[CBM_SZ_4K];
+    char gi_path[LSM_SZ_4K];
     snprintf(gi_path, sizeof(gi_path), "%s/.gitignore", frame->dir);
     struct stat gi_st;
     if (wide_stat(gi_path, &gi_st) == 0 && S_ISREG(gi_st.st_mode)) {
-        return cbm_gitignore_load(gi_path);
+        return lsm_gitignore_load(gi_path);
     }
     return NULL;
 }
@@ -848,31 +848,31 @@ static void walk_push_subdir(walk_stack_t *ws, const char *abs_path, const char 
         ws->cap = new_cap;
     }
     walk_frame_t *slot = &ws->frames[ws->top];
-    int directory_length = snprintf(slot->dir, CBM_SZ_4K, "%s", abs_path);
-    int prefix_length = snprintf(slot->prefix, CBM_SZ_4K, "%s", rel_path);
-    if (directory_length <= 0 || directory_length >= CBM_SZ_4K || prefix_length < 0 ||
-        prefix_length >= CBM_SZ_4K) {
+    int directory_length = snprintf(slot->dir, LSM_SZ_4K, "%s", abs_path);
+    int prefix_length = snprintf(slot->prefix, LSM_SZ_4K, "%s", rel_path);
+    if (directory_length <= 0 || directory_length >= LSM_SZ_4K || prefix_length < 0 ||
+        prefix_length >= LSM_SZ_4K) {
         out->failed = true;
         return;
     }
     slot->local_gi = parent->local_gi;
     int local_prefix_length =
-        snprintf(slot->local_gi_prefix, CBM_SZ_4K, "%s", parent->local_gi_prefix);
-    if (local_prefix_length < 0 || local_prefix_length >= CBM_SZ_4K) {
+        snprintf(slot->local_gi_prefix, LSM_SZ_4K, "%s", parent->local_gi_prefix);
+    if (local_prefix_length < 0 || local_prefix_length >= LSM_SZ_4K) {
         out->failed = true;
         return;
     }
     ws->top++;
 }
 
-static void walk_dir_process_entry(cbm_dirent_t *entry, const walk_frame_t *frame,
-                                   const cbm_discover_opts_t *opts,
-                                   const cbm_gitignore_t *gitignore,
-                                   const cbm_gitignore_t *global_gi,
-                                   const cbm_gitignore_t *cbmignore, walk_stack_t *ws,
+static void walk_dir_process_entry(lsm_dirent_t *entry, const walk_frame_t *frame,
+                                   const lsm_discover_opts_t *opts,
+                                   const lsm_gitignore_t *gitignore,
+                                   const lsm_gitignore_t *global_gi,
+                                   const lsm_gitignore_t *lsmignore, walk_stack_t *ws,
                                    file_list_t *out) {
-    char abs_path[CBM_SZ_4K];
-    char rel_path[CBM_SZ_4K];
+    char abs_path[LSM_SZ_4K];
+    char rel_path[LSM_SZ_4K];
     int absolute_length = snprintf(abs_path, sizeof(abs_path), "%s/%s", frame->dir, entry->name);
     int relative_length;
     if (frame->prefix[0] != '\0') {
@@ -896,7 +896,7 @@ static void walk_dir_process_entry(cbm_dirent_t *entry, const walk_frame_t *fram
 
     if (S_ISDIR(st.st_mode)) {
         if (!dir_is_cache_tree(abs_path) &&
-            !should_skip_directory(entry->name, rel_path, opts, gitignore, global_gi, cbmignore,
+            !should_skip_directory(entry->name, rel_path, opts, gitignore, global_gi, lsmignore,
                                    frame->local_gi, frame->local_gi_prefix)) {
             walk_push_subdir(ws, abs_path, rel_path, frame, out);
         } else {
@@ -905,12 +905,12 @@ static void walk_dir_process_entry(cbm_dirent_t *entry, const walk_frame_t *fram
         }
     } else if (S_ISREG(st.st_mode)) {
         walk_dir_process_file(abs_path, rel_path, entry->name, opts, gitignore, global_gi,
-                              cbmignore, frame->local_gi, frame->local_gi_prefix, st.st_size, out);
+                              lsmignore, frame->local_gi, frame->local_gi_prefix, st.st_size, out);
     }
 }
 
-static bool walk_owned_gitignore_append(cbm_gitignore_t ***owned, size_t *count, size_t *capacity,
-                                        cbm_gitignore_t *gitignore) {
+static bool walk_owned_gitignore_append(lsm_gitignore_t ***owned, size_t *count, size_t *capacity,
+                                        lsm_gitignore_t *gitignore) {
     if (!owned || !count || !capacity || !gitignore) {
         return false;
     }
@@ -919,7 +919,7 @@ static bool walk_owned_gitignore_append(cbm_gitignore_t ***owned, size_t *count,
         if (next_capacity < *capacity || next_capacity > SIZE_MAX / sizeof(**owned)) {
             return false;
         }
-        cbm_gitignore_t **grown = realloc(*owned, next_capacity * sizeof(*grown));
+        lsm_gitignore_t **grown = realloc(*owned, next_capacity * sizeof(*grown));
         if (!grown) {
             return false;
         }
@@ -930,9 +930,9 @@ static bool walk_owned_gitignore_append(cbm_gitignore_t ***owned, size_t *count,
     return true;
 }
 
-static void walk_dir(const char *dir_path, const char *rel_prefix, const cbm_discover_opts_t *opts,
-                     const cbm_gitignore_t *gitignore, const cbm_gitignore_t *global_gi,
-                     const cbm_gitignore_t *cbmignore, file_list_t *out) {
+static void walk_dir(const char *dir_path, const char *rel_prefix, const lsm_discover_opts_t *opts,
+                     const lsm_gitignore_t *gitignore, const lsm_gitignore_t *global_gi,
+                     const lsm_gitignore_t *lsmignore, file_list_t *out) {
     walk_stack_t ws = {
         .frames = calloc(WALK_STACK_CAP, sizeof(walk_frame_t)), .top = 0, .cap = WALK_STACK_CAP};
     if (!ws.frames) {
@@ -941,14 +941,14 @@ static void walk_dir(const char *dir_path, const char *rel_prefix, const cbm_dis
     }
     /* Collect all owned gitignores — freed at the end because child frames
      * on the stack hold borrowed pointers to them. */
-    cbm_gitignore_t **owned_gis = NULL;
+    lsm_gitignore_t **owned_gis = NULL;
     size_t owned_count = 0;
     size_t owned_capacity = 0;
 
-    int initial_directory_length = snprintf(ws.frames[0].dir, CBM_SZ_4K, "%s", dir_path);
-    int initial_prefix_length = snprintf(ws.frames[0].prefix, CBM_SZ_4K, "%s", rel_prefix);
-    if (initial_directory_length <= 0 || initial_directory_length >= CBM_SZ_4K ||
-        initial_prefix_length < 0 || initial_prefix_length >= CBM_SZ_4K) {
+    int initial_directory_length = snprintf(ws.frames[0].dir, LSM_SZ_4K, "%s", dir_path);
+    int initial_prefix_length = snprintf(ws.frames[0].prefix, LSM_SZ_4K, "%s", rel_prefix);
+    if (initial_directory_length <= 0 || initial_directory_length >= LSM_SZ_4K ||
+        initial_prefix_length < 0 || initial_prefix_length >= LSM_SZ_4K) {
         out->failed = true;
         free(ws.frames);
         return;
@@ -958,21 +958,21 @@ static void walk_dir(const char *dir_path, const char *rel_prefix, const cbm_dis
     while (ws.top > 0 && !file_list_should_stop(out)) {
         walk_frame_t frame = ws.frames[--ws.top];
 
-        cbm_gitignore_t *loaded = try_load_nested_gitignore(&frame);
+        lsm_gitignore_t *loaded = try_load_nested_gitignore(&frame);
         if (loaded) {
             int local_prefix_length =
                 snprintf(frame.local_gi_prefix, sizeof(frame.local_gi_prefix), "%s", frame.prefix);
             if (local_prefix_length < 0 ||
                 (size_t)local_prefix_length >= sizeof(frame.local_gi_prefix) ||
                 !walk_owned_gitignore_append(&owned_gis, &owned_count, &owned_capacity, loaded)) {
-                cbm_gitignore_free(loaded);
+                lsm_gitignore_free(loaded);
                 out->failed = true;
                 break;
             }
             frame.local_gi = loaded;
         }
 
-        cbm_dir_t *d = cbm_opendir(frame.dir);
+        lsm_dir_t *d = lsm_opendir(frame.dir);
         if (!d) {
             if (out->count_only) {
                 out->failed = true;
@@ -980,14 +980,14 @@ static void walk_dir(const char *dir_path, const char *rel_prefix, const cbm_dis
             continue;
         }
 
-        cbm_dirent_t *entry;
-        while (!file_list_should_stop(out) && (entry = cbm_readdir(d)) != NULL) {
-            walk_dir_process_entry(entry, &frame, opts, gitignore, global_gi, cbmignore, &ws, out);
+        lsm_dirent_t *entry;
+        while (!file_list_should_stop(out) && (entry = lsm_readdir(d)) != NULL) {
+            walk_dir_process_entry(entry, &frame, opts, gitignore, global_gi, lsmignore, &ws, out);
         }
-        cbm_closedir(d);
+        lsm_closedir(d);
     }
     for (size_t i = 0; i < owned_count; i++) {
-        cbm_gitignore_free(owned_gis[i]);
+        lsm_gitignore_free(owned_gis[i]);
     }
     free(owned_gis);
     free(ws.frames);
@@ -1021,7 +1021,7 @@ static bool discover_path_is_absolute(const char *path) {
  * .git/info/exclude and core.excludesfile were silently dropped because the old
  * check required .git to be a directory (issue #489 only covered ordinary repos). */
 static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size_t cd_sz) {
-    char dot_git[CBM_SZ_4K];
+    char dot_git[LSM_SZ_4K];
     snprintf(dot_git, sizeof(dot_git), "%s/.git", repo_path);
     struct stat st;
     if (wide_stat(dot_git, &st) != 0) {
@@ -1029,7 +1029,7 @@ static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size
     }
     if (S_ISDIR(st.st_mode)) {
         snprintf(common_dir, cd_sz, "%s", dot_git);
-        cbm_normalize_path_sep(common_dir);
+        lsm_normalize_path_sep(common_dir);
         return true;
     }
     if (!S_ISREG(st.st_mode)) {
@@ -1037,14 +1037,14 @@ static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size
     }
 
     /* Linked worktree: parse "gitdir: <path>" from the gitlink file.
-     * cbm_fopen (not raw fopen) so non-ASCII repo paths open on Windows. */
-    FILE *f = cbm_fopen(dot_git, "r");
+     * lsm_fopen (not raw fopen) so non-ASCII repo paths open on Windows. */
+    FILE *f = lsm_fopen(dot_git, "r");
     if (!f) {
         return false;
     }
-    char git_dir[CBM_SZ_4K];
+    char git_dir[LSM_SZ_4K];
     bool got_git_dir = false;
-    char line[CBM_SZ_4K];
+    char line[LSM_SZ_4K];
     while (fgets(line, sizeof(line), f)) {
         char *gs = trim_ws(line);
         if (strncmp(gs, "gitdir:", 7) == 0) {
@@ -1052,7 +1052,7 @@ static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size
             if (val[0] != '\0') {
                 if (discover_path_is_absolute(val)) {
                     snprintf(git_dir, sizeof(git_dir), "%s", val);
-                    cbm_normalize_path_sep(git_dir);
+                    lsm_normalize_path_sep(git_dir);
                 } else {
                     path_join(git_dir, sizeof(git_dir), repo_path, val);
                 }
@@ -1068,18 +1068,18 @@ static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size
 
     /* The shared dir holding info/exclude + config is named in <git_dir>/commondir
      * (typically a relative path like "../.."). Absent in single-worktree gitdirs. */
-    char commondir_path[CBM_SZ_4K];
+    char commondir_path[LSM_SZ_4K];
     path_join(commondir_path, sizeof(commondir_path), git_dir, "commondir");
-    FILE *cf = cbm_fopen(commondir_path, "r");
+    FILE *cf = lsm_fopen(commondir_path, "r");
     if (cf) {
-        char cbuf[CBM_SZ_4K];
+        char cbuf[LSM_SZ_4K];
         bool resolved = false;
         if (fgets(cbuf, sizeof(cbuf), cf)) {
             char *cs = trim_ws(cbuf);
             if (cs[0] != '\0') {
                 if (discover_path_is_absolute(cs)) {
                     snprintf(common_dir, cd_sz, "%s", cs);
-                    cbm_normalize_path_sep(common_dir);
+                    lsm_normalize_path_sep(common_dir);
                 } else {
                     path_join(common_dir, cd_sz, git_dir, cs);
                 }
@@ -1093,25 +1093,25 @@ static bool resolve_git_common_dir(const char *repo_path, char *common_dir, size
     }
 
     snprintf(common_dir, cd_sz, "%s", git_dir);
-    cbm_normalize_path_sep(common_dir);
+    lsm_normalize_path_sep(common_dir);
     return true;
 }
 
-int cbm_discover(const char *repo_path, const cbm_discover_opts_t *opts, cbm_file_info_t **out,
+int lsm_discover(const char *repo_path, const lsm_discover_opts_t *opts, lsm_file_info_t **out,
                  int *count) {
-    return cbm_discover_ex(repo_path, opts, out, count, NULL, NULL);
+    return lsm_discover_ex(repo_path, opts, out, count, NULL, NULL);
 }
 
-int cbm_discover_ex(const char *repo_path, const cbm_discover_opts_t *opts, cbm_file_info_t **out,
+int lsm_discover_ex(const char *repo_path, const lsm_discover_opts_t *opts, lsm_file_info_t **out,
                     int *count, char ***excluded_out, int *excluded_count_out) {
-    return cbm_discover_ex2(repo_path, opts, out, count, excluded_out, excluded_count_out, NULL,
+    return lsm_discover_ex2(repo_path, opts, out, count, excluded_out, excluded_count_out, NULL,
                             NULL, NULL);
 }
 
-static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_discover_opts_t *opts,
-                                           cbm_file_info_t **out, int *count, char ***excluded_out,
+static lsm_discover_status_t discover_impl(const char *repo_path, const lsm_discover_opts_t *opts,
+                                           lsm_file_info_t **out, int *count, char ***excluded_out,
                                            int *excluded_count_out,
-                                           cbm_ignored_file_t **ignored_out, int *ignored_count_out,
+                                           lsm_ignored_file_t **ignored_out, int *ignored_count_out,
                                            int *ignored_total_out, bool count_only, int max_files,
                                            uint64_t deadline_ms) {
     if (excluded_out) {
@@ -1130,7 +1130,7 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
         *ignored_total_out = 0;
     }
     if (!repo_path || !out || !count || (count_only && max_files < 0)) {
-        return CBM_DISCOVER_ERROR;
+        return LSM_DISCOVER_ERROR;
     }
 
     *out = NULL;
@@ -1139,7 +1139,7 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
     /* Verify directory exists */
     struct stat st;
     if (wide_stat(repo_path, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        return CBM_DISCOVER_ERROR;
+        return LSM_DISCOVER_ERROR;
     }
 
     /* Load gitignore sources for ordinary repos AND linked worktrees.
@@ -1151,27 +1151,27 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
      * just like a normal checkout. Both are folded into a single matcher so all
      * downstream call paths remain unchanged. Fixes issue #489: OOM on repos whose
      * worktrees are excluded only via .git/info/exclude (e.g. Sandcastle). */
-    cbm_gitignore_t *gitignore = NULL;
-    char gi_path[CBM_SZ_4K];
+    lsm_gitignore_t *gitignore = NULL;
+    char gi_path[LSM_SZ_4K];
     struct stat gi_stat;
     /* Resolve the git common dir, transparently following a worktree gitlink so the
      * .git/info/exclude and core.excludesfile sources are honoured inside linked
      * worktrees too (where .git is a file pointing at the shared dir, not a directory). */
-    char git_common_dir[CBM_SZ_4K];
+    char git_common_dir[LSM_SZ_4K];
     bool is_git_repo = resolve_git_common_dir(repo_path, git_common_dir, sizeof(git_common_dir));
     bool has_git_config = false;
     /* Always honour the .gitignore at the indexed-directory root, even when the
      * directory is not a git repo root (e.g. indexing a sub-package directly).
      * Fixes issue #510: a root .gitignore was silently ignored without .git/. */
     snprintf(gi_path, sizeof(gi_path), "%s/.gitignore", repo_path);
-    gitignore = cbm_gitignore_load(gi_path);
+    gitignore = lsm_gitignore_load(gi_path);
     if (is_git_repo) {
         path_join(gi_path, sizeof(gi_path), git_common_dir, "config");
         has_git_config = wide_stat(gi_path, &gi_stat) == 0 && S_ISREG(gi_stat.st_mode);
 
-        char exc_path[CBM_SZ_4K];
+        char exc_path[LSM_SZ_4K];
         path_join(exc_path, sizeof(exc_path), git_common_dir, "info/exclude");
-        cbm_gitignore_t *git_exclude = cbm_gitignore_load(exc_path);
+        lsm_gitignore_t *git_exclude = lsm_gitignore_load(exc_path);
         if (git_exclude) {
             if (!gitignore) {
                 gitignore = git_exclude;
@@ -1179,24 +1179,24 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
                 /* On allocation failure the merge is atomic (dst unchanged), so
                  * the .gitignore patterns still apply; the exclude patterns are
                  * simply skipped — same as if .git/info/exclude were absent. */
-                (void)cbm_gitignore_merge(gitignore, git_exclude);
-                cbm_gitignore_free(git_exclude);
+                (void)lsm_gitignore_merge(gitignore, git_exclude);
+                lsm_gitignore_free(git_exclude);
             }
         }
     }
 
-    cbm_gitignore_t *global_gi = NULL;
+    lsm_gitignore_t *global_gi = NULL;
     if (has_git_config && resolve_global_excludes_path(gi_path, sizeof(gi_path))) {
-        global_gi = cbm_gitignore_load(gi_path);
+        global_gi = lsm_gitignore_load(gi_path);
     }
 
-    /* Load cbmignore if specified or exists at repo root */
-    cbm_gitignore_t *cbmignore = NULL;
+    /* Load lsmignore if specified or exists at repo root */
+    lsm_gitignore_t *lsmignore = NULL;
     if (opts && opts->ignore_file) {
-        cbmignore = cbm_gitignore_load(opts->ignore_file);
+        lsmignore = lsm_gitignore_load(opts->ignore_file);
     } else {
-        snprintf(gi_path, sizeof(gi_path), "%s/.cbmignore", repo_path);
-        cbmignore = cbm_gitignore_load(gi_path);
+        snprintf(gi_path, sizeof(gi_path), "%s/.lsmignore", repo_path);
+        lsmignore = lsm_gitignore_load(gi_path);
     }
 
     /* Walk */
@@ -1208,28 +1208,28 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
         .collect_ignored = !count_only && ignored_out != NULL,
     };
     walk_cache_dir_snapshot();
-    walk_dir(repo_path, "", opts, gitignore, global_gi, cbmignore, &fl);
+    walk_dir(repo_path, "", opts, gitignore, global_gi, lsmignore, &fl);
 
     /* Cleanup */
-    cbm_gitignore_free(gitignore);
-    cbm_gitignore_free(global_gi);
-    cbm_gitignore_free(cbmignore);
+    lsm_gitignore_free(gitignore);
+    lsm_gitignore_free(global_gi);
+    lsm_gitignore_free(lsmignore);
 
     if (count_only) {
-        cbm_discover_free(fl.files, fl.count);
-        cbm_discover_free_excluded(fl.excluded, fl.excluded_count);
-        cbm_discover_free_ignored(fl.ignored, fl.ignored_count);
+        lsm_discover_free(fl.files, fl.count);
+        lsm_discover_free_excluded(fl.excluded, fl.excluded_count);
+        lsm_discover_free_ignored(fl.ignored, fl.ignored_count);
         *count = fl.count;
         if (fl.failed) {
-            return CBM_DISCOVER_ERROR;
+            return LSM_DISCOVER_ERROR;
         }
-        return fl.limit_exceeded ? CBM_DISCOVER_LIMIT_EXCEEDED : CBM_DISCOVER_OK;
+        return fl.limit_exceeded ? LSM_DISCOVER_LIMIT_EXCEEDED : LSM_DISCOVER_OK;
     }
     if (fl.failed) {
-        cbm_discover_free(fl.files, fl.count);
-        cbm_discover_free_excluded(fl.excluded, fl.excluded_count);
-        cbm_discover_free_ignored(fl.ignored, fl.ignored_count);
-        return CBM_DISCOVER_ERROR;
+        lsm_discover_free(fl.files, fl.count);
+        lsm_discover_free_excluded(fl.excluded, fl.excluded_count);
+        lsm_discover_free_ignored(fl.ignored, fl.ignored_count);
+        return LSM_DISCOVER_ERROR;
     }
 
     *out = fl.files;
@@ -1242,7 +1242,7 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
             *excluded_count_out = fl.excluded_count;
         }
     } else {
-        cbm_discover_free_excluded(fl.excluded, fl.excluded_count);
+        lsm_discover_free_excluded(fl.excluded, fl.excluded_count);
     }
 
     /* Same handoff for the ignored-file list (#963). */
@@ -1255,38 +1255,38 @@ static cbm_discover_status_t discover_impl(const char *repo_path, const cbm_disc
             *ignored_total_out = fl.ignored_total;
         }
     } else {
-        cbm_discover_free_ignored(fl.ignored, fl.ignored_count);
+        lsm_discover_free_ignored(fl.ignored, fl.ignored_count);
     }
-    return CBM_DISCOVER_OK;
+    return LSM_DISCOVER_OK;
 }
 
-int cbm_discover_ex2(const char *repo_path, const cbm_discover_opts_t *opts, cbm_file_info_t **out,
+int lsm_discover_ex2(const char *repo_path, const lsm_discover_opts_t *opts, lsm_file_info_t **out,
                      int *count, char ***excluded_out, int *excluded_count_out,
-                     cbm_ignored_file_t **ignored_out, int *ignored_count_out,
+                     lsm_ignored_file_t **ignored_out, int *ignored_count_out,
                      int *ignored_total_out) {
     return discover_impl(repo_path, opts, out, count, excluded_out, excluded_count_out, ignored_out,
                          ignored_count_out, ignored_total_out, false, 0, 0);
 }
 
-cbm_discover_status_t cbm_discover_count_bounded(const char *repo_path,
-                                                 const cbm_discover_opts_t *opts, int max_files,
+lsm_discover_status_t lsm_discover_count_bounded(const char *repo_path,
+                                                 const lsm_discover_opts_t *opts, int max_files,
                                                  uint64_t deadline_ms, int *count_out) {
     if (count_out) {
         *count_out = -1;
     }
     if (!repo_path || !count_out || max_files < 0) {
-        return CBM_DISCOVER_ERROR;
+        return LSM_DISCOVER_ERROR;
     }
-    cbm_file_info_t *files = NULL;
+    lsm_file_info_t *files = NULL;
     int count = 0;
-    cbm_discover_status_t status = discover_impl(repo_path, opts, &files, &count, NULL, NULL, NULL,
+    lsm_discover_status_t status = discover_impl(repo_path, opts, &files, &count, NULL, NULL, NULL,
                                                  NULL, NULL, true, max_files, deadline_ms);
-    cbm_discover_free(files, count);
-    *count_out = status == CBM_DISCOVER_ERROR ? -1 : count;
+    lsm_discover_free(files, count);
+    *count_out = status == LSM_DISCOVER_ERROR ? -1 : count;
     return status;
 }
 
-void cbm_discover_free(cbm_file_info_t *files, int count) {
+void lsm_discover_free(lsm_file_info_t *files, int count) {
     if (!files) {
         return;
     }
@@ -1297,7 +1297,7 @@ void cbm_discover_free(cbm_file_info_t *files, int count) {
     free(files);
 }
 
-void cbm_discover_free_excluded(char **excluded, int count) {
+void lsm_discover_free_excluded(char **excluded, int count) {
     if (!excluded) {
         return;
     }
@@ -1307,7 +1307,7 @@ void cbm_discover_free_excluded(char **excluded, int count) {
     free(excluded);
 }
 
-void cbm_discover_free_ignored(cbm_ignored_file_t *ignored, int count) {
+void lsm_discover_free_ignored(lsm_ignored_file_t *ignored, int count) {
     if (!ignored) {
         return;
     }

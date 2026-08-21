@@ -7,16 +7,16 @@ WHY THIS IS NOT A C UNIT TEST
 The RSS ratchet is a property of mimalloc v3's abandoned-page handling
 (page_reclaim_on_free=0): pages a worker THREAD abandons at exit are not
 reclaimed when the main thread later frees their blocks. That only manifests in
-the PROD binary, which links mimalloc as the global allocator (Makefile.cbm:
+the PROD binary, which links mimalloc as the global allocator (Makefile.lsm:
 MI_OVERRIDE=1). The C test-runner and the C repro-runner are built CRT+ASan
-(MI_OVERRIDE=0), so mimalloc is inert there and cbm_mem_rss() falls back to
+(MI_OVERRIDE=0), so mimalloc is inert there and lsm_mem_rss() falls back to
 os_rss() -- a C test would be VACUOUS. Hence this drives the real
-`build/c/codebase-memory-mcp` server over stdio and samples its RSS from `ps`.
+`build/c/logan-spine-mcp` server over stdio and samples its RSS from `ps`.
 
 WHAT IT SHOWS
 -------------
 A long-lived MCP server is driven through K index_repository cycles of the same
-fixture. The in-process pipeline (CBM_INDEX_SUPERVISOR=0) is the pre-#832-fix
+fixture. The in-process pipeline (LSM_INDEX_SUPERVISOR=0) is the pre-#832-fix
 background-path behaviour: RSS RATCHETS across cycles. The supervised subprocess
 path (default) is the fix: each child returns 100% of its RSS on exit, so the
 long-lived parent stays ~FLAT. The auto-index (mcp.c) and watcher re-index
@@ -26,7 +26,7 @@ tests/test_mcp.c::index_bg_paths_route_through_supervisor_issue832.
 
 Inherently noisy (allocator/OS dependent) -> thresholds are generous and this is
 NOT wired into `make test` / `ci-ok`. Run manually:
-    make -f Makefile.cbm cbm
+    make -f Makefile.lsm lsm
     python3 tests/repro/issue832_rss.py
 """
 import json
@@ -37,7 +37,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-BINARY = os.path.join(ROOT, "build", "c", "codebase-memory-mcp")
+BINARY = os.path.join(ROOT, "build", "c", "logan-spine-mcp")
 CYCLES = 10
 NUM_FILES = 120  # enough files to fan out across worker threads (abandoned heaps)
 
@@ -58,12 +58,12 @@ def make_fixture(d):
 
 def run_series(repo, cache, supervised):
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = cache
+    env["LSM_CACHE_DIR"] = cache
     if supervised:
-        env.pop("CBM_INDEX_SUPERVISOR", None)
+        env.pop("LSM_INDEX_SUPERVISOR", None)
     else:
-        env["CBM_INDEX_SUPERVISOR"] = "0"  # in-process (pre-fix background behaviour)
-    env["CBM_INDEX_WORKER_TIMEOUT_S"] = "120"
+        env["LSM_INDEX_SUPERVISOR"] = "0"  # in-process (pre-fix background behaviour)
+    env["LSM_INDEX_WORKER_TIMEOUT_S"] = "120"
 
     proc = subprocess.Popen(
         [BINARY], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -92,9 +92,9 @@ def run_series(repo, cache, supervised):
 
 def main():
     if not os.path.exists(BINARY):
-        print(f"missing prod binary: {BINARY}\n  build it: make -f Makefile.cbm cbm")
+        print(f"missing prod binary: {BINARY}\n  build it: make -f Makefile.lsm lsm")
         return 2
-    base = tempfile.mkdtemp(prefix="cbm-832-")
+    base = tempfile.mkdtemp(prefix="lsm-832-")
     repo = os.path.join(base, "repo")
     os.makedirs(repo)
     make_fixture(repo)

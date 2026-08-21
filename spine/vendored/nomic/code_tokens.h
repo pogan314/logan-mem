@@ -1,6 +1,6 @@
 /* nomic-embed-code token vocabulary — 40856 tokens. */
-#ifndef CBM_NOMIC_TOKENS_H
-#define CBM_NOMIC_TOKENS_H
+#ifndef LSM_NOMIC_TOKENS_H
+#define LSM_NOMIC_TOKENS_H
 
 static const char *PRETRAINED_TOKENS[40856] = {
 "aa",
@@ -40861,4 +40861,4 @@ static const char *PRETRAINED_TOKENS[40856] = {
 "zzo",
 };
 
-#endif /* CBM_NOMIC_TOKENS_H */
+#endif /* LSM_NOMIC_TOKENS_H */

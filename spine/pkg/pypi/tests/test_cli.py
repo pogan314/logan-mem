@@ -18,7 +18,7 @@ from unittest import mock
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PACKAGE_ROOT / "src"))
 
-from codebase_memory_mcp import _cli  # noqa: E402
+from logan_spine_mcp import _cli  # noqa: E402
 
 
 class BinarySelectionTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class BinarySelectionTests(unittest.TestCase):
         self.assertEqual(_cli._execution_path(binary, "win32"), binary)
 
     def test_non_windows_executes_the_cached_binary(self):
-        binary = Path("cache") / "0.8.1" / "codebase-memory-mcp"
+        binary = Path("cache") / "0.8.1" / "logan-spine-mcp"
 
         self.assertEqual(_cli._execution_path(binary, "linux"), binary)
 
@@ -59,7 +59,7 @@ class BinarySelectionTests(unittest.TestCase):
                 "win32",
                 windows_local_app_data
                 / "Programs"
-                / "codebase-memory-mcp",
+                / "logan-spine-mcp",
                 mock.patch.dict(
                     os.environ,
                     {"LOCALAPPDATA": str(windows_local_app_data)},
@@ -91,12 +91,12 @@ class BinarySelectionTests(unittest.TestCase):
         # The binary is self-contained; a returning sidecar would silently make
         # `pip install` reject every archive against this exact-set allowlist.
         for names in (_cli._WINDOWS_ARCHIVE_NAMES, _cli._UNIX_ARCHIVE_NAMES):
-            self.assertNotIn("cbm-integrations.json", names)
-            self.assertFalse([n for n in names if n.startswith("cbm-ui-")])
+            self.assertNotIn("lsm-integrations.json", names)
+            self.assertFalse([n for n in names if n.startswith("lsm-ui-")])
             self.assertEqual(len(names), 4)
 
     def test_update_guidance_uses_pip_and_names_managed_install(self):
-        with mock.patch.object(_cli.sys, "argv", ["cbm", "update"]), \
+        with mock.patch.object(_cli.sys, "argv", ["lsm", "update"]), \
              mock.patch.object(_cli, "_version", return_value="0.8.1"), \
              mock.patch("sys.stderr") as stderr:
             with self.assertRaisesRegex(SystemExit, "2"):
@@ -104,9 +104,9 @@ class BinarySelectionTests(unittest.TestCase):
 
         output = "".join(call.args[0] for call in stderr.write.call_args_list)
         self.assertIn(
-            "python -m pip install --upgrade codebase-memory-mcp", output
+            "python -m pip install --upgrade logan-spine-mcp", output
         )
-        self.assertIn("codebase-memory-mcp install --yes", output)
+        self.assertIn("logan-spine-mcp install --yes", output)
         self.assertNotIn("install.sh", output)
 
 
@@ -206,8 +206,8 @@ class ProcessLivenessTests(unittest.TestCase):
 class RuntimeSetTests(unittest.TestCase):
     def test_candidate_probe_requires_the_binary_to_execute(self):
         candidates = (
-            Path("/tmp/codebase-memory-mcp"),
-            PureWindowsPath("/tmp/codebase-memory-mcp"),
+            Path("/tmp/logan-spine-mcp"),
+            PureWindowsPath("/tmp/logan-spine-mcp"),
         )
 
         for candidate in candidates:
@@ -224,7 +224,7 @@ class RuntimeSetTests(unittest.TestCase):
     def test_concurrent_publishers_preserve_the_first_complete_winner(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root)
-            binary_name = "codebase-memory-mcp"
+            binary_name = "logan-spine-mcp"
 
             def stages(tag):
                 staged = directory / f".stage-{tag}-{binary_name}"
@@ -306,12 +306,12 @@ from pathlib import Path
 
 source_root, directory_raw, staged_raw, marker_raw, crash_name = sys.argv[1:]
 sys.path.insert(0, source_root)
-from codebase_memory_mcp import _cli
+from logan_spine_mcp import _cli
 
 directory = Path(directory_raw)
 staged = Path(staged_raw)
 marker = Path(marker_raw)
-binary_name = "codebase-memory-mcp"
+binary_name = "logan-spine-mcp"
 staged_paths = {
     binary_name: staged / binary_name,
 }
@@ -336,7 +336,7 @@ _cli._publish_runtime_set(
     verifier=verifier,
 )
 """
-        binary_name = "codebase-memory-mcp"
+        binary_name = "logan-spine-mcp"
         for crash_name, expected_ready in (
             (binary_name, True),
         ):
@@ -384,7 +384,7 @@ _cli._publish_runtime_set(
                     backups = [
                         path
                         for path in directory.iterdir()
-                        if path.name.startswith(".cbm-runtime-backup-")
+                        if path.name.startswith(".lsm-runtime-backup-")
                     ]
                     self.assertEqual(len(backups), 1)
                     self.assertTrue(backups[0].is_dir())
@@ -430,7 +430,7 @@ _cli._publish_runtime_set(
                     )
                     self.assertFalse(
                         any(
-                            path.name.startswith(".cbm-runtime-backup-")
+                            path.name.startswith(".lsm-runtime-backup-")
                             for path in directory.iterdir()
                         )
                     )
@@ -447,7 +447,7 @@ _cli._publish_runtime_set(
     def test_publication_failure_restores_prior_complete_runtime_set(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root)
-            binary_name = "codebase-memory-mcp"
+            binary_name = "logan-spine-mcp"
             (directory / binary_name).write_text("binary:old")
             staged_paths = {}
             for name, contents in (
@@ -465,7 +465,7 @@ _cli._publish_runtime_set(
                 nonlocal failed
                 source = Path(source)
                 destination = Path(destination)
-                if destination.parent.name.startswith(".cbm-runtime-backup-"):
+                if destination.parent.name.startswith(".lsm-runtime-backup-"):
                     retired.append(source.name)
                 if destination == directory / binary_name and not failed:
                     failed = True
@@ -485,7 +485,7 @@ _cli._publish_runtime_set(
             self.assertEqual((directory / binary_name).read_text(), "binary:old")
             self.assertFalse(
                 any(
-                    path.name.startswith(".cbm-runtime-backup-")
+                    path.name.startswith(".lsm-runtime-backup-")
                     for path in directory.iterdir()
                 )
             )
@@ -493,7 +493,7 @@ _cli._publish_runtime_set(
     def test_failure_never_deletes_a_complete_foreign_winner(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root)
-            binary_name = "codebase-memory-mcp"
+            binary_name = "logan-spine-mcp"
             (directory / binary_name).write_bytes(b"binary:old")
             staged_paths = {}
             for name, contents in (
@@ -529,7 +529,7 @@ _cli._publish_runtime_set(
             )
             self.assertFalse(
                 any(
-                    path.name.startswith(".cbm-runtime-backup-")
+                    path.name.startswith(".lsm-runtime-backup-")
                     for path in directory.iterdir()
                 )
             )
@@ -537,8 +537,8 @@ _cli._publish_runtime_set(
     def test_orphan_reconciliation_rejects_multiply_linked_backup_members(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root)
-            binary = directory / "codebase-memory-mcp"
-            backup = directory / f".cbm-runtime-backup-{'a' * 32}"
+            binary = directory / "logan-spine-mcp"
+            backup = directory / f".lsm-runtime-backup-{'a' * 32}"
             backup.mkdir()
             (backup / ".retirement-complete").write_bytes(b"")
             member = backup / binary.name
@@ -794,14 +794,14 @@ _cli._publish_runtime_set(
                     tf,
                     str(destination),
                     _cli._UNIX_ARCHIVE_NAMES,
-                    ("codebase-memory-mcp",),
+                    ("logan-spine-mcp",),
                 )
 
     def test_unix_tar_rejects_hardlink_members(self):
         with tempfile.TemporaryDirectory() as root:
             archive = Path(root) / "release.tar.gz"
             with tarfile.open(archive, "w:gz") as tf:
-                info = tarfile.TarInfo("codebase-memory-mcp")
+                info = tarfile.TarInfo("logan-spine-mcp")
                 info.type = tarfile.LNKTYPE
                 info.linkname = "LICENSE"
                 tf.addfile(info)
@@ -811,8 +811,8 @@ _cli._publish_runtime_set(
                 _cli._safe_extract_tar(
                     tf,
                     str(destination),
-                    ("codebase-memory-mcp",),
-                    ("codebase-memory-mcp",),
+                    ("logan-spine-mcp",),
+                    ("logan-spine-mcp",),
                     False,
                 )
 

@@ -201,12 +201,12 @@ typedef struct {
 } yaml_list_target_t;
 
 static atomic_uint yaml_temp_sequence = ATOMIC_VAR_INIT(0);
-#ifdef CBM_YAML_ENABLE_TEST_API
-static cbm_yaml_precommit_test_hook_t yaml_precommit_test_hook = NULL;
+#ifdef LSM_YAML_ENABLE_TEST_API
+static lsm_yaml_precommit_test_hook_t yaml_precommit_test_hook = NULL;
 static void *yaml_precommit_test_context = NULL;
-static cbm_yaml_precommit_test_hook_t yaml_prepublish_test_hook = NULL;
+static lsm_yaml_precommit_test_hook_t yaml_prepublish_test_hook = NULL;
 static void *yaml_prepublish_test_context = NULL;
-static cbm_yaml_lock_postcreate_test_hook_t yaml_lock_postcreate_test_hook = NULL;
+static lsm_yaml_lock_postcreate_test_hook_t yaml_lock_postcreate_test_hook = NULL;
 static void *yaml_lock_postcreate_test_context = NULL;
 #endif
 
@@ -330,7 +330,7 @@ static int yaml_validate_text_bytes_from(const char *data, size_t len, size_t fr
 }
 
 static int yaml_build_lock_path(const char *path, char **out_path) {
-    static const char suffix[] = ".cbm-yaml.lock";
+    static const char suffix[] = ".lsm-yaml.lock";
     size_t path_len = 0U;
     if (yaml_bounded_strlen(path, YAML_OUTPUT_MAX, &path_len) != 0 || path_len == 0U ||
         path_len > SIZE_MAX - YAML_LOCK_SUFFIX_MAX - YAML_UNIT) {
@@ -391,7 +391,7 @@ static int yaml_lock_acquire(const char *path, yaml_config_lock_t *lock) {
     }
 
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(lock->path);
+    wchar_t *wide_path = lsm_utf8_to_wide(lock->path);
     if (!wide_path) {
         free(lock->path);
         lock->path = NULL;
@@ -423,7 +423,7 @@ static int yaml_lock_acquire(const char *path, yaml_config_lock_t *lock) {
         lock->path = NULL;
         return YAML_ERROR;
     }
-#ifdef CBM_YAML_ENABLE_TEST_API
+#ifdef LSM_YAML_ENABLE_TEST_API
     if (yaml_lock_postcreate_test_hook) {
         yaml_lock_postcreate_test_hook(lock->path, yaml_lock_postcreate_test_context);
     }
@@ -479,7 +479,7 @@ static int yaml_lock_acquire(const char *path, yaml_config_lock_t *lock) {
         lock->path = NULL;
         return YAML_ERROR;
     }
-#ifdef CBM_YAML_ENABLE_TEST_API
+#ifdef LSM_YAML_ENABLE_TEST_API
     if (yaml_lock_postcreate_test_hook) {
         yaml_lock_postcreate_test_hook(lock->path, yaml_lock_postcreate_test_context);
     }
@@ -644,7 +644,7 @@ static int yaml_read_file(const char *path, char **out_data, size_t *out_len,
     *out_len = 0U;
     memset(out_snapshot, 0, sizeof(*out_snapshot));
 #ifdef _WIN32
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_path) {
         return YAML_ERROR;
     }
@@ -732,7 +732,7 @@ static int yaml_read_file(const char *path, char **out_data, size_t *out_len,
     int read_failed = ferror(file);
     struct stat after_state;
     yaml_file_snapshot_t after;
-    int after_result = fstat(cbm_fileno(file), &after_state) == 0
+    int after_result = fstat(lsm_fileno(file), &after_state) == 0
                            ? yaml_snapshot_from_stat(&after_state, &after)
                            : YAML_ERROR;
     int close_failed = fclose(file);
@@ -839,8 +839,8 @@ static int yaml_sync_parent_directory(const char *path) {
 
 static int yaml_replace_file(const char *temp_path, const char *path, bool destination_exists) {
 #ifdef _WIN32
-    wchar_t *wide_temp = cbm_utf8_to_wide(temp_path);
-    wchar_t *wide_path = cbm_utf8_to_wide(path);
+    wchar_t *wide_temp = lsm_utf8_to_wide(temp_path);
+    wchar_t *wide_path = lsm_utf8_to_wide(path);
     if (!wide_temp || !wide_path) {
         free(wide_temp);
         free(wide_path);
@@ -857,7 +857,7 @@ static int yaml_replace_file(const char *temp_path, const char *path, bool desti
         if (link(temp_path, path) != 0) {
             return YAML_ERROR;
         }
-        if (cbm_unlink(temp_path) != 0) {
+        if (lsm_unlink(temp_path) != 0) {
             return YAML_ERROR;
         }
         return yaml_sync_parent_directory(path);
@@ -887,7 +887,7 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
     for (unsigned attempt = 0U; attempt < YAML_TMP_ATTEMPTS; attempt++) {
         unsigned sequence =
             atomic_fetch_add_explicit(&yaml_temp_sequence, YAML_UNIT, memory_order_relaxed);
-        int written = snprintf(temp_path, capacity, "%s.cbm-yaml-%ld-%u.tmp", path,
+        int written = snprintf(temp_path, capacity, "%s.lsm-yaml-%ld-%u.tmp", path,
                                (long)YAML_PROCESS_ID(), sequence);
         if (written < 0 || (size_t)written >= capacity) {
             free(temp_path);
@@ -895,7 +895,7 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
         }
         errno = 0;
 #ifdef _WIN32
-        file = cbm_fopen(temp_path, "wbx");
+        file = lsm_fopen(temp_path, "wbx");
 #else
         int flags = O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW;
 #ifdef O_CLOEXEC
@@ -906,7 +906,7 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
             file = fdopen(descriptor, "wb");
             if (!file) {
                 (void)close(descriptor);
-                (void)cbm_unlink(temp_path);
+                (void)lsm_unlink(temp_path);
                 free(temp_path);
                 return YAML_ERROR;
             }
@@ -931,23 +931,23 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
     }
 #ifndef _WIN32
     if (!failed && expected_snapshot->exists &&
-        fchown(cbm_fileno(file), expected_snapshot->owner, expected_snapshot->group) != 0) {
+        fchown(lsm_fileno(file), expected_snapshot->owner, expected_snapshot->group) != 0) {
         failed = true;
     }
     mode_t mode = expected_snapshot->exists ? expected_snapshot->mode & YAML_PERMISSION_MASK
                                             : YAML_NEW_FILE_MODE;
-    if (!failed && fchmod(cbm_fileno(file), mode) != 0) {
+    if (!failed && fchmod(lsm_fileno(file), mode) != 0) {
         failed = true;
     }
 #endif
-    if (!failed && YAML_SYNC(cbm_fileno(file)) != 0) {
+    if (!failed && YAML_SYNC(lsm_fileno(file)) != 0) {
         failed = true;
     }
     if (fclose(file) != 0) {
         failed = true;
     }
     if (failed) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return YAML_ERROR;
     }
@@ -958,23 +958,23 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
         !temp_snapshot.exists || temp_len != len ||
         (len != 0U && memcmp(temp_data, data, len) != 0)) {
         free(temp_data);
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return YAML_ERROR;
     }
     free(temp_data);
 
-#ifdef CBM_YAML_ENABLE_TEST_API
+#ifdef LSM_YAML_ENABLE_TEST_API
     if (yaml_precommit_test_hook) {
         yaml_precommit_test_hook(path, yaml_precommit_test_context);
     }
 #endif
     if (yaml_snapshot_matches_path(path, expected_data, expected_len, expected_snapshot) != 0) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return YAML_ERROR;
     }
-#ifdef CBM_YAML_ENABLE_TEST_API
+#ifdef LSM_YAML_ENABLE_TEST_API
     if (yaml_prepublish_test_hook) {
         yaml_prepublish_test_hook(path, yaml_prepublish_test_context);
     }
@@ -982,7 +982,7 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
     if (yaml_snapshot_matches_path(path, expected_data, expected_len, expected_snapshot) != 0 ||
         yaml_snapshot_matches_path(temp_path, data, len, &temp_snapshot) != 0 ||
         yaml_replace_file(temp_path, path, expected_snapshot->exists) != 0) {
-        (void)cbm_unlink(temp_path);
+        (void)lsm_unlink(temp_path);
         free(temp_path);
         return YAML_ERROR;
     }
@@ -990,18 +990,18 @@ static int yaml_write_atomic(const char *path, const char *data, size_t len,
     return 0;
 }
 
-#ifdef CBM_YAML_ENABLE_TEST_API
-void cbm_yaml_set_precommit_hook_for_testing(cbm_yaml_precommit_test_hook_t hook, void *context) {
+#ifdef LSM_YAML_ENABLE_TEST_API
+void lsm_yaml_set_precommit_hook_for_testing(lsm_yaml_precommit_test_hook_t hook, void *context) {
     yaml_precommit_test_hook = hook;
     yaml_precommit_test_context = context;
 }
 
-void cbm_yaml_set_prepublish_hook_for_testing(cbm_yaml_precommit_test_hook_t hook, void *context) {
+void lsm_yaml_set_prepublish_hook_for_testing(lsm_yaml_precommit_test_hook_t hook, void *context) {
     yaml_prepublish_test_hook = hook;
     yaml_prepublish_test_context = context;
 }
 
-void cbm_yaml_set_lock_postcreate_hook_for_testing(cbm_yaml_lock_postcreate_test_hook_t hook,
+void lsm_yaml_set_lock_postcreate_hook_for_testing(lsm_yaml_lock_postcreate_test_hook_t hook,
                                                    void *context) {
     yaml_lock_postcreate_test_hook = hook;
     yaml_lock_postcreate_test_context = context;
@@ -2249,7 +2249,7 @@ static int yaml_append_quoted(yaml_buf_t *buf, const char *item, size_t item_len
     return yaml_buf_append_char(buf, '"');
 }
 
-int cbm_yaml_encode_double_quoted_scalar(const char *value, char **encoded_out) {
+int lsm_yaml_encode_double_quoted_scalar(const char *value, char **encoded_out) {
     if (!encoded_out) {
         return YAML_ERROR;
     }
@@ -3059,18 +3059,18 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
         yaml_bounded_strlen(identity_scalar, YAML_ITEM_MAX, &identity_scalar_len) != 0 ||
         yaml_validate_text_bytes(identity_scalar, identity_scalar_len) != 0 ||
         yaml_bounded_strlen(canonical_item, YAML_BLOCK_MAX, &canonical_len) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     (void)identity_key_len;
 
     size_t *path_lengths = (size_t *)calloc(sequence_path_len, sizeof(*path_lengths));
     if (!path_lengths) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     for (size_t i = 0U; i < sequence_path_len; i++) {
         if (yaml_validate_key(sequence_path[i], &path_lengths[i]) != 0) {
             free(path_lengths);
-            return CBM_YAML_IDENTITY_EDIT_ERROR;
+            return LSM_YAML_IDENTITY_EDIT_ERROR;
         }
     }
     char *identity_value = NULL;
@@ -3079,7 +3079,7 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
                                          identity_value) != 0) {
         free(identity_value);
         free(path_lengths);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
     char *data = NULL;
@@ -3088,14 +3088,14 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
     if (yaml_read_file(file_path, &data, &len, &snapshot) != 0) {
         free(identity_value);
         free(path_lengths);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     yaml_doc_t doc;
     if (yaml_doc_init(&doc, data, len) != 0) {
         free(data);
         free(identity_value);
         free(path_lengths);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     yaml_mapping_sequence_target_t target;
     if (yaml_sequence_analyze(&doc, sequence_path, path_lengths, sequence_path_len, identity_key,
@@ -3104,7 +3104,7 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
         free(data);
         free(identity_value);
         free(path_lengths);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
     yaml_buf_t rendered = {0};
@@ -3116,21 +3116,21 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
         free(data);
         free(identity_value);
         free(path_lengths);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
-    int result = CBM_YAML_IDENTITY_EDIT_OK;
+    int result = LSM_YAML_IDENTITY_EDIT_OK;
     if (target.identity_found) {
         size_t existing_len = target.identity_end - target.identity_start;
         if (existing_len != rendered.len ||
             memcmp(doc.data + target.identity_start, rendered.data, rendered.len) != 0) {
-            result = CBM_YAML_IDENTITY_EDIT_FOREIGN;
+            result = LSM_YAML_IDENTITY_EDIT_FOREIGN;
         } else if (remove) {
             yaml_buf_t out = {0};
             if (yaml_splice(&out, &doc, target.identity_start, target.identity_end, NULL, 0U) !=
                     0 ||
                 yaml_commit_if_changed(file_path, data, len, &snapshot, &out) != 0) {
-                result = CBM_YAML_IDENTITY_EDIT_ERROR;
+                result = LSM_YAML_IDENTITY_EDIT_ERROR;
             }
             yaml_buf_free(&out);
         }
@@ -3139,7 +3139,7 @@ static int yaml_edit_mapping_sequence_item_locked(const char *file_path,
         if (yaml_sequence_build_insert(&out, &doc, &target, sequence_path, path_lengths,
                                        sequence_path_len, &rendered) != 0 ||
             yaml_commit_if_changed(file_path, data, len, &snapshot, &out) != 0) {
-            result = CBM_YAML_IDENTITY_EDIT_ERROR;
+            result = LSM_YAML_IDENTITY_EDIT_ERROR;
         }
         yaml_buf_free(&out);
     }
@@ -3274,7 +3274,7 @@ static int yaml_remove_mapping_entry_locked(const char *file_path, const char *s
  *   stdio schema; early releases wrote V unquoted), OR the goose block
  *   `type/cmd/args/enabled` in order with an optional leading `name:` (the
  *   pre-#1675 block had no name). V may be plain or double-quoted; its
- *   basename must be codebase-memory-mcp[.exe]. Anything else stays FOREIGN
+ *   basename must be logan-spine-mcp[.exe]. Anything else stays FOREIGN
  *   (fail-closed). */
 static bool yaml_owned_value_is_our_binary(const char *v, size_t vlen) {
     if (vlen >= 2U && v[0] == '"' && v[vlen - 1U] == '"') {
@@ -3289,8 +3289,8 @@ static bool yaml_owned_value_is_our_binary(const char *v, size_t vlen) {
     }
     const char *name = v + base;
     size_t name_len = vlen - base;
-    static const char plain[] = "codebase-memory-mcp";
-    static const char exe[] = "codebase-memory-mcp.exe";
+    static const char plain[] = "logan-spine-mcp";
+    static const char exe[] = "logan-spine-mcp.exe";
     return (name_len == sizeof(plain) - 1U && memcmp(name, plain, name_len) == 0) ||
            (name_len == sizeof(exe) - 1U && memcmp(name, exe, name_len) == 0);
 }
@@ -3333,7 +3333,7 @@ static bool yaml_owned_entry_is_prior_shape(const char *data, size_t len, const 
     }
     /* Body lines: 4-space indent, known fields only. */
     static const char cmd_prefix[] = "    command: ";
-    static const char goose_name[] = "    name: codebase-memory-mcp";
+    static const char goose_name[] = "    name: logan-spine-mcp";
     static const char goose_type[] = "    type: stdio";
     static const char goose_cmd[] = "    cmd: ";
     static const char goose_args[] = "    args: []";
@@ -3383,25 +3383,25 @@ static int yaml_edit_owned_mapping_entry_locked(const char *file_path, const cha
         yaml_validate_key(section_key, &section_len) != 0 ||
         yaml_validate_key(entry_key, &entry_len) != 0 ||
         yaml_validate_entry_block(canonical_entry_block, &block_len) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
     char *data = NULL;
     size_t len = 0U;
     yaml_file_snapshot_t snapshot;
     if (yaml_read_file(file_path, &data, &len, &snapshot) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     yaml_doc_t doc;
     if (yaml_doc_init(&doc, data, len) != 0) {
         free(data);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     yaml_mapping_target_t target;
     if (yaml_analyze_mapping(&doc, section_key, section_len, entry_key, entry_len, &target) != 0) {
         yaml_doc_free(&doc);
         free(data);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
     yaml_buf_t canonical = {0};
@@ -3410,7 +3410,7 @@ static int yaml_edit_owned_mapping_entry_locked(const char *file_path, const cha
         yaml_buf_free(&canonical);
         yaml_doc_free(&doc);
         free(data);
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
 
     const yaml_line_t *header = NULL;
@@ -3420,14 +3420,14 @@ static int yaml_edit_owned_mapping_entry_locked(const char *file_path, const cha
             yaml_buf_free(&canonical);
             yaml_doc_free(&doc);
             free(data);
-            return CBM_YAML_IDENTITY_EDIT_ERROR;
+            return LSM_YAML_IDENTITY_EDIT_ERROR;
         }
         header = &doc.lines[target.entry_line];
         if (header->start > target.entry_end || target.entry_end > doc.len) {
             yaml_buf_free(&canonical);
             yaml_doc_free(&doc);
             free(data);
-            return CBM_YAML_IDENTITY_EDIT_ERROR;
+            return LSM_YAML_IDENTITY_EDIT_ERROR;
         }
         entry_start = header->start;
         size_t existing_entry_len = target.entry_end - entry_start;
@@ -3439,19 +3439,19 @@ static int yaml_edit_owned_mapping_entry_locked(const char *file_path, const cha
             yaml_buf_free(&canonical);
             yaml_doc_free(&doc);
             free(data);
-            return CBM_YAML_IDENTITY_EDIT_FOREIGN;
+            return LSM_YAML_IDENTITY_EDIT_FOREIGN;
         }
         if (!remove && canonical_match) {
             yaml_buf_free(&canonical);
             yaml_doc_free(&doc);
             free(data);
-            return CBM_YAML_IDENTITY_EDIT_OK;
+            return LSM_YAML_IDENTITY_EDIT_OK;
         }
     } else if (remove) {
         yaml_buf_free(&canonical);
         yaml_doc_free(&doc);
         free(data);
-        return CBM_YAML_IDENTITY_EDIT_OK;
+        return LSM_YAML_IDENTITY_EDIT_OK;
     }
 
     yaml_buf_t out = {0};
@@ -3470,7 +3470,7 @@ static int yaml_edit_owned_mapping_entry_locked(const char *file_path, const cha
     yaml_buf_free(&canonical);
     yaml_doc_free(&doc);
     free(data);
-    return result == 0 ? CBM_YAML_IDENTITY_EDIT_OK : CBM_YAML_IDENTITY_EDIT_ERROR;
+    return result == 0 ? LSM_YAML_IDENTITY_EDIT_OK : LSM_YAML_IDENTITY_EDIT_ERROR;
 }
 
 static int yaml_upsert_string_list_item_locked(const char *file_path, const char *key,
@@ -3590,7 +3590,7 @@ static int yaml_remove_string_list_item_locked(const char *file_path, const char
     return rc;
 }
 
-int cbm_yaml_upsert_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_upsert_mapping_entry(const char *file_path, const char *section_key,
                                   const char *entry_key, const char *entry_block) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
@@ -3601,7 +3601,7 @@ int cbm_yaml_upsert_mapping_entry(const char *file_path, const char *section_key
     return result == 0 && release_result == 0 ? 0 : YAML_ERROR;
 }
 
-int cbm_yaml_remove_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_remove_mapping_entry(const char *file_path, const char *section_key,
                                   const char *entry_key) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
@@ -3612,59 +3612,59 @@ int cbm_yaml_remove_mapping_entry(const char *file_path, const char *section_key
     return result == 0 && release_result == 0 ? 0 : YAML_ERROR;
 }
 
-int cbm_yaml_upsert_owned_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_upsert_owned_mapping_entry(const char *file_path, const char *section_key,
                                         const char *entry_key, const char *canonical_entry_block) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     int result = yaml_edit_owned_mapping_entry_locked(file_path, section_key, entry_key,
                                                       canonical_entry_block, false);
     int release_result = yaml_lock_release(&lock);
-    return release_result == 0 ? result : CBM_YAML_IDENTITY_EDIT_ERROR;
+    return release_result == 0 ? result : LSM_YAML_IDENTITY_EDIT_ERROR;
 }
 
-int cbm_yaml_remove_owned_mapping_entry(const char *file_path, const char *section_key,
+int lsm_yaml_remove_owned_mapping_entry(const char *file_path, const char *section_key,
                                         const char *entry_key, const char *canonical_entry_block) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     int result = yaml_edit_owned_mapping_entry_locked(file_path, section_key, entry_key,
                                                       canonical_entry_block, true);
     int release_result = yaml_lock_release(&lock);
-    return release_result == 0 ? result : CBM_YAML_IDENTITY_EDIT_ERROR;
+    return release_result == 0 ? result : LSM_YAML_IDENTITY_EDIT_ERROR;
 }
 
-int cbm_yaml_upsert_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
+int lsm_yaml_upsert_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
                                           size_t sequence_path_len, const char *identity_key,
                                           const char *identity_scalar, const char *canonical_item) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     int result = yaml_edit_mapping_sequence_item_locked(file_path, sequence_path, sequence_path_len,
                                                         identity_key, identity_scalar,
                                                         canonical_item, false);
     int release_result = yaml_lock_release(&lock);
-    return release_result == 0 ? result : CBM_YAML_IDENTITY_EDIT_ERROR;
+    return release_result == 0 ? result : LSM_YAML_IDENTITY_EDIT_ERROR;
 }
 
-int cbm_yaml_remove_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
+int lsm_yaml_remove_mapping_sequence_item(const char *file_path, const char *const *sequence_path,
                                           size_t sequence_path_len, const char *identity_key,
                                           const char *identity_scalar, const char *canonical_item) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
-        return CBM_YAML_IDENTITY_EDIT_ERROR;
+        return LSM_YAML_IDENTITY_EDIT_ERROR;
     }
     int result =
         yaml_edit_mapping_sequence_item_locked(file_path, sequence_path, sequence_path_len,
                                                identity_key, identity_scalar, canonical_item, true);
     int release_result = yaml_lock_release(&lock);
-    return release_result == 0 ? result : CBM_YAML_IDENTITY_EDIT_ERROR;
+    return release_result == 0 ? result : LSM_YAML_IDENTITY_EDIT_ERROR;
 }
 
-int cbm_yaml_upsert_string_list_item(const char *file_path, const char *key, const char *item) {
+int lsm_yaml_upsert_string_list_item(const char *file_path, const char *key, const char *item) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
         return YAML_ERROR;
@@ -3674,7 +3674,7 @@ int cbm_yaml_upsert_string_list_item(const char *file_path, const char *key, con
     return result == 0 && release_result == 0 ? 0 : YAML_ERROR;
 }
 
-int cbm_yaml_remove_string_list_item(const char *file_path, const char *key, const char *item) {
+int lsm_yaml_remove_string_list_item(const char *file_path, const char *key, const char *item) {
     yaml_config_lock_t lock;
     if (yaml_lock_acquire(file_path, &lock) != 0) {
         return YAML_ERROR;

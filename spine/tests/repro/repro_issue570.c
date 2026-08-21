@@ -2,19 +2,19 @@
  * repro_issue570.c -- Reproduce-first case for OPEN bug #570.
  *
  * BUG #570: "Installer adds hooks to both hooks.json and config.toml"
- *   https://github.com/DeusData/codebase-memory-mcp/issues/570
+ *   https://github.com/DeusData/logan-spine-mcp/issues/570
  *
  * TWO FILES WRONGLY WRITTEN (Codex SessionStart hook):
- *   ~/.codex/config.toml   -- always written by cbm_upsert_codex_hooks()
+ *   ~/.codex/config.toml   -- always written by lsm_upsert_codex_hooks()
  *   ~/.codex/hooks.json    -- pre-existing JSON hook representation
  *
  * ROOT CAUSE (src/cli/cli.c, install_cli_agent_configs, ~line 3116-3130):
  *   The Codex install path unconditionally passes config.toml as the hook
- *   target to cbm_upsert_codex_hooks():
+ *   target to lsm_upsert_codex_hooks():
  *
  *     snprintf(cp, sizeof(cp), "%s/.codex/config.toml", home);
  *     ...
- *     cbm_upsert_codex_hooks(cp);
+ *     lsm_upsert_codex_hooks(cp);
  *
  *   It never checks whether ~/.codex/hooks.json already exists.  When a user
  *   has configured Codex via hooks.json (the JSON representation), the
@@ -26,10 +26,10 @@
  *     if (g_install_plan)
  *         plan_record("Codex CLI", "hook", cp);  -- cp is always config.toml
  *
- *   So cbm_build_install_plan_json() always lists config.toml as the Codex
+ *   So lsm_build_install_plan_json() always lists config.toml as the Codex
  *   hook target, even when hooks.json is already in use.
  *
- * EXPECTED vs ACTUAL (oracle: cbm_build_install_plan_json plan JSON):
+ * EXPECTED vs ACTUAL (oracle: lsm_build_install_plan_json plan JSON):
  *   Scenario: ~/.codex/ exists AND ~/.codex/hooks.json exists.
  *
  *   Expected: hooks_planned for Codex CLI lists ~/.codex/hooks.json as the
@@ -51,7 +51,7 @@
  *   there.  ASSERT_NULL(config_toml_as_hook) fires -> RED.
  *
  * WHAT MAKES CODEX "DETECTED":
- *   cbm_detect_agents() sets agents.codex = dir_exists("~/.codex").
+ *   lsm_detect_agents() sets agents.codex = dir_exists("~/.codex").
  *   Creating the directory ~/.codex is sufficient for detection.
  *   Creating ~/.codex/hooks.json in addition signals the JSON representation
  *   is already in use and is the trigger for the correct single-target behavior.
@@ -60,7 +60,7 @@
  *   install_cli_agent_configs() in src/cli/cli.c:
  *     - Before choosing the hook target path for Codex, check whether
  *       ~/.codex/hooks.json exists.
- *     - If it does, pass that path to cbm_upsert_codex_session_hooks_json()
+ *     - If it does, pass that path to lsm_upsert_codex_session_hooks_json()
  *       (or equivalent JSON-format writer) and update plan_record accordingly.
  *     - Only fall back to config.toml when hooks.json does not exist.
  */
@@ -84,7 +84,7 @@
  *   - Temp HOME with ~/.codex/ (makes Codex "detected")
  *   - ~/.codex/hooks.json with a minimal hooks payload (signals JSON in use)
  *
- * Oracle: cbm_build_install_plan_json(home, binary) -- dry-run plan, no writes.
+ * Oracle: lsm_build_install_plan_json(home, binary) -- dry-run plan, no writes.
  *
  * Assertion (correct behavior that the bug violates):
  *   The hooks_planned array for Codex CLI must reference hooks.json, NOT
@@ -106,9 +106,9 @@
  */
 TEST(repro_issue570_no_dual_hook_write) {
     char home[256];
-    snprintf(home, sizeof(home), "/tmp/cbm-repro570-XXXXXX");
-    if (!cbm_mkdtemp(home))
-        FAIL("cbm_mkdtemp failed");
+    snprintf(home, sizeof(home), "/tmp/lsm-repro570-XXXXXX");
+    if (!lsm_mkdtemp(home))
+        FAIL("lsm_mkdtemp failed");
 
     /* Create ~/.codex/ -- sufficient to make Codex "detected". */
     char codex_dir[512];
@@ -128,7 +128,7 @@ TEST(repro_issue570_no_dual_hook_write) {
         FAIL("failed to create hooks.json");
 
     /* Build the dry-run install plan -- no files are mutated. */
-    char *json = cbm_build_install_plan_json(home, "/usr/local/bin/codebase-memory-mcp");
+    char *json = lsm_build_install_plan_json(home, "/usr/local/bin/logan-spine-mcp");
     ASSERT_NOT_NULL(json);
 
     /* Sanity: plan must be valid and detect Codex. */

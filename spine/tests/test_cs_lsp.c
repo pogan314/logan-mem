@@ -24,21 +24,21 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 #include "../src/pipeline/lsp_resolve.h"
 #include "lsp/cs_lsp.h"
 #include <string.h>
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
-static CBMFileResult *extract_cs(const char *source) {
-    return cbm_extract_file(source, (int)strlen(source), CBM_LANG_CSHARP, "test", "main.cs", 0,
+static LSMFileResult *extract_cs(const char *source) {
+    return lsm_extract_file(source, (int)strlen(source), LSM_LANG_CSHARP, "test", "main.cs", 0,
                             NULL, NULL);
 }
 
-static int find_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int find_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->caller_qn && strstr(rc->caller_qn, callerSub) && rc->callee_qn &&
             strstr(rc->callee_qn, calleeSub))
             return i;
@@ -46,13 +46,13 @@ static int find_resolved(const CBMFileResult *r, const char *callerSub, const ch
     return -1;
 }
 
-static int require_resolved(const CBMFileResult *r, const char *callerSub, const char *calleeSub) {
+static int require_resolved(const LSMFileResult *r, const char *callerSub, const char *calleeSub) {
     int idx = find_resolved(r, callerSub, calleeSub);
     if (idx < 0) {
         printf("  MISSING resolved call: caller~%s -> callee~%s (have %d)\n", callerSub, calleeSub,
                r->resolved_calls.count);
         for (int i = 0; i < r->resolved_calls.count; i++) {
-            const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+            const LSMResolvedCall *rc = &r->resolved_calls.items[i];
             printf("    %s -> %s [%s %.2f]\n", rc->caller_qn ? rc->caller_qn : "(null)",
                    rc->callee_qn ? rc->callee_qn : "(null)",
                    rc->strategy ? rc->strategy : "(null)", rc->confidence);
@@ -61,10 +61,10 @@ static int require_resolved(const CBMFileResult *r, const char *callerSub, const
     return idx;
 }
 
-static int count_resolved_with_strategy(const CBMFileResult *r, const char *strategy) {
+static int count_resolved_with_strategy(const LSMFileResult *r, const char *strategy) {
     int n = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (rc->strategy && strcmp(rc->strategy, strategy) == 0) n++;
     }
     return n;
@@ -83,10 +83,10 @@ TEST(cslsp_local_method_via_new) {
         "        g.Hello();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Caller.Go", "Greeter.Hello") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -98,10 +98,10 @@ TEST(cslsp_method_via_typed_param) {
         "class C {\n"
         "    public void Run(P p) { p.Value(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "P.Value") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -113,10 +113,10 @@ TEST(cslsp_static_method) {
         "class C {\n"
         "    public void Run() { Util.Fmt(\"hi\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Util.Fmt") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -132,12 +132,12 @@ TEST(cslsp_base_dispatch) {
         "        Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Child.Go", "Child.Alt") >= 0);
     /* Tag() is inherited from Base; resolution should attribute to Base.Tag */
     ASSERT(require_resolved(r, "Child.Go", "Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -151,10 +151,10 @@ TEST(cslsp_ctor) {
         "class C {\n"
         "    public void Make() { var p = new Point(1, 2); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Make", "Point") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -174,11 +174,11 @@ TEST(cslsp_method_chain) {
         "        a.GetB().Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Go", "A.GetB") >= 0);
     ASSERT(require_resolved(r, "C.Go", "B.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -191,10 +191,10 @@ TEST(cslsp_file_scoped_namespace) {
         "class C {\n"
         "    public void Run(P p) { p.V(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "P.V") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -208,10 +208,10 @@ TEST(cslsp_block_namespace) {
         "        public void Run(P p) { p.V(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "P.V") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -224,10 +224,10 @@ TEST(cslsp_using_directive) {
         "class C {\n"
         "    public void Greet() { Console.WriteLine(\"hi\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Greet", "Console.WriteLine") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -239,10 +239,10 @@ TEST(cslsp_using_static) {
         "class C {\n"
         "    public double X() { return Sqrt(2.0); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.X", "Math.Sqrt") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -254,10 +254,10 @@ TEST(cslsp_using_alias) {
         "class C {\n"
         "    public void Use(IL list) { list.Add(1); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "List.Add") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -272,10 +272,10 @@ TEST(cslsp_generic_list_foreach) {
         "        foreach (var it in items) { it.Tag(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Each", "Item.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -290,10 +290,10 @@ TEST(cslsp_list_add_resolved) {
         "        xs.Add(1);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Build", "List.Add") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -308,11 +308,11 @@ TEST(cslsp_linq_extension) {
         "        return xs.Count();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* Dispatch should hit Enumerable.Count, an extension method. */
     ASSERT(require_resolved(r, "C.CountOdd", "Count") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -327,10 +327,10 @@ TEST(cslsp_property_chain) {
         "class C {\n"
         "    public void Go(Outer o) { o.I.Run(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Go", "Inner.Run") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -344,10 +344,10 @@ TEST(cslsp_auto_property_field) {
         "    public string Name { get; set; }\n"
         "    public string Lower() { return Name.ToLower(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Lower", "ToLower") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -365,12 +365,12 @@ TEST(cslsp_async_await) {
         "        s.Trim();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Loader.LoadAsync") >= 0);
     /* `s` is Task<string> awaited → string; s.Trim() resolves on String. */
     ASSERT(require_resolved(r, "C.Run", "Trim") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -384,10 +384,10 @@ TEST(cslsp_record_primary_ctor) {
         "class C {\n"
         "    public string Hello(Person p) { return p.Greet(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Hello", "Person.Greet") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -403,11 +403,11 @@ TEST(cslsp_pattern_is_type) {
         "        if (o is A a) { a.Tag(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* We don't require resolution here because `o is A a` declarator
      * binding isn't fully implemented. The test verifies no crash. */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -422,10 +422,10 @@ TEST(cslsp_cast) {
         "        a.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Go", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -440,10 +440,10 @@ TEST(cslsp_as_expression) {
         "        a.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Go", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -457,10 +457,10 @@ TEST(cslsp_generic_method) {
         "        return b.Get();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "Box.Get") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -474,10 +474,10 @@ TEST(cslsp_inherited_method_via_field) {
         "    Derived d;\n"
         "    public void Go() { d.Common(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Go", "Common") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -491,10 +491,10 @@ TEST(cslsp_nameof) {
         "        return s.ToLower();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "ToLower") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -508,11 +508,11 @@ TEST(cslsp_typeof) {
         "        return t.ToString();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* typeof returns System.Type; ToString resolves on Object/Type. */
     ASSERT(require_resolved(r, "C.Run", "ToString") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -525,10 +525,10 @@ TEST(cslsp_string_literal_method) {
         "        return \"hello\".ToUpper();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "ToUpper") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -540,12 +540,12 @@ TEST(cslsp_null_conditional) {
         "class C {\n"
         "    public void Go(A a) { a?.Tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* tree-sitter-c-sharp may emit ?. as conditional_access_expression;
      * resolution should still yield A.Tag. We don't strictly require it. */
     (void)r;
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -556,9 +556,9 @@ TEST(cslsp_tuple_expression) {
         "class C {\n"
         "    public (int, string) Pair() { return (1, \"x\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -568,11 +568,11 @@ TEST(cslsp_top_level_statements) {
     const char *src =
         "using System;\n"
         "Console.WriteLine(\"hi\");\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* Emission requires an enclosing func QN; we synth from module_qn. */
     (void)r;
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -585,10 +585,10 @@ TEST(cslsp_interface_dispatch) {
         "class C {\n"
         "    public void Use(IFoo f) { f.Tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -600,10 +600,10 @@ TEST(cslsp_enum_does_not_crash) {
         "class C {\n"
         "    public void Use() { var c = Color.Red; }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     (void)r;
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -618,10 +618,10 @@ TEST(cslsp_object_initializer) {
         "        return p.V();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Make", "P.V") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -636,10 +636,10 @@ TEST(cslsp_var_assigned_object) {
         "        a.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -658,11 +658,11 @@ TEST(cslsp_task_generic_unwrap) {
         "        s.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "A.GetAsync") >= 0);
     ASSERT(require_resolved(r, "C.Run", "S.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -675,10 +675,10 @@ TEST(cslsp_field_typed) {
         "    private A a;\n"
         "    public void Use() { a.Tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -690,10 +690,10 @@ TEST(cslsp_this_accessor) {
         "    public string V() { return \"v\"; }\n"
         "    public string Run() { return this.V(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "C.V") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -708,10 +708,10 @@ TEST(cslsp_conditional_expression) {
         "        a.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -724,10 +724,10 @@ TEST(cslsp_array_element_access) {
         "class C {\n"
         "    public void Use(List<A> xs) { xs[0].Tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -738,10 +738,10 @@ TEST(cslsp_predefined_int_parse) {
         "class C {\n"
         "    public int Run(string s) { return int.Parse(s); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Parse") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -758,10 +758,10 @@ TEST(cslsp_multi_usings) {
         "        return xs.Count();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Count") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -773,9 +773,9 @@ TEST(cslsp_indexer) {
         "    public string this[int i] { get { return \"\"; } }\n"
         "    public string Get(int i) { return this[i]; }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -791,11 +791,11 @@ TEST(cslsp_lambda_body) {
         "        return xs.Sum(x => x.Score());\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* Sum is the extension; we don't require the lambda body to resolve. */
     ASSERT(require_resolved(r, "C.Sum", "Sum") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -813,9 +813,9 @@ TEST(cslsp_switch_expression) {
         "        v.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -829,10 +829,10 @@ TEST(cslsp_struct_method) {
         "class C {\n"
         "    public int Use(Point p) { return p.Mag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "Point.Mag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -847,10 +847,10 @@ TEST(cslsp_dictionary) {
         "        d.Add(\"k\", 1);\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Use", "Dictionary.Add") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -862,10 +862,10 @@ TEST(cslsp_same_ns_lookup) {
         "    class Util { public static string Trim(string s) { return s; } }\n"
         "    class Cli { public string Go() { return Util.Trim(\"x\"); } }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Cli.Go", "Util.Trim") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -879,10 +879,10 @@ TEST(cslsp_inheritance_chain) {
         "class Caller {\n"
         "    public string Use(C c) { return c.Common(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "Caller.Use", "Common") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -894,10 +894,10 @@ TEST(cslsp_expression_bodied) {
         "class C {\n"
         "    public string Run(A a) => a.Tag();\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "A.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -908,14 +908,14 @@ TEST(cslsp_unresolved_returns_no_resolved) {
         "class C {\n"
         "    public void Run() { Mystery(\"x\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     /* No specific resolved call expected — Mystery isn't registered. */
     int idx = find_resolved(r, "C.Run", "Mystery");
     /* If it's resolved with a low-confidence fallback, that's OK; if not
      * resolved at all, also OK. We just confirm no crash. */
     (void)idx;
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -938,12 +938,12 @@ TEST(cslsp_quality_indicator) {
         "        p.V();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     int high = 0;
     int total_named = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
         if (!rc->callee_qn) continue;
         if (rc->confidence >= 0.9f) high++;
         total_named++;
@@ -951,7 +951,7 @@ TEST(cslsp_quality_indicator) {
     /* Expect resolutions for: s.V, xs.Add, Console.WriteLine, S.ctor, p.V → 5 */
     ASSERT(total_named >= 4);
     ASSERT(high >= 4); /* >= 80% high confidence */
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -965,11 +965,11 @@ TEST(cslsp_return_type_fallback) {
         "class C {\n"
         "    public void Run(A a) { a.GetB().Tag(); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "A.GetB") >= 0);
     ASSERT(require_resolved(r, "C.Run", "B.Tag") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -986,10 +986,10 @@ TEST(cslsp_multi_namespace_same_file) {
         "        public void Run(P p) { p.V(); }\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "P.V") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1003,9 +1003,9 @@ TEST(cslsp_local_function) {
         "        return Helper(\"x\");\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1017,10 +1017,10 @@ TEST(cslsp_params_smoke) {
         "    public void Sum(params int[] xs) { }\n"
         "    public void Run() { Sum(1, 2, 3); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "C.Sum") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1032,10 +1032,10 @@ TEST(cslsp_ref_out_param) {
         "    public bool TryGet(string key, out string value) { value = \"\"; return true; }\n"
         "    public void Run() { string v; TryGet(\"k\", out v); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "C.TryGet") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1047,10 +1047,10 @@ TEST(cslsp_global_using_smoke) {
         "class C {\n"
         "    public void Run() { Console.WriteLine(\"hi\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Console.WriteLine") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1068,14 +1068,14 @@ TEST(cslsp_strategy_distribution) {
         "        s2.Tag();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     int typed = count_resolved_with_strategy(r, "cs_method_typed");
     int statics = count_resolved_with_strategy(r, "cs_static_typed");
     /* At least one of each. */
     ASSERT(typed >= 1);
     ASSERT(statics >= 1);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1087,10 +1087,10 @@ TEST(cslsp_using_static_console) {
         "class C {\n"
         "    public void Run() { WriteLine(\"hi\"); }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "Console.WriteLine") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1105,10 +1105,10 @@ TEST(cslsp_stringbuilder_chain) {
         "        return sb.Append(\"a\").Append(\"b\").ToString();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Build", "StringBuilder.Append") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1124,11 +1124,11 @@ TEST(cslsp_httpclient_chain) {
         "        return s.Trim();\n"
         "    }\n"
         "}\n";
-    CBMFileResult *r = extract_cs(src);
+    LSMFileResult *r = extract_cs(src);
     ASSERT(r);
     ASSERT(require_resolved(r, "C.Run", "HttpClient.GetStringAsync") >= 0);
     ASSERT(require_resolved(r, "C.Run", "Trim") >= 0);
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 
@@ -1157,15 +1157,15 @@ TEST(cslsp_ordinary_same_leaf_calls_join_by_exact_site) {
     const uint32_t beta_start = (uint32_t)(beta_site - source);
     const uint32_t beta_end = beta_start + (uint32_t)strlen(beta_text);
 
-    CBMFileResult *r = extract_cs(source);
+    LSMFileResult *r = extract_cs(source);
     ASSERT_NOT_NULL(r);
 
-    const CBMCall *alpha_call = NULL;
-    const CBMCall *beta_call = NULL;
+    const LSMCall *alpha_call = NULL;
+    const LSMCall *beta_call = NULL;
     int render_carriers = 0;
     int zero_span_carriers = 0;
     for (int i = 0; i < r->calls.count; i++) {
-        const CBMCall *call = &r->calls.items[i];
+        const LSMCall *call = &r->calls.items[i];
         if (!call->enclosing_func_qn || !strstr(call->enclosing_func_qn, "OccurrenceProbe.Run") ||
             !call->callee_name || !strstr(call->callee_name, "Render")) {
             continue;
@@ -1185,13 +1185,13 @@ TEST(cslsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_NOT_NULL(beta_call);
     ASSERT_TRUE(alpha_call != beta_call);
 
-    const CBMResolvedCall *alpha_semantic = NULL;
-    const CBMResolvedCall *beta_semantic = NULL;
+    const LSMResolvedCall *alpha_semantic = NULL;
+    const LSMResolvedCall *beta_semantic = NULL;
     int render_semantics = 0;
     int zero_span_hijackers = 0;
     for (int i = 0; i < r->resolved_calls.count; i++) {
-        const CBMResolvedCall *rc = &r->resolved_calls.items[i];
-        if (rc->kind != CBM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
+        const LSMResolvedCall *rc = &r->resolved_calls.items[i];
+        if (rc->kind != LSM_RESOLVED_INVOCATION || rc->confidence <= 0.0f || !rc->caller_qn ||
             !strstr(rc->caller_qn, "OccurrenceProbe.Run") || !rc->callee_qn ||
             !strstr(rc->callee_qn, ".Render")) {
             continue;
@@ -1215,14 +1215,14 @@ TEST(cslsp_ordinary_same_leaf_calls_join_by_exact_site) {
     ASSERT_NOT_NULL(beta_semantic);
     ASSERT_TRUE(alpha_semantic != beta_semantic);
 
-    const CBMResolvedCall *alpha_join =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, alpha_call, false);
-    const CBMResolvedCall *beta_join =
-        cbm_pipeline_find_lsp_resolution(&r->resolved_calls, beta_call, false);
+    const LSMResolvedCall *alpha_join =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, alpha_call, false);
+    const LSMResolvedCall *beta_join =
+        lsm_pipeline_find_lsp_resolution(&r->resolved_calls, beta_call, false);
     ASSERT_TRUE(alpha_join == alpha_semantic);
     ASSERT_TRUE(beta_join == beta_semantic);
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

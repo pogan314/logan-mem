@@ -9,7 +9,7 @@
 #include <sys/types.h>
 #include <sys/acl.h>
 
-bool cbm_macos_extended_acl_fd_is_empty(int fd) {
+bool lsm_macos_extended_acl_fd_is_empty(int fd) {
     if (fd < 0) {
         return false;
     }
@@ -34,7 +34,7 @@ bool cbm_macos_extended_acl_fd_is_empty(int fd) {
     return entry_result == -1 && entry_error == EINVAL && free_result == 0;
 }
 
-bool cbm_macos_extended_acl_fd_is_deny_only(int fd) {
+bool lsm_macos_extended_acl_fd_is_deny_only(int fd) {
     if (fd < 0) {
         return false;
     }
@@ -74,7 +74,7 @@ bool cbm_macos_extended_acl_fd_is_deny_only(int fd) {
     return safe && free_result == 0;
 }
 
-bool cbm_macos_extended_acl_fd_clear(int fd) {
+bool lsm_macos_extended_acl_fd_clear(int fd) {
     if (fd < 0) {
         return false;
     }
@@ -84,20 +84,20 @@ bool cbm_macos_extended_acl_fd_clear(int fd) {
     }
     bool cleared = acl_set_fd_np(fd, empty, ACL_TYPE_EXTENDED) == 0;
     bool freed = acl_free(empty) == 0;
-    return cleared && freed && cbm_macos_extended_acl_fd_is_empty(fd);
+    return cleared && freed && lsm_macos_extended_acl_fd_is_empty(fd);
 }
 
 #else
 
-bool cbm_macos_extended_acl_fd_is_empty(int fd) {
+bool lsm_macos_extended_acl_fd_is_empty(int fd) {
     return fd >= 0;
 }
 
-bool cbm_macos_extended_acl_fd_is_deny_only(int fd) {
+bool lsm_macos_extended_acl_fd_is_deny_only(int fd) {
     return fd >= 0;
 }
 
-bool cbm_macos_extended_acl_fd_clear(int fd) {
+bool lsm_macos_extended_acl_fd_clear(int fd) {
     return fd >= 0;
 }
 

@@ -4,35 +4,35 @@
  *
  * One TEST() per language so per-language RED/GREEN shows on the bug-repro
  * board. Each test runs a battery adapted to what the language actually models,
- * read directly from internal/cbm/lang_specs.c (the func/class/field/call type
- * arrays per CBM_LANG_*). The dimensions applied per language are documented in
+ * read directly from internal/lsm/lang_specs.c (the func/class/field/call type
+ * arrays per LSM_LANG_*). The dimensions applied per language are documented in
  * the per-TEST comment.
  *
- * Languages covered (19) and the CBM_LANG_* enum each uses (all verified present
- * in internal/cbm/cbm.h):
- *   BASH       -> CBM_LANG_BASH        (callable: func + call)
- *   ZSH        -> CBM_LANG_ZSH         (callable: func + call)
- *   FISH       -> CBM_LANG_FISH        (callable: func + call)
- *   POWERSHELL -> CBM_LANG_POWERSHELL  (callable: func + class + call)
- *   TCL        -> CBM_LANG_TCL         (callable: func + class + call)
- *   AWK        -> CBM_LANG_AWK         (callable: func + call)
- *   VIMSCRIPT  -> CBM_LANG_VIMSCRIPT   (callable: func + call)
- *   FENNEL     -> CBM_LANG_FENNEL      (callable: func + call, lisp)
- *   NIX        -> CBM_LANG_NIX         (callable: func + call)
- *   GDSCRIPT   -> CBM_LANG_GDSCRIPT    (callable: func + class + call)
- *   LUAU       -> CBM_LANG_LUAU        (callable: func + class + call)
- *   TEAL       -> CBM_LANG_TEAL        (callable: func + class + call)
- *   LLVM_IR    -> CBM_LANG_LLVM_IR     (callable: func + call)
- *   NASM       -> CBM_LANG_NASM        (callable: func(label) + call)
- *   JANET      -> CBM_LANG_JANET       (STRUCTURAL ONLY: spec has only module_types)
- *   SMALI      -> CBM_LANG_SMALI       (structural-with-defs: func/class/field, NO calls)
- *   DEVICETREE -> CBM_LANG_DEVICETREE  (structural: call_types but NO func anchor)
- *   KCONFIG    -> CBM_LANG_KCONFIG     (structural-with-defs: class_types, NO calls)
- *   HYPRLANG   -> CBM_LANG_HYPRLANG    (pure structural: only module_types)
+ * Languages covered (19) and the LSM_LANG_* enum each uses (all verified present
+ * in internal/lsm/lsm.h):
+ *   BASH       -> LSM_LANG_BASH        (callable: func + call)
+ *   ZSH        -> LSM_LANG_ZSH         (callable: func + call)
+ *   FISH       -> LSM_LANG_FISH        (callable: func + call)
+ *   POWERSHELL -> LSM_LANG_POWERSHELL  (callable: func + class + call)
+ *   TCL        -> LSM_LANG_TCL         (callable: func + class + call)
+ *   AWK        -> LSM_LANG_AWK         (callable: func + call)
+ *   VIMSCRIPT  -> LSM_LANG_VIMSCRIPT   (callable: func + call)
+ *   FENNEL     -> LSM_LANG_FENNEL      (callable: func + call, lisp)
+ *   NIX        -> LSM_LANG_NIX         (callable: func + call)
+ *   GDSCRIPT   -> LSM_LANG_GDSCRIPT    (callable: func + class + call)
+ *   LUAU       -> LSM_LANG_LUAU        (callable: func + class + call)
+ *   TEAL       -> LSM_LANG_TEAL        (callable: func + class + call)
+ *   LLVM_IR    -> LSM_LANG_LLVM_IR     (callable: func + call)
+ *   NASM       -> LSM_LANG_NASM        (callable: func(label) + call)
+ *   JANET      -> LSM_LANG_JANET       (STRUCTURAL ONLY: spec has only module_types)
+ *   SMALI      -> LSM_LANG_SMALI       (structural-with-defs: func/class/field, NO calls)
+ *   DEVICETREE -> LSM_LANG_DEVICETREE  (structural: call_types but NO func anchor)
+ *   KCONFIG    -> LSM_LANG_KCONFIG     (structural-with-defs: class_types, NO calls)
+ *   HYPRLANG   -> LSM_LANG_HYPRLANG    (pure structural: only module_types)
  *
- * No language in this set was skipped; every CBM_LANG_* above is defined in cbm.h.
+ * No language in this set was skipped; every LSM_LANG_* above is defined in lsm.h.
  *
- * SPEC-DRIVEN CLASSIFICATION (from internal/cbm/lang_specs.c)
+ * SPEC-DRIVEN CLASSIFICATION (from internal/lsm/lang_specs.c)
  * ----------------------------------------------------------
  * CALLABLES (func_types AND call_types both non-empty -> full battery + pipeline):
  *   BASH       func=function_definition         call=command
@@ -62,7 +62,7 @@
  *
  * BATTERY DIMENSIONS (identical semantics to repro_grammar_core.c /
  * repro_grammar_config.c -- shared helpers reused via repro_invariant_lib.h):
- * SINGLE-FILE (cbm_extract_file):
+ * SINGLE-FILE (lsm_extract_file):
  *   1. extract-clean    : inv_extract_clean == 1 (non-NULL, has_error unset).
  *   2. labels-valid     : inv_count_bad_labels == 0.
  *   3. fqn-wellformed   : inv_count_bad_fqns == 0.
@@ -74,13 +74,13 @@
  *                          (callables only).
  *   8. no-dangling       : inv_count_dangling_edges("CALLS") == 0 (with dim 7).
  * ROBUSTNESS (every language):
- *   R. extract-on-malformed: cbm_extract_file on a truncated/broken fixture must
+ *   R. extract-on-malformed: lsm_extract_file on a truncated/broken fixture must
  *      RETURN non-NULL (has_error may be set). A NULL return means the extractor
  *      crashed/aborted on bad input -- a RED robustness bug.
  *
  * KNOWN GAP -> dim-7 RED PREDICTIONS (the point of this file).
- * The enclosing-func walk cbm_find_enclosing_func() uses func_kinds_for_lang()
- * in internal/cbm/helpers.c. In that switch ONLY CBM_LANG_BASH has a dedicated
+ * The enclosing-func walk lsm_find_enclosing_func() uses func_kinds_for_lang()
+ * in internal/lsm/helpers.c. In that switch ONLY LSM_LANG_BASH has a dedicated
  * kind list (func_kinds_bash = {"function_definition"}); every other language in
  * this set falls through to func_kinds_generic =
  *   {"function_declaration","function_definition","method_declaration","method_definition"}.
@@ -126,7 +126,7 @@
  * Four core invariants on valid input, no defs/calls assertions. Used for the
  * structural-only languages (JANET, DEVICETREE, HYPRLANG). Returns 0 on PASS.
  */
-static int sh_base_battery(const char *lang_tag, const char *src, CBMLanguage lang,
+static int sh_base_battery(const char *lang_tag, const char *src, LSMLanguage lang,
                            const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
@@ -138,7 +138,7 @@ static int sh_base_battery(const char *lang_tag, const char *src, CBMLanguage la
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -171,7 +171,7 @@ static int sh_base_battery(const char *lang_tag, const char *src, CBMLanguage la
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -181,7 +181,7 @@ static int sh_base_battery(const char *lang_tag, const char *src, CBMLanguage la
  * Pass NULL for expect_label2/expect_label3 when fewer labels are needed.
  * Returns 0 on PASS.
  */
-static int sh_struct_battery(const char *lang_tag, const char *src, CBMLanguage lang,
+static int sh_struct_battery(const char *lang_tag, const char *src, LSMLanguage lang,
                              const char *file, const char *expect_label,
                              const char *expect_label2, const char *expect_label3) {
     const char *RED = tf_red();
@@ -193,7 +193,7 @@ static int sh_struct_battery(const char *lang_tag, const char *src, CBMLanguage 
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -240,7 +240,7 @@ static int sh_struct_battery(const char *lang_tag, const char *src, CBMLanguage 
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -250,7 +250,7 @@ static int sh_struct_battery(const char *lang_tag, const char *src, CBMLanguage 
  * invariants. Used for the callable shells/scripting languages. Pass NULL for
  * expect_label when no def label is asserted alongside the call. Returns 0 on PASS.
  */
-static int sh_callable_battery(const char *lang_tag, const char *src, CBMLanguage lang,
+static int sh_callable_battery(const char *lang_tag, const char *src, LSMLanguage lang,
                                const char *file, const char *expect_label,
                                const char *expect_label2, const char *callee) {
     const char *RED = tf_red();
@@ -262,7 +262,7 @@ static int sh_callable_battery(const char *lang_tag, const char *src, CBMLanguag
         return 1;
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -311,7 +311,7 @@ static int sh_callable_battery(const char *lang_tag, const char *src, CBMLanguag
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -333,7 +333,7 @@ static int sh_pipeline_battery(const char *lang_tag, const char *filename, const
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -373,24 +373,24 @@ static int sh_pipeline_battery(const char *lang_tag, const char *filename, const
 
 /* ── Robustness helper: assert call RETURNS on malformed input ──────────────
  *
- * A truncated version of the fixture is passed through cbm_extract_file.
+ * A truncated version of the fixture is passed through lsm_extract_file.
  * has_error may be set (1) but the call must return non-NULL. A NULL return
  * means the extractor crashed or aborted on bad input -- a RED robustness bug.
  * Returns 0 on PASS.
  */
-static int sh_robustness(const char *lang_tag, const char *bad_src, CBMLanguage lang,
+static int sh_robustness(const char *lang_tag, const char *bad_src, LSMLanguage lang,
                          const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
-    CBMFileResult *r =
-        cbm_extract_file(bad_src, (int)strlen(bad_src), lang, "t", file, 0, NULL, NULL);
+    LSMFileResult *r =
+        lsm_extract_file(bad_src, (int)strlen(bad_src), lang, "t", file, 0, NULL, NULL);
     if (!r) {
         printf("  %sFAIL%s  [%s] robustness: extractor returned NULL on malformed input\n",
                RED, RST, lang_tag);
         return 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 
@@ -417,10 +417,10 @@ TEST(repro_grammar_shells_bash) {
         "    compute_inner \"$1\"\n"
         "}\n";
     static const char bad[] = "compute_outer() {\n    compute_inner \"$1\"";
-    if (sh_callable_battery("BASH", src, CBM_LANG_BASH, "run.sh",
+    if (sh_callable_battery("BASH", src, LSM_LANG_BASH, "run.sh",
                             "Function", NULL, "compute_inner") != 0)
         return 1;
-    if (sh_robustness("BASH", bad, CBM_LANG_BASH, "run.sh") != 0)
+    if (sh_robustness("BASH", bad, LSM_LANG_BASH, "run.sh") != 0)
         return 1;
     return sh_pipeline_battery("BASH", "run.sh", src);
 }
@@ -444,10 +444,10 @@ TEST(repro_grammar_shells_zsh) {
         "    inner_fn \"$1\"\n"
         "}\n";
     static const char bad[] = "outer_fn() {\n    inner_fn \"$1\"";
-    if (sh_callable_battery("ZSH", src, CBM_LANG_ZSH, "run.zsh",
+    if (sh_callable_battery("ZSH", src, LSM_LANG_ZSH, "run.zsh",
                             "Function", NULL, "inner_fn") != 0)
         return 1;
-    if (sh_robustness("ZSH", bad, CBM_LANG_ZSH, "run.zsh") != 0)
+    if (sh_robustness("ZSH", bad, LSM_LANG_ZSH, "run.zsh") != 0)
         return 1;
     return sh_pipeline_battery("ZSH", "run.zsh", src);
 }
@@ -470,10 +470,10 @@ TEST(repro_grammar_shells_fish) {
         "    inner_fn $argv[1]\n"
         "end\n";
     static const char bad[] = "function outer_fn\n    inner_fn $argv[1]";
-    if (sh_callable_battery("FISH", src, CBM_LANG_FISH, "run.fish",
+    if (sh_callable_battery("FISH", src, LSM_LANG_FISH, "run.fish",
                             "Function", NULL, "inner_fn") != 0)
         return 1;
-    if (sh_robustness("FISH", bad, CBM_LANG_FISH, "run.fish") != 0)
+    if (sh_robustness("FISH", bad, LSM_LANG_FISH, "run.fish") != 0)
         return 1;
     return sh_pipeline_battery("FISH", "run.fish", src);
 }
@@ -500,10 +500,10 @@ TEST(repro_grammar_shells_powershell) {
         "    return Get-Inner -x $x\n"
         "}\n";
     static const char bad[] = "function Get-Outer {\n    param([int]$x)\n    return Get-Inner";
-    if (sh_callable_battery("PowerShell", src, CBM_LANG_POWERSHELL, "run.ps1",
+    if (sh_callable_battery("PowerShell", src, LSM_LANG_POWERSHELL, "run.ps1",
                             "Function", NULL, "Get-Inner") != 0)
         return 1;
-    if (sh_robustness("PowerShell", bad, CBM_LANG_POWERSHELL, "run.ps1") != 0)
+    if (sh_robustness("PowerShell", bad, LSM_LANG_POWERSHELL, "run.ps1") != 0)
         return 1;
     return sh_pipeline_battery("PowerShell", "run.ps1", src);
 }
@@ -528,10 +528,10 @@ TEST(repro_grammar_shells_tcl) {
         "    return [inner_proc $x]\n"
         "}\n";
     static const char bad[] = "proc outer_proc {x} {\n    return [inner_proc $x]";
-    if (sh_callable_battery("TCL", src, CBM_LANG_TCL, "run.tcl",
+    if (sh_callable_battery("TCL", src, LSM_LANG_TCL, "run.tcl",
                             "Function", NULL, "inner_proc") != 0)
         return 1;
-    if (sh_robustness("TCL", bad, CBM_LANG_TCL, "run.tcl") != 0)
+    if (sh_robustness("TCL", bad, LSM_LANG_TCL, "run.tcl") != 0)
         return 1;
     return sh_pipeline_battery("TCL", "run.tcl", src);
 }
@@ -561,10 +561,10 @@ TEST(repro_grammar_shells_awk) {
         "    answer = 1\n"
         "}\n";
     static const char bad[] = "function inner(x) {\n    return x +";
-    if (sh_callable_battery("AWK", src, CBM_LANG_AWK, "prog.awk",
+    if (sh_callable_battery("AWK", src, LSM_LANG_AWK, "prog.awk",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("AWK", bad, CBM_LANG_AWK, "prog.awk") != 0)
+    if (sh_robustness("AWK", bad, LSM_LANG_AWK, "prog.awk") != 0)
         return 1;
     return sh_pipeline_battery("AWK", "prog.awk", src);
 }
@@ -588,10 +588,10 @@ TEST(repro_grammar_shells_vimscript) {
         "    return Inner(a:x)\n"
         "endfunction\n";
     static const char bad[] = "function! Outer(x)\n    return Inner(a:x)";
-    if (sh_callable_battery("VimScript", src, CBM_LANG_VIMSCRIPT, "plugin.vim",
+    if (sh_callable_battery("VimScript", src, LSM_LANG_VIMSCRIPT, "plugin.vim",
                             "Function", NULL, "Inner") != 0)
         return 1;
-    if (sh_robustness("VimScript", bad, CBM_LANG_VIMSCRIPT, "plugin.vim") != 0)
+    if (sh_robustness("VimScript", bad, LSM_LANG_VIMSCRIPT, "plugin.vim") != 0)
         return 1;
     return sh_pipeline_battery("VimScript", "plugin.vim", src);
 }
@@ -614,10 +614,10 @@ TEST(repro_grammar_shells_fennel) {
         "(fn outer [x]\n"
         "  (inner x))\n";
     static const char bad[] = "(fn outer [x]\n  (inner x";
-    if (sh_callable_battery("Fennel", src, CBM_LANG_FENNEL, "init.fnl",
+    if (sh_callable_battery("Fennel", src, LSM_LANG_FENNEL, "init.fnl",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("Fennel", bad, CBM_LANG_FENNEL, "init.fnl") != 0)
+    if (sh_robustness("Fennel", bad, LSM_LANG_FENNEL, "init.fnl") != 0)
         return 1;
     return sh_pipeline_battery("Fennel", "init.fnl", src);
 }
@@ -648,10 +648,10 @@ TEST(repro_grammar_shells_nix) {
         "in\n"
         "  compute 41\n";
     static const char bad[] = "let\n  addOne = x: x +";
-    if (sh_callable_battery("Nix", src, CBM_LANG_NIX, "default.nix",
+    if (sh_callable_battery("Nix", src, LSM_LANG_NIX, "default.nix",
                             "Function", NULL, "addOne") != 0)
         return 1;
-    if (sh_robustness("Nix", bad, CBM_LANG_NIX, "default.nix") != 0)
+    if (sh_robustness("Nix", bad, LSM_LANG_NIX, "default.nix") != 0)
         return 1;
     return sh_pipeline_battery("Nix", "default.nix", src);
 }
@@ -677,10 +677,10 @@ TEST(repro_grammar_shells_gdscript) {
         "func compute(x):\n"
         "    return _inner(x)\n";
     static const char bad[] = "func compute(x):\n    return _inner(";
-    if (sh_callable_battery("GDScript", src, CBM_LANG_GDSCRIPT, "calc.gd",
+    if (sh_callable_battery("GDScript", src, LSM_LANG_GDSCRIPT, "calc.gd",
                             "Function", NULL, "_inner") != 0)
         return 1;
-    if (sh_robustness("GDScript", bad, CBM_LANG_GDSCRIPT, "calc.gd") != 0)
+    if (sh_robustness("GDScript", bad, LSM_LANG_GDSCRIPT, "calc.gd") != 0)
         return 1;
     return sh_pipeline_battery("GDScript", "calc.gd", src);
 }
@@ -704,10 +704,10 @@ TEST(repro_grammar_shells_luau) {
         "    return inner(x)\n"
         "end\n";
     static const char bad[] = "local function outer(x: number): number\n    return inner(";
-    if (sh_callable_battery("Luau", src, CBM_LANG_LUAU, "mod.luau",
+    if (sh_callable_battery("Luau", src, LSM_LANG_LUAU, "mod.luau",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("Luau", bad, CBM_LANG_LUAU, "mod.luau") != 0)
+    if (sh_robustness("Luau", bad, LSM_LANG_LUAU, "mod.luau") != 0)
         return 1;
     return sh_pipeline_battery("Luau", "mod.luau", src);
 }
@@ -737,10 +737,10 @@ TEST(repro_grammar_shells_teal) {
         "    return inner(x)\n"
         "end\n";
     static const char bad[] = "local function outer(x: number): number\n    return inner(";
-    if (sh_callable_battery("Teal", src, CBM_LANG_TEAL, "mod.tl",
+    if (sh_callable_battery("Teal", src, LSM_LANG_TEAL, "mod.tl",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("Teal", bad, CBM_LANG_TEAL, "mod.tl") != 0)
+    if (sh_robustness("Teal", bad, LSM_LANG_TEAL, "mod.tl") != 0)
         return 1;
     return sh_pipeline_battery("Teal", "mod.tl", src);
 }
@@ -778,10 +778,10 @@ TEST(repro_grammar_shells_llvm_ir) {
         "  ret i32 %c\n"
         "}\n";
     static const char bad[] = "define i32 @outer(i32 %x) {\nentry:\n  %c = call i32 @inner(";
-    if (sh_callable_battery("LLVM-IR", src, CBM_LANG_LLVM_IR, "mod.ll",
+    if (sh_callable_battery("LLVM-IR", src, LSM_LANG_LLVM_IR, "mod.ll",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("LLVM-IR", bad, CBM_LANG_LLVM_IR, "mod.ll") != 0)
+    if (sh_robustness("LLVM-IR", bad, LSM_LANG_LLVM_IR, "mod.ll") != 0)
         return 1;
     return sh_pipeline_battery("LLVM-IR", "mod.ll", src);
 }
@@ -817,16 +817,16 @@ TEST(repro_grammar_shells_nasm) {
         "    call inner\n"
         "    ret\n";
     static const char bad[] = "section .text\nouter:\n    call ";
-    if (sh_callable_battery("NASM", src, CBM_LANG_NASM, "prog.asm",
+    if (sh_callable_battery("NASM", src, LSM_LANG_NASM, "prog.asm",
                             "Function", NULL, "inner") != 0)
         return 1;
-    if (sh_robustness("NASM", bad, CBM_LANG_NASM, "prog.asm") != 0)
+    if (sh_robustness("NASM", bad, LSM_LANG_NASM, "prog.asm") != 0)
         return 1;
     return sh_pipeline_battery("NASM", "prog.asm", src);
 }
 
 /* ── JANET (structural only) ──────────────────────────────────────────────────
- * Idiomatic Janet with a defn and a call. spec entry CBM_LANG_JANET maps ONLY
+ * Idiomatic Janet with a defn and a call. spec entry LSM_LANG_JANET maps ONLY
  * module_types=source; func/class/field/var/call are all empty_types. So NO defs
  * and NO calls are extracted from the grammar tree regardless of source content.
  *
@@ -847,9 +847,9 @@ TEST(repro_grammar_shells_janet) {
         "\n"
         "(print (outer 41))\n";
     static const char bad[] = "(defn outer [x]\n  (inner x";
-    if (sh_base_battery("Janet", src, CBM_LANG_JANET, "init.janet") != 0)
+    if (sh_base_battery("Janet", src, LSM_LANG_JANET, "init.janet") != 0)
         return 1;
-    return sh_robustness("Janet", bad, CBM_LANG_JANET, "init.janet");
+    return sh_robustness("Janet", bad, LSM_LANG_JANET, "init.janet");
 }
 
 /* ── SMALI (structural with defs, no calls) ───────────────────────────────────
@@ -876,10 +876,10 @@ TEST(repro_grammar_shells_smali) {
         "    return v0\n"
         ".end method\n";
     static const char bad[] = ".class public LCalculator;\n.method public compute(I)I\n    .registers";
-    if (sh_struct_battery("Smali", src, CBM_LANG_SMALI, "Calculator.smali",
+    if (sh_struct_battery("Smali", src, LSM_LANG_SMALI, "Calculator.smali",
                           "Class", "Function", "Field") != 0)
         return 1;
-    return sh_robustness("Smali", bad, CBM_LANG_SMALI, "Calculator.smali");
+    return sh_robustness("Smali", bad, LSM_LANG_SMALI, "Calculator.smali");
 }
 
 /* ── DEVICETREE (structural) ──────────────────────────────────────────────────
@@ -914,9 +914,9 @@ TEST(repro_grammar_shells_devicetree) {
         "    };\n"
         "};\n";
     static const char bad[] = "/dts-v1/;\n/ {\n    soc {\n        uart0: serial@101f1000 {";
-    if (sh_base_battery("DeviceTree", src, CBM_LANG_DEVICETREE, "board.dts") != 0)
+    if (sh_base_battery("DeviceTree", src, LSM_LANG_DEVICETREE, "board.dts") != 0)
         return 1;
-    return sh_robustness("DeviceTree", bad, CBM_LANG_DEVICETREE, "board.dts");
+    return sh_robustness("DeviceTree", bad, LSM_LANG_DEVICETREE, "board.dts");
 }
 
 /* ── KCONFIG (structural with defs, no calls) ─────────────────────────────────
@@ -941,15 +941,15 @@ TEST(repro_grammar_shells_kconfig) {
         "    depends on NETWORKING\n"
         "    default n\n";
     static const char bad[] = "config NET_IPV6\n    bool \"IPv6 support\"\n    depends on";
-    if (sh_struct_battery("Kconfig", src, CBM_LANG_KCONFIG, "Kconfig",
+    if (sh_struct_battery("Kconfig", src, LSM_LANG_KCONFIG, "Kconfig",
                           "Class", NULL, NULL) != 0)
         return 1;
-    return sh_robustness("Kconfig", bad, CBM_LANG_KCONFIG, "Kconfig");
+    return sh_robustness("Kconfig", bad, LSM_LANG_KCONFIG, "Kconfig");
 }
 
 /* ── HYPRLANG (pure structural) ───────────────────────────────────────────────
  * Idiomatic Hyprland config with sections and key=value assignments. spec entry
- * CBM_LANG_HYPRLANG maps ONLY module_types=source_file; every other type array
+ * LSM_LANG_HYPRLANG maps ONLY module_types=source_file; every other type array
  * is empty_types. No defs or calls are extracted.
  *
  * Dims asserted: 1-4 + R.
@@ -975,9 +975,9 @@ TEST(repro_grammar_shells_hyprlang) {
         "    }\n"
         "}\n";
     static const char bad[] = "general {\n    gaps_in = 5\n    blur {";
-    if (sh_base_battery("Hyprlang", src, CBM_LANG_HYPRLANG, "hyprland.conf") != 0)
+    if (sh_base_battery("Hyprlang", src, LSM_LANG_HYPRLANG, "hyprland.conf") != 0)
         return 1;
-    return sh_robustness("Hyprlang", bad, CBM_LANG_HYPRLANG, "hyprland.conf");
+    return sh_robustness("Hyprlang", bad, LSM_LANG_HYPRLANG, "hyprland.conf");
 }
 
 /* ── Suite ──────────────────────────────────────────────────────────────────── */

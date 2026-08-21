@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <string.h>
 
-size_t repro_call_argument_matrix_a_copy_language_ids(CBMLanguage *language_ids, size_t capacity);
+size_t repro_call_argument_matrix_a_copy_language_ids(LSMLanguage *language_ids, size_t capacity);
 
 typedef enum {
     MATRIX_SEMANTIC,
@@ -35,7 +35,7 @@ typedef enum {
 
 typedef struct {
     const char *tag;
-    CBMLanguage language;
+    LSMLanguage language;
     const char *filename;
     const char *source;
     MatrixMode mode;
@@ -95,10 +95,10 @@ static const char *short_call_name(const char *name) {
     return short_name;
 }
 
-static int definition_count(const CBMFileResult *result, const char *name) {
+static int definition_count(const LSMFileResult *result, const char *name) {
     int count = 0;
     for (int i = 0; i < result->defs.count; i++) {
-        const CBMDefinition *definition = &result->defs.items[i];
+        const LSMDefinition *definition = &result->defs.items[i];
         int callable = definition->label && (strcmp(definition->label, "Function") == 0 ||
                                              strcmp(definition->label, "Method") == 0);
         if (callable && definition->name && strcmp(definition->name, name) == 0)
@@ -107,10 +107,10 @@ static int definition_count(const CBMFileResult *result, const char *name) {
     return count;
 }
 
-static int call_count(const CBMFileResult *result, const char *caller, const char *target) {
+static int call_count(const LSMFileResult *result, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < result->calls.count; i++) {
-        const CBMCall *call = &result->calls.items[i];
+        const LSMCall *call = &result->calls.items[i];
         const char *callee = short_call_name(call->callee_name);
         if (callee && strcmp(callee, target) == 0 &&
             (!caller || qn_has_terminal_name(call->enclosing_func_qn, caller))) {
@@ -120,18 +120,18 @@ static int call_count(const CBMFileResult *result, const char *caller, const cha
     return count;
 }
 
-static int usage_within_call_count(const CBMFileResult *result, const char *caller,
+static int usage_within_call_count(const LSMFileResult *result, const char *caller,
                                    const char *value, const char *callee) {
     int count = 0;
     for (int u = 0; u < result->usages.count; u++) {
-        const CBMUsage *usage = &result->usages.items[u];
+        const LSMUsage *usage = &result->usages.items[u];
         if (!usage->ref_name || strcmp(usage->ref_name, value) != 0 ||
             !qn_has_terminal_name(usage->enclosing_func_qn, caller) ||
             usage->site_end_byte <= usage->site_start_byte) {
             continue;
         }
         for (int c = 0; c < result->calls.count; c++) {
-            const CBMCall *call = &result->calls.items[c];
+            const LSMCall *call = &result->calls.items[c];
             const char *call_name = short_call_name(call->callee_name);
             if (!call_name || strcmp(call_name, callee) != 0 ||
                 !qn_has_terminal_name(call->enclosing_func_qn, caller) ||
@@ -148,10 +148,10 @@ static int usage_within_call_count(const CBMFileResult *result, const char *call
     return count;
 }
 
-static int usage_count(const CBMFileResult *result, const char *caller, const char *target) {
+static int usage_count(const LSMFileResult *result, const char *caller, const char *target) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
+        const LSMUsage *usage = &result->usages.items[i];
         if (usage->ref_name && strcmp(usage->ref_name, target) == 0 &&
             (!caller || qn_has_terminal_name(usage->enclosing_func_qn, caller))) {
             count++;
@@ -160,11 +160,11 @@ static int usage_count(const CBMFileResult *result, const char *caller, const ch
     return count;
 }
 
-static int usage_kind_count(const CBMFileResult *result, const char *caller, const char *target,
-                            CBMUsageKind kind) {
+static int usage_kind_count(const LSMFileResult *result, const char *caller, const char *target,
+                            LSMUsageKind kind) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
+        const LSMUsage *usage = &result->usages.items[i];
         if (usage->kind == kind && usage->ref_name && strcmp(usage->ref_name, target) == 0 &&
             (!caller || qn_has_terminal_name(usage->enclosing_func_qn, caller))) {
             count++;
@@ -173,12 +173,12 @@ static int usage_kind_count(const CBMFileResult *result, const char *caller, con
     return count;
 }
 
-static int local_shadow_usage_count(const CBMFileResult *result, const char *caller,
+static int local_shadow_usage_count(const LSMFileResult *result, const char *caller,
                                     const char *target) {
     int count = 0;
     for (int i = 0; i < result->usages.count; i++) {
-        const CBMUsage *usage = &result->usages.items[i];
-        if (usage->kind == CBM_USAGE_VALUE && usage->semantic_reference_blocked &&
+        const LSMUsage *usage = &result->usages.items[i];
+        if (usage->kind == LSM_USAGE_VALUE && usage->semantic_reference_blocked &&
             usage->semantic_reference_local_shadow && usage->ref_name &&
             strcmp(usage->ref_name, target) == 0 &&
             (!caller || qn_has_terminal_name(usage->enclosing_func_qn, caller))) {
@@ -226,7 +226,7 @@ static int check_ast_contract(const MatrixCase *matrix_case, const char *source,
                               const char *secondary_kind, const char *secondary_text,
                               int secondary_expected, const char *secondary_invariant) {
     int failures = 0;
-    const TSLanguage *language = cbm_ts_language(matrix_case->language);
+    const TSLanguage *language = lsm_ts_language(matrix_case->language);
     TSParser *parser = ts_parser_new();
     if (!language || !parser || !ts_parser_set_language(parser, language)) {
         fprintf(stderr,
@@ -291,9 +291,9 @@ static int check_ast_contract(const MatrixCase *matrix_case, const char *source,
         }                                                                                     \
     } while (0)
 
-static CBMFileResult *extract_matrix_source(const MatrixCase *matrix_case, const char *source,
+static LSMFileResult *extract_matrix_source(const MatrixCase *matrix_case, const char *source,
                                             const char *filename, const char *phase) {
-    CBMFileResult *result = cbm_extract_file(source, (int)strlen(source), matrix_case->language,
+    LSMFileResult *result = lsm_extract_file(source, (int)strlen(source), matrix_case->language,
                                              "repro", filename, 0, NULL, NULL);
     if (!result) {
         fprintf(stderr, "  [call-matrix-a] lang=%s phase=%s invariant=extract_result_null\n",
@@ -309,7 +309,7 @@ static int check_reference_fixture(const MatrixCase *matrix_case, const char *so
                                    const char *usage_invariant, const char *not_call_invariant,
                                    const char *shape_callee, int expected_call_count,
                                    const char *total_calls_invariant) {
-    CBMFileResult *result = extract_matrix_source(matrix_case, source, filename, phase);
+    LSMFileResult *result = extract_matrix_source(matrix_case, source, filename, phase);
     if (!result)
         return 1;
 
@@ -334,15 +334,15 @@ static int check_reference_fixture(const MatrixCase *matrix_case, const char *so
     }
     CHECK_EXACT(matrix_case->tag, usage_invariant, usage_count(result, caller, value), 1);
     CHECK_EXACT(matrix_case->tag, "reference_is_ordinary_usage",
-                usage_kind_count(result, caller, value, CBM_USAGE_VALUE), 1);
+                usage_kind_count(result, caller, value, LSM_USAGE_VALUE), 1);
     CHECK_EXACT(matrix_case->tag, "reference_not_call_reference",
-                usage_kind_count(result, caller, value, CBM_USAGE_CALL_REFERENCE), 0);
+                usage_kind_count(result, caller, value, LSM_USAGE_CALL_REFERENCE), 0);
     CHECK_EXACT(matrix_case->tag, not_call_invariant, call_count(result, caller, value), 0);
     CHECK_EXACT(matrix_case->tag, total_calls_invariant, result->calls.count, expected_call_count);
     if (shape_callee)
         CHECK_EXACT(matrix_case->tag, "broad_expected_callee",
                     call_count(result, caller, shape_callee), expected_call_count);
-    cbm_free_result(result);
+    lsm_free_result(result);
     return failures;
 }
 
@@ -350,7 +350,7 @@ static int check_semantic_case(const MatrixCase *matrix_case) {
     int failures = check_ast_contract(matrix_case, matrix_case->source, "roles-ast",
                                       matrix_case->call_kind, NULL, matrix_case->scope_node_count,
                                       "semantic_primary_call_node_count", NULL, NULL, 0, NULL);
-    CBMFileResult *result =
+    LSMFileResult *result =
         extract_matrix_source(matrix_case, matrix_case->source, matrix_case->filename, "roles");
     if (!result)
         return failures + 1;
@@ -374,10 +374,10 @@ static int check_semantic_case(const MatrixCase *matrix_case) {
     CHECK_EXACT(matrix_case->tag, "inside_value_site_owned_by_registrar_call",
                 usage_within_call_count(result, "argument", matrix_case->value_name, "accept"), 1);
     CHECK_EXACT(matrix_case->tag, "inside_value_is_ordinary_usage",
-                usage_kind_count(result, "argument", matrix_case->value_name, CBM_USAGE_VALUE), 1);
+                usage_kind_count(result, "argument", matrix_case->value_name, LSM_USAGE_VALUE), 1);
     CHECK_EXACT(
         matrix_case->tag, "inside_value_not_call_reference",
-        usage_kind_count(result, "argument", matrix_case->value_name, CBM_USAGE_CALL_REFERENCE), 0);
+        usage_kind_count(result, "argument", matrix_case->value_name, LSM_USAGE_CALL_REFERENCE), 0);
     if (matrix_case->expect_lexical_local_shadow) {
         CHECK_EXACT(matrix_case->tag, "inside_value_blocks_callable_promotion",
                     local_shadow_usage_count(result, "argument", matrix_case->value_name), 1);
@@ -385,9 +385,9 @@ static int check_semantic_case(const MatrixCase *matrix_case) {
     CHECK_EXACT(matrix_case->tag, "bare_value_usage",
                 usage_count(result, "bare", matrix_case->value_name), 1);
     CHECK_EXACT(matrix_case->tag, "bare_value_is_ordinary_usage",
-                usage_kind_count(result, "bare", matrix_case->value_name, CBM_USAGE_VALUE), 1);
+                usage_kind_count(result, "bare", matrix_case->value_name, LSM_USAGE_VALUE), 1);
     CHECK_EXACT(matrix_case->tag, "bare_value_not_call_reference",
-                usage_kind_count(result, "bare", matrix_case->value_name, CBM_USAGE_CALL_REFERENCE),
+                usage_kind_count(result, "bare", matrix_case->value_name, LSM_USAGE_CALL_REFERENCE),
                 0);
     CHECK_EXACT(matrix_case->tag, "direct_callee_not_usage",
                 usage_count(result, "direct", "handler"), 0);
@@ -395,7 +395,7 @@ static int check_semantic_case(const MatrixCase *matrix_case) {
                 call_count(result, "argument", "handler"), 0);
     CHECK_EXACT(matrix_case->tag, "semantic_total_calls", result->calls.count,
                 matrix_case->scope_call_count);
-    cbm_free_result(result);
+    lsm_free_result(result);
 
     if (matrix_case->broad_source) {
         failures += check_ast_contract(
@@ -412,7 +412,7 @@ static int check_semantic_case(const MatrixCase *matrix_case) {
 
 static int check_native_scope_case(const MatrixCase *matrix_case) {
     int failures = 0;
-    const CBMLangSpec *spec = cbm_lang_spec(matrix_case->language);
+    const LSMLangSpec *spec = lsm_lang_spec(matrix_case->language);
     if (!spec || spec->language != matrix_case->language) {
         fprintf(stderr, "  [call-matrix-a] lang=%s invariant=registered_spec_missing\n",
                 matrix_case->tag);
@@ -475,7 +475,7 @@ static int check_matrix_case(const MatrixCase *matrix_case) {
 #define SEMANTIC_CASE(tag_, lang_, file_, source_, value_, kind_, node_count_, call_count_) \
     static const MatrixCase CASE_##tag_ = {                                                 \
         .tag = #tag_,                                                                       \
-        .language = CBM_LANG_##lang_,                                                       \
+        .language = LSM_LANG_##lang_,                                                       \
         .filename = file_,                                                                  \
         .source = source_,                                                                  \
         .mode = MATRIX_SEMANTIC,                                                            \
@@ -491,7 +491,7 @@ static int check_matrix_case(const MatrixCase *matrix_case) {
                             broad_node_count_, broad_callee_, broad_call_count_)                  \
     static const MatrixCase CASE_##tag_ = {                                                       \
         .tag = #tag_,                                                                             \
-        .language = CBM_LANG_##lang_,                                                             \
+        .language = LSM_LANG_##lang_,                                                             \
         .filename = file_,                                                                        \
         .source = source_,                                                                        \
         .mode = MATRIX_SEMANTIC,                                                                  \
@@ -517,7 +517,7 @@ static int check_matrix_case(const MatrixCase *matrix_case) {
                           scope_call_count_, bare_call_count_)                                    \
     static const MatrixCase CASE_##tag_ = {                                                       \
         .tag = #tag_,                                                                             \
-        .language = CBM_LANG_##lang_,                                                             \
+        .language = LSM_LANG_##lang_,                                                             \
         .filename = file_,                                                                        \
         .source = source_,                                                                        \
         .mode = MATRIX_NATIVE_SCOPE,                                                              \
@@ -548,7 +548,7 @@ static int check_matrix_case(const MatrixCase *matrix_case) {
                            call_count_)                                                     \
     static const MatrixCase CASE_##tag_ = {                                                 \
         .tag = #tag_,                                                                       \
-        .language = CBM_LANG_##lang_,                                                       \
+        .language = LSM_LANG_##lang_,                                                       \
         .filename = file_,                                                                  \
         .source = source_,                                                                  \
         .mode = MATRIX_NATIVE_SCOPE,                                                        \
@@ -1262,7 +1262,7 @@ static const MatrixCase *const MATRIX_A_CASE_ROWS[] = {MATRIX_A_CASES(MATRIX_CAS
 _Static_assert(sizeof(MATRIX_A_CASE_ROWS) / sizeof(MATRIX_A_CASE_ROWS[0]) == 67,
                "GO..AGDA call-capable matrix must contain exactly 67 language rows");
 
-size_t repro_call_argument_matrix_a_copy_language_ids(CBMLanguage *language_ids, size_t capacity) {
+size_t repro_call_argument_matrix_a_copy_language_ids(LSMLanguage *language_ids, size_t capacity) {
     size_t row_count = sizeof(MATRIX_A_CASE_ROWS) / sizeof(MATRIX_A_CASE_ROWS[0]);
     for (size_t row = 0; language_ids && row < row_count && row < capacity; row++) {
         language_ids[row] = MATRIX_A_CASE_ROWS[row]->language;

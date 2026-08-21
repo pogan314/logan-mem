@@ -7,8 +7,8 @@
  *
  * Layout positions are cached in the project's SQLite database.
  */
-#ifndef CBM_UI_LAYOUT3D_H
-#define CBM_UI_LAYOUT3D_H
+#ifndef LSM_UI_LAYOUT3D_H
+#define LSM_UI_LAYOUT3D_H
 
 #include "store/store.h"
 #include <stdbool.h>
@@ -30,7 +30,7 @@ typedef struct {
     /* Dead-code classification (string literal, NOT freed):
      * "dead"|"single"|"entry"|"test"|"exported"|"normal"|"structural". */
     const char *status;
-} cbm_layout_node_t;
+} lsm_layout_node_t;
 
 /* ── Layout edge (output) ─────────────────────────────────────── */
 
@@ -38,37 +38,37 @@ typedef struct {
     int64_t source;
     int64_t target;
     const char *type; /* "CALLS", "IMPORTS", etc. */
-} cbm_layout_edge_t;
+} lsm_layout_edge_t;
 
 /* ── Layout result ────────────────────────────────────────────── */
 
 typedef struct {
-    cbm_layout_node_t *nodes;
+    lsm_layout_node_t *nodes;
     int node_count;
-    cbm_layout_edge_t *edges;
+    lsm_layout_edge_t *edges;
     int edge_count;
     int total_nodes; /* total in project (may exceed returned) */
-} cbm_layout_result_t;
+} lsm_layout_result_t;
 
 /* ── API ──────────────────────────────────────────────────────── */
 
 typedef enum {
-    CBM_LAYOUT_OVERVIEW = 0, /* cluster centroids */
-    CBM_LAYOUT_DETAIL = 1    /* individual nodes in region */
-} cbm_layout_level_t;
+    LSM_LAYOUT_OVERVIEW = 0, /* cluster centroids */
+    LSM_LAYOUT_DETAIL = 1    /* individual nodes in region */
+} lsm_layout_level_t;
 
 /* Compute layout for a project.
  * center_node: QN of center (for detail level), NULL for overview
  * radius: hop distance from center (for detail level)
  * max_nodes: cap on returned nodes */
-cbm_layout_result_t *cbm_layout_compute(cbm_store_t *store, const char *project,
-                                        cbm_layout_level_t level, const char *center_node,
+lsm_layout_result_t *lsm_layout_compute(lsm_store_t *store, const char *project,
+                                        lsm_layout_level_t level, const char *center_node,
                                         int radius, int max_nodes);
 
 /* Free a layout result. */
-void cbm_layout_free(cbm_layout_result_t *result);
+void lsm_layout_free(lsm_layout_result_t *result);
 
 /* Serialize layout result to JSON string. Caller must free(). */
-char *cbm_layout_to_json(const cbm_layout_result_t *result);
+char *lsm_layout_to_json(const lsm_layout_result_t *result);
 
-#endif /* CBM_UI_LAYOUT3D_H */
+#endif /* LSM_UI_LAYOUT3D_H */

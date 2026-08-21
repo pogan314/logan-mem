@@ -45,7 +45,7 @@ static const char *file_ext(const char *path) {
 
 /* Parse "fp" hex string from a node's properties_json.
  * Returns true if found and decoded successfully. */
-static bool parse_fp_from_props(const char *props_json, cbm_minhash_t *out) {
+static bool parse_fp_from_props(const char *props_json, lsm_minhash_t *out) {
     if (!props_json) {
         return false;
     }
@@ -60,20 +60,20 @@ static bool parse_fp_from_props(const char *props_json, cbm_minhash_t *out) {
         return false;
     }
     int hex_len = (int)(hex_end - hex_start);
-    if (hex_len != CBM_MINHASH_HEX_LEN) {
+    if (hex_len != LSM_MINHASH_HEX_LEN) {
         return false;
     }
-    char hex_buf[CBM_MINHASH_HEX_BUF];
+    char hex_buf[LSM_MINHASH_HEX_BUF];
     memcpy(hex_buf, hex_start, (size_t)hex_len);
     hex_buf[hex_len] = '\0';
-    return cbm_minhash_from_hex(hex_buf, out);
+    return lsm_minhash_from_hex(hex_buf, out);
 }
 
 /* Log helper for integer-to-string in log calls. */
 static const char *itoa_log(int val) {
     enum { RING_BUF_COUNT = 4, RING_BUF_MASK = 3 };
-    static CBM_TLS char bufs[RING_BUF_COUNT][CBM_SZ_32];
-    static CBM_TLS int idx = 0;
+    static LSM_TLS char bufs[RING_BUF_COUNT][LSM_SZ_32];
+    static LSM_TLS int idx = 0;
     int i = idx;
     idx = (idx + SKIP_ONE) & RING_BUF_MASK;
     snprintf(bufs[i], sizeof(bufs[i]), "%d", val);
@@ -86,7 +86,7 @@ enum { FP_ENTRY_INIT_CAP = 256, FP_ENTRY_GROW = 2, PROPS_BUF_LEN = 256 };
 
 typedef struct {
     int64_t node_id;
-    cbm_minhash_t fp;
+    lsm_minhash_t fp;
     const char *file_path;
     const char *ext;
     const char *qn; /* canonical ordering + pair-ownership (determinism) */
@@ -112,21 +112,21 @@ static int cmp_fp_entry_by_qn(const void *pa, const void *pb) {
 }
 
 /* Collect all Function/Method nodes with fingerprints from graph buffer. */
-static int collect_fp_entries(cbm_gbuf_t *gbuf, fp_entry_t **out_entries) {
+static int collect_fp_entries(lsm_gbuf_t *gbuf, fp_entry_t **out_entries) {
     fp_entry_t *entries = NULL;
     int count = 0;
     int cap = 0;
 
     const char *labels[] = {"Function", "Method", NULL};
     for (int li = 0; labels[li]; li++) {
-        const cbm_gbuf_node_t **nodes = NULL;
+        const lsm_gbuf_node_t **nodes = NULL;
         int node_count = 0;
-        if (cbm_gbuf_find_by_label(gbuf, labels[li], &nodes, &node_count) != 0) {
+        if (lsm_gbuf_find_by_label(gbuf, labels[li], &nodes, &node_count) != 0) {
             continue;
         }
         for (int i = 0; i < node_count; i++) {
-            const cbm_gbuf_node_t *n = nodes[i];
-            cbm_minhash_t fp;
+            const lsm_gbuf_node_t *n = nodes[i];
+            lsm_minhash_t fp;
             if (!parse_fp_from_props(n->properties_json, &fp)) {
                 continue;
             }
@@ -192,7 +192,7 @@ static void sim_edge_buf_push(sim_edge_buf_t *buf, int64_t src, int64_t tgt, dou
 typedef struct {
     const fp_entry_t *entries;
     int entry_count;
-    const cbm_lsh_index_t *lsh;
+    const lsm_lsh_index_t *lsh;
     sim_edge_buf_t *worker_bufs;
     _Atomic int next_idx;
     _Atomic int *edge_counts; /* shared atomic array, one per entry */
@@ -205,7 +205,7 @@ static void sim_query_worker(int worker_id, void *ctx_ptr) {
     sim_edge_buf_t *my_buf = &sc->worker_bufs[worker_id];
 
     /* Thread-local candidate buffer (stack-allocated) */
-    const cbm_lsh_entry_t *cands[SIM_CAND_CAP];
+    const lsm_lsh_entry_t *cands[SIM_CAND_CAP];
 
     while (true) {
         int i = atomic_fetch_add_explicit(&sc->next_idx, SKIP_ONE, memory_order_relaxed);
@@ -214,16 +214,16 @@ static void sim_query_worker(int worker_id, void *ctx_ptr) {
         }
 
         int ec = atomic_load_explicit(&sc->edge_counts[i], memory_order_relaxed);
-        if (ec >= CBM_MINHASH_MAX_EDGES_PER_NODE) {
+        if (ec >= LSM_MINHASH_MAX_EDGES_PER_NODE) {
             continue;
         }
 
         const fp_entry_t *src = &sc->entries[i];
-        int cand_count = cbm_lsh_query_into(sc->lsh, &src->fp, cands, SIM_CAND_CAP);
+        int cand_count = lsm_lsh_query_into(sc->lsh, &src->fp, cands, SIM_CAND_CAP);
 
         int emitted = 0;
         for (int c = 0; c < cand_count; c++) {
-            const cbm_lsh_entry_t *cand = cands[c];
+            const lsm_lsh_entry_t *cand = cands[c];
             if (cand->node_id == src->node_id) {
                 continue;
             }
@@ -239,12 +239,12 @@ static void sim_query_worker(int worker_id, void *ctx_ptr) {
             }
 
             int cur = atomic_load_explicit(&sc->edge_counts[i], memory_order_relaxed);
-            if (cur + emitted >= CBM_MINHASH_MAX_EDGES_PER_NODE) {
+            if (cur + emitted >= LSM_MINHASH_MAX_EDGES_PER_NODE) {
                 break;
             }
 
-            double jaccard = cbm_minhash_jaccard(&src->fp, cand->fingerprint);
-            if (jaccard < CBM_MINHASH_JACCARD_THRESHOLD) {
+            double jaccard = lsm_minhash_jaccard(&src->fp, cand->fingerprint);
+            if (jaccard < LSM_MINHASH_JACCARD_THRESHOLD) {
                 continue;
             }
 
@@ -260,7 +260,7 @@ static void sim_query_worker(int worker_id, void *ctx_ptr) {
 }
 
 /* Merge worker edge buffers into gbuf. Returns total edge count. Frees worker buffers. */
-static int merge_sim_edges(cbm_gbuf_t *gbuf, sim_edge_buf_t *worker_bufs, int worker_count) {
+static int merge_sim_edges(lsm_gbuf_t *gbuf, sim_edge_buf_t *worker_bufs, int worker_count) {
     int total = 0;
     for (int w = 0; w < worker_count; w++) {
         for (int e = 0; e < worker_bufs[w].count; e++) {
@@ -268,7 +268,7 @@ static int merge_sim_edges(cbm_gbuf_t *gbuf, sim_edge_buf_t *worker_bufs, int wo
             char props[PROPS_BUF_LEN];
             snprintf(props, sizeof(props), "{\"jaccard\":%.3f,\"same_file\":%s}", de->jaccard,
                      de->same_file ? "true" : "false");
-            cbm_gbuf_insert_edge(gbuf, de->source_id, de->target_id, "SIMILAR_TO", props);
+            lsm_gbuf_insert_edge(gbuf, de->source_id, de->target_id, "SIMILAR_TO", props);
             total++;
         }
         free(worker_bufs[w].edges);
@@ -279,54 +279,54 @@ static int merge_sim_edges(cbm_gbuf_t *gbuf, sim_edge_buf_t *worker_bufs, int wo
 
 /* ── Pass entry point ────────────────────────────────────────────── */
 
-int cbm_pipeline_pass_similarity(cbm_pipeline_ctx_t *ctx) {
-    cbm_log_info("pass.start", "pass", "similarity");
+int lsm_pipeline_pass_similarity(lsm_pipeline_ctx_t *ctx) {
+    lsm_log_info("pass.start", "pass", "similarity");
 
-    cbm_gbuf_t *gbuf = ctx->gbuf;
+    lsm_gbuf_t *gbuf = ctx->gbuf;
 
     /* Phase 1: Collect fingerprints from Function/Method nodes */
-    CBM_PROF_START(t_collect);
+    LSM_PROF_START(t_collect);
     fp_entry_t *entries = NULL;
     int entry_count = collect_fp_entries(gbuf, &entries);
-    CBM_PROF_END_N("similarity", "1_collect_fp", t_collect, entry_count);
+    LSM_PROF_END_N("similarity", "1_collect_fp", t_collect, entry_count);
 
-    cbm_log_info("pass.similarity.collected", "nodes_with_fp", itoa_log(entry_count));
+    lsm_log_info("pass.similarity.collected", "nodes_with_fp", itoa_log(entry_count));
 
     if (entry_count < MIN_FP_ENTRIES) {
         free(entries);
-        cbm_log_info("pass.done", "pass", "similarity", "edges", "0");
+        lsm_log_info("pass.done", "pass", "similarity", "edges", "0");
         return 0;
     }
 
-    /* Phase 2: Build LSH index (sequential — cbm_lsh_insert mutates shared state) */
-    CBM_PROF_START(t_lsh_build);
-    cbm_lsh_index_t *lsh = cbm_lsh_new();
-    cbm_lsh_entry_t *lsh_entries = malloc((size_t)entry_count * sizeof(cbm_lsh_entry_t));
+    /* Phase 2: Build LSH index (sequential — lsm_lsh_insert mutates shared state) */
+    LSM_PROF_START(t_lsh_build);
+    lsm_lsh_index_t *lsh = lsm_lsh_new();
+    lsm_lsh_entry_t *lsh_entries = malloc((size_t)entry_count * sizeof(lsm_lsh_entry_t));
     if (!lsh_entries) {
         free(entries);
-        cbm_lsh_free(lsh);
-        return CBM_NOT_FOUND;
+        lsm_lsh_free(lsh);
+        return LSM_NOT_FOUND;
     }
 
     for (int i = 0; i < entry_count; i++) {
-        lsh_entries[i] = (cbm_lsh_entry_t){
+        lsh_entries[i] = (lsm_lsh_entry_t){
             .node_id = entries[i].node_id,
             .fingerprint = &entries[i].fp,
             .file_path = entries[i].file_path,
             .file_ext = entries[i].ext,
             .qualified_name = entries[i].qn,
         };
-        cbm_lsh_insert(lsh, &lsh_entries[i]);
+        lsm_lsh_insert(lsh, &lsh_entries[i]);
     }
-    CBM_PROF_END_N("similarity", "2_lsh_build_seq", t_lsh_build, entry_count);
+    LSM_PROF_END_N("similarity", "2_lsh_build_seq", t_lsh_build, entry_count);
 
-    /* Phase 3: Query LSH + emit edges (PARALLEL via cbm_lsh_query_into).
+    /* Phase 3: Query LSH + emit edges (PARALLEL via lsm_lsh_query_into).
      * Each worker claims entries, queries, scores candidates, stashes edges
      * in its own deferred buffer. Shared edge_counts is atomic.
      * Final merge into gbuf is sequential (gbuf not thread-safe). */
-    CBM_PROF_START(t_query_emit);
+    LSM_PROF_START(t_query_emit);
     _Atomic int *edge_counts = calloc((size_t)entry_count, sizeof(_Atomic int));
-    int worker_count = cbm_default_worker_count(false);
+    int worker_count = lsm_default_worker_count(false);
     sim_edge_buf_t *worker_bufs = calloc((size_t)worker_count, sizeof(sim_edge_buf_t));
 
     {
@@ -338,20 +338,20 @@ int cbm_pipeline_pass_similarity(cbm_pipeline_ctx_t *ctx) {
             .edge_counts = edge_counts,
         };
         atomic_init(&sc.next_idx, 0);
-        cbm_parallel_for_opts_t opts = {.max_workers = worker_count, .force_pthreads = false};
-        cbm_parallel_for(worker_count, sim_query_worker, &sc, opts);
+        lsm_parallel_for_opts_t opts = {.max_workers = worker_count, .force_pthreads = false};
+        lsm_parallel_for(worker_count, sim_query_worker, &sc, opts);
     }
-    CBM_PROF_END_N("similarity", "3_query_parallel", t_query_emit, entry_count);
+    LSM_PROF_END_N("similarity", "3_query_parallel", t_query_emit, entry_count);
 
-    CBM_PROF_START(t_merge);
+    LSM_PROF_START(t_merge);
     int total_edges = merge_sim_edges(gbuf, worker_bufs, worker_count);
-    CBM_PROF_END_N("similarity", "4_edge_merge_seq", t_merge, total_edges);
+    LSM_PROF_END_N("similarity", "4_edge_merge_seq", t_merge, total_edges);
 
-    cbm_log_info("pass.done", "pass", "similarity", "edges", itoa_log(total_edges));
+    lsm_log_info("pass.done", "pass", "similarity", "edges", itoa_log(total_edges));
 
     free(edge_counts);
     free(lsh_entries);
     free(entries);
-    cbm_lsh_free(lsh);
+    lsm_lsh_free(lsh);
     return 0;
 }

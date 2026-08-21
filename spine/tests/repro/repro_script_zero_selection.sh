@@ -5,7 +5,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/cbm-repro-zero.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/lsm-repro-zero.XXXXXX")"
 
 cleanup() {
     rm -f "$TMP_ROOT/scripts/repro.sh" "$TMP_ROOT/scripts/env.sh"
@@ -18,7 +18,7 @@ mkdir -p "$TMP_ROOT/scripts"
 cp "$PROJECT_ROOT/scripts/repro.sh" "$TMP_ROOT/scripts/repro.sh"
 cp "$PROJECT_ROOT/scripts/env.sh" "$TMP_ROOT/scripts/env.sh"
 
-# Supply the exact transcript produced when CBM_REPRO_ONLY matches no suite.
+# Supply the exact transcript produced when LSM_REPRO_ONLY matches no suite.
 make() {
     printf '%s\n' \
         '────────────────────────────────────────────' \

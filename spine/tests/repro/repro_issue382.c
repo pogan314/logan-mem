@@ -5,7 +5,7 @@
  * from graph nodes"
  *
  * Root cause (confirmed by maintainer + reporter re-open):
- *   extract_decorators() in internal/cbm/extract_defs.c first scans
+ *   extract_decorators() in internal/lsm/extract_defs.c first scans
  *   ts_node_prev_sibling() looking for nodes of type "annotation" /
  *   "marker_annotation".  In the Java AST emitted by tree-sitter-java, those
  *   nodes are NOT prev-siblings of either the class_declaration or the
@@ -70,21 +70,21 @@
  */
 
 #include "test_framework.h"
-#include "cbm.h"
+#include "lsm.h"
 
 /* Convenience: extract one file, return result (caller frees). */
-static CBMFileResult *rx(const char *src, CBMLanguage lang,
+static LSMFileResult *rx(const char *src, LSMLanguage lang,
                          const char *proj, const char *path) {
-    return cbm_extract_file(src, (int)strlen(src), lang, proj, path,
+    return lsm_extract_file(src, (int)strlen(src), lang, proj, path,
                             0, NULL, NULL);
 }
 
 /* Return the first definition whose label AND name both match (either may be
  * NULL to wildcard). Mirrors the helper in repro_extraction.c. */
-static CBMDefinition *find_def(CBMFileResult *r, const char *label,
+static LSMDefinition *find_def(LSMFileResult *r, const char *label,
                                const char *name) {
     for (int i = 0; i < r->defs.count; i++) {
-        CBMDefinition *d = &r->defs.items[i];
+        LSMDefinition *d = &r->defs.items[i];
         if (label && (!d->label || strcmp(d->label, label) != 0))
             continue;
         if (name && (!d->name || strcmp(d->name, name) != 0))
@@ -96,7 +96,7 @@ static CBMDefinition *find_def(CBMFileResult *r, const char *label,
 
 /* Return 1 if any entry in the NULL-terminated decorators array contains
  * needle as a substring. */
-static int decorators_contain(const CBMDefinition *d, const char *needle) {
+static int decorators_contain(const LSMDefinition *d, const char *needle) {
     if (!d || !d->decorators)
         return 0;
     for (int i = 0; d->decorators[i]; i++) {
@@ -110,7 +110,7 @@ static int decorators_contain(const CBMDefinition *d, const char *needle) {
  * repro_issue382_java_annotations_on_nodes
  *
  * Asserts that BOTH the Class node AND the Method node produced by
- * cbm_extract_file carry their Java annotations in .decorators:
+ * lsm_extract_file carry their Java annotations in .decorators:
  *
  *   @Entity
  *   @RestController
@@ -130,7 +130,7 @@ static int decorators_contain(const CBMDefinition *d, const char *needle) {
  *   • The Method "getUser" has NULL or empty signature
  * ─────────────────────────────────────────────────────────────────── */
 TEST(repro_issue382_java_annotations_on_nodes) {
-    CBMFileResult *r = rx(
+    LSMFileResult *r = rx(
         "@Entity\n"
         "@RestController\n"
         "public class User {\n"
@@ -138,13 +138,13 @@ TEST(repro_issue382_java_annotations_on_nodes) {
         "    @GetMapping(\"/users\")\n"
         "    public String getUser(String id) { return id; }\n"
         "}\n",
-        CBM_LANG_JAVA, "t", "User.java");
+        LSM_LANG_JAVA, "t", "User.java");
 
     ASSERT_NOT_NULL(r);
     ASSERT_FALSE(r->has_error);
 
     /* ── Class node: two class-level marker_annotations ── */
-    CBMDefinition *cls = find_def(r, "Class", "User");
+    LSMDefinition *cls = find_def(r, "Class", "User");
     ASSERT_NOT_NULL(cls);
 
     /* The Class def MUST carry a non-NULL decorators array.
@@ -158,7 +158,7 @@ TEST(repro_issue382_java_annotations_on_nodes) {
     ASSERT_TRUE(decorators_contain(cls, "RestController"));
 
     /* ── Method node: one marker_annotation + one annotation ── */
-    CBMDefinition *method = find_def(r, "Method", "getUser");
+    LSMDefinition *method = find_def(r, "Method", "getUser");
     ASSERT_NOT_NULL(method);
 
     /* Method decorators must be non-NULL. */
@@ -179,7 +179,7 @@ TEST(repro_issue382_java_annotations_on_nodes) {
     ASSERT_NOT_NULL(method->signature);
     ASSERT_TRUE(method->signature[0] != '\0');
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     PASS();
 }
 

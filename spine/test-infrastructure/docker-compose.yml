@@ -12,7 +12,7 @@ services:
   # for correctness — timing/scheduling/subprocess suites assert invariants
   # (ordering, bounded-return, RUNNING poll state), not wall-clock, so they
   # pass at any parallelism. Artificial CPU starvation belongs to smoke/soak
-  # (CBM_LOCAL_CI_CPUS), not the regular suite.
+  # (LSM_LOCAL_CI_CPUS), not the regular suite.
   test:
     build:
       context: ..
@@ -20,9 +20,9 @@ services:
     platform: linux/arm64
     volumes:
       - ..:/src
-      - cbm-build:/src/build
-      - cbm-fixture-cache:/root/.cache/cbm-test-fixtures
-      - cbm-ccache-arm64:/root/.ccache
+      - lsm-build:/src/build
+      - lsm-fixture-cache:/root/.cache/lsm-test-fixtures
+      - lsm-ccache-arm64:/root/.ccache
     environment:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 1500M
@@ -35,9 +35,9 @@ services:
     platform: linux/amd64
     volumes:
       - ..:/src
-      - cbm-build:/src/build
-      - cbm-fixture-cache:/root/.cache/cbm-test-fixtures
-      - cbm-ccache-amd64:/root/.ccache
+      - lsm-build:/src/build
+      - lsm-fixture-cache:/root/.cache/lsm-test-fixtures
+      - lsm-ccache-amd64:/root/.ccache
     environment:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 1500M
@@ -57,9 +57,9 @@ services:
     init: true
     volumes:
       - ..:/src
-      - cbm-build:/src/build
-      - cbm-fixture-cache:/root/.cache/cbm-test-fixtures
-      - cbm-ccache-arm64:/root/.ccache
+      - lsm-build:/src/build
+      - lsm-fixture-cache:/root/.cache/lsm-test-fixtures
+      - lsm-ccache-arm64:/root/.ccache
     environment:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 1500M
@@ -79,9 +79,9 @@ services:
     init: true
     volumes:
       - ..:/src
-      - cbm-build:/src/build
-      - cbm-fixture-cache:/root/.cache/cbm-test-fixtures
-      - cbm-ccache-arm64:/root/.ccache
+      - lsm-build:/src/build
+      - lsm-fixture-cache:/root/.cache/lsm-test-fixtures
+      - lsm-ccache-arm64:/root/.ccache
     environment:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 1500M
@@ -105,9 +105,9 @@ services:
     init: true
     volumes:
       - ..:/src
-      - cbm-build:/src/build
-      - cbm-fixture-cache:/root/.cache/cbm-test-fixtures
-      - cbm-ccache-amd64:/root/.ccache
+      - lsm-build:/src/build
+      - lsm-fixture-cache:/root/.cache/lsm-test-fixtures
+      - lsm-ccache-amd64:/root/.ccache
     environment:
       CCACHE_DIR: /root/.ccache
       CCACHE_MAXSIZE: 1500M
@@ -154,8 +154,8 @@ services:
     volumes:
       - ..:/src
     command: >-
-      make -j4 -f Makefile.cbm clean-c BUILD_DIR=build/win-cross &&
-      make -j4 -f Makefile.cbm build/win-cross/test-runner
+      make -j4 -f Makefile.lsm clean-c BUILD_DIR=build/win-cross &&
+      make -j4 -f Makefile.lsm build/win-cross/test-runner
         BUILD_DIR=build/win-cross
         CC=x86_64-w64-mingw32-clang
         CXX=x86_64-w64-mingw32-clang++ &&
@@ -175,7 +175,7 @@ services:
     command:
       - |
         scripts/build.sh CC=gcc CXX=g++ BUILD_DIR=build/linux-arm64 &&
-        scripts/smoke-local.sh ./build/linux-arm64/codebase-memory-mcp
+        scripts/smoke-local.sh ./build/linux-arm64/logan-spine-mcp
 
   smoke-amd64:
     build:
@@ -188,13 +188,13 @@ services:
     command:
       - |
         scripts/build.sh CC=gcc CXX=g++ BUILD_DIR=build/linux-amd64 &&
-        scripts/smoke-local.sh ./build/linux-amd64/codebase-memory-mcp
+        scripts/smoke-local.sh ./build/linux-amd64/logan-spine-mcp
 
   # ── Soak (both CI legs) ────────────────────────────────────
   # The sequence (quick + #581 query-leak) lives in the canonical entry
   # scripts/soak-legs.sh — the same file _soak.yml and the Windows VM run.
   # The local ladder previously had NO unix soak at all. Duration follows
-  # CBM_SOAK_MINUTES (default 10, matching the dry run).
+  # LSM_SOAK_MINUTES (default 10, matching the dry run).
   soak:
     build:
       context: ..
@@ -206,7 +206,7 @@ services:
     command:
       - |
         scripts/build.sh CC=gcc CXX=g++ BUILD_DIR=build/linux-arm64 &&
-        scripts/soak-legs.sh ./build/linux-arm64/codebase-memory-mcp ${CBM_SOAK_MINUTES:-10}
+        scripts/soak-legs.sh ./build/linux-arm64/logan-spine-mcp ${LSM_SOAK_MINUTES:-10}
 
   # ── Windows smoke (cross-compile + Wine) ──────────────────
   smoke-windows:
@@ -220,9 +220,9 @@ services:
     command:
       - |
         scripts/build.sh CC=x86_64-w64-mingw32-clang CXX=x86_64-w64-mingw32-clang++ BUILD_DIR=build/win-cross &&
-        test ! -e build/win-cross/codebase-memory-mcp.payload.exe &&
-        WINEDEBUG=-all wine64 ./build/win-cross/codebase-memory-mcp.exe --version &&
-        WINEDEBUG=-all wine64 cmd /c build/win-cross/codebase-memory-mcp.exe --version
+        test ! -e build/win-cross/logan-spine-mcp.payload.exe &&
+        WINEDEBUG=-all wine64 ./build/win-cross/logan-spine-mcp.exe --version &&
+        WINEDEBUG=-all wine64 cmd /c build/win-cross/logan-spine-mcp.exe --version
 
   # ── Linux portable (Alpine musl static) ────────────────────
   test-portable:
@@ -256,9 +256,9 @@ services:
     command:
       - |
         scripts/build.sh CC=gcc CXX=g++ STATIC=1 BUILD_DIR=build/alpine &&
-        file build/alpine/codebase-memory-mcp | grep -q "statically linked" &&
+        file build/alpine/logan-spine-mcp | grep -q "statically linked" &&
         echo "=== Verified: statically linked ===" &&
-        scripts/smoke-local.sh ./build/alpine/codebase-memory-mcp
+        scripts/smoke-local.sh ./build/alpine/logan-spine-mcp
 
   # ── Artifact-flow smoke (package → extract → wrapper) ──────
   # The release venue smokes the shipped archive; this lane reproduces that
@@ -292,11 +292,11 @@ services:
     command:
       - |
         set -e
-        file build/alpine/codebase-memory-mcp | grep -q "statically linked"
+        file build/alpine/logan-spine-mcp | grep -q "statically linked"
         echo "=== glibc-floor: portable binary smoke on glibc 2.35 ==="
-        scripts/smoke-local.sh ./build/alpine/codebase-memory-mcp
+        scripts/smoke-local.sh ./build/alpine/logan-spine-mcp
         echo "=== glibc-floor: dynamic binary must refuse (glibc 2.38+ floor) ==="
-        if build/linux-arm64/codebase-memory-mcp --version 2>/tmp/dynamic-floor.err; then
+        if build/linux-arm64/logan-spine-mcp --version 2>/tmp/dynamic-floor.err; then
           echo "ERROR: dynamic binary ran on glibc 2.35 — floor contract broken"
           exit 1
         fi
@@ -313,8 +313,8 @@ services:
     command: ["--ci", "CLANG_FORMAT=clang-format-20"]
 
 volumes:
-  cbm-ccache-arm64:
-  cbm-ccache-amd64:
+  lsm-ccache-arm64:
+  lsm-ccache-amd64:
   # Build artifacts and the incremental-suite fixture cache stay on the VM's
   # native filesystem: object writes over the virtiofs bind mount are the
   # container legs' largest avoidable I/O cost, and the fixture cache makes
@@ -322,10 +322,10 @@ volumes:
   # The build volume is the ONLY per-run-mutable one: concurrent legs writing
   # the same build dir clobber each other's objects and test-logs (a scheduler
   # then fails reading a suite log that another run replaced). run.sh gives each
-  # run its own volume via CBM_CI_BUILD_VOLUME and removes it afterwards; the
+  # run its own volume via LSM_CI_BUILD_VOLUME and removes it afterwards; the
   # default name preserves the single-run fast path. ccache and the fixture
   # cache stay SHARED on purpose — ccache is concurrency-safe and
   # content-verified, and sharing them is what keeps isolated runs fast.
-  cbm-build:
-    name: ${CBM_CI_BUILD_VOLUME:-cbm-build}
-  cbm-fixture-cache:
+  lsm-build:
+    name: ${LSM_CI_BUILD_VOLUME:-lsm-build}
+  lsm-fixture-cache:

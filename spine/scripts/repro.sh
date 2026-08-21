@@ -17,8 +17,8 @@ cd "$ROOT"
 prev_arg=""
 for arg in "$@"; do
     case "$arg" in
-        arm64|x86_64) [[ "$prev_arg" == "--arch" ]] && export CBM_ARCH="$arg" ;;
-        --arch=*) export CBM_ARCH="${arg#--arch=}" ;;
+        arm64|x86_64) [[ "$prev_arg" == "--arch" ]] && export LSM_ARCH="$arg" ;;
+        --arch=*) export LSM_ARCH="${arg#--arch=}" ;;
     esac
     prev_arg="$arg"
 done
@@ -38,7 +38,7 @@ done
 print_env "repro.sh"
 verify_compiler "$CC"
 
-OUT="$(mktemp "${TMPDIR:-/tmp}/cbm-repro-out.XXXXXX")"
+OUT="$(mktemp "${TMPDIR:-/tmp}/lsm-repro-out.XXXXXX")"
 if [[ -z "$OUT" ]]; then
     echo "::error::unable to create bug-repro transcript"
     exit 1
@@ -53,7 +53,7 @@ export ASAN_OPTIONS="detect_leaks=0${ASAN_OPTIONS:+:$ASAN_OPTIONS}"
 
 # test-repro both builds and runs the runner; tolerate its non-zero (red) exit.
 set +e
-make -j"$NPROC" -f Makefile.cbm test-repro $MAKE_ARGS 2>&1 | tee "$OUT"
+make -j"$NPROC" -f Makefile.lsm test-repro $MAKE_ARGS 2>&1 | tee "$OUT"
 set -e
 
 # The runner's final aggregate is the only line that starts with the count.

@@ -2,7 +2,7 @@
  * repro_invariant_graph.c — Graph quality invariant tests.
  *
  * Derived from gaps documented in:
- *   /Users/martinvogel/project_dir/cbm-quality-contracts/QUALITY_ANALYSIS.md
+ *   /Users/martinvogel/project_dir/lsm-quality-contracts/QUALITY_ANALYSIS.md
  *
  * Each test is one invariant in SUITE(repro_invariant_graph).  Expectations
  * are documented per-test below.  Tests that are RED today are annotated
@@ -47,8 +47,8 @@
  * ──────────────────────────────────────────────────────────────────────── */
 TEST(invariant_discovery_hygiene) {
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "%s/cbm_inv_disc_XXXXXX", cbm_tmpdir());
-    ASSERT_NOT_NULL(cbm_mkdtemp(tmpdir));
+    snprintf(tmpdir, sizeof(tmpdir), "%s/lsm_inv_disc_XXXXXX", lsm_tmpdir());
+    ASSERT_NOT_NULL(lsm_mkdtemp(tmpdir));
 
     /* control file — must be present after discovery */
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, "main.py"),
@@ -67,9 +67,9 @@ TEST(invariant_discovery_hygiene) {
     ASSERT_EQ(0, th_write_file(TH_PATH(tmpdir, ".claude/settings.json"),
                                "{}\n"));
 
-    cbm_file_info_t *files = NULL;
+    lsm_file_info_t *files = NULL;
     int count = 0;
-    int rc = cbm_discover(tmpdir, NULL, &files, &count);
+    int rc = lsm_discover(tmpdir, NULL, &files, &count);
     ASSERT_EQ(0, rc);
 
     bool main_found = false;
@@ -96,7 +96,7 @@ TEST(invariant_discovery_hygiene) {
             claude_found = true;
         }
     }
-    cbm_discover_free(files, count);
+    lsm_discover_free(files, count);
     th_rmtree(tmpdir);
 
     /* Control: main.py must always be discovered */
@@ -136,7 +136,7 @@ TEST(invariant_discovery_hygiene) {
  * are DISTINCT (not collapsed to the same QN by extension-stripping).
  *
  * WHY RED today:
- *   cbm_fqn_compute() in internal/cbm/helpers.c calls strip_ext_len() on the
+ *   lsm_fqn_compute() in internal/lsm/helpers.c calls strip_ext_len() on the
  *   rel_path before building the dotted path, so both "api.h" and "api.c"
  *   yield "<project>.api.api_init" — the same QN.  The upsert then collapses
  *   them to a single node, so either one symbol is missing or the file_path
@@ -173,15 +173,15 @@ TEST(invariant_fqn_same_stem_distinct) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     /* Find all nodes named "api_init" in this project */
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int node_count = 0;
-    int rc = cbm_store_find_nodes_by_name(store, lp.project, "api_init",
+    int rc = lsm_store_find_nodes_by_name(store, lp.project, "api_init",
                                           &nodes, &node_count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* For distinctness: if both symbols survived in the store, they must
      * have DIFFERENT qualified_names — meaning at least 2 nodes, or exactly
@@ -193,7 +193,7 @@ TEST(invariant_fqn_same_stem_distinct) {
      * both definitions are independently reachable. */
     int distinct_found = node_count;
 
-    cbm_store_free_nodes(nodes, node_count);
+    lsm_store_free_nodes(nodes, node_count);
     rh_cleanup(&lp, store);
 
     /*
@@ -214,7 +214,7 @@ TEST(invariant_fqn_same_stem_distinct) {
  *
  * For every edge of type CALLS, IMPORTS, or CONTAINS_FILE in a freshly
  * indexed multi-file project, both endpoints (source_id and target_id) must
- * resolve to an existing node via cbm_store_find_node_by_id.
+ * resolve to an existing node via lsm_store_find_node_by_id.
  *
  * This is a REGRESSION GUARD (expected GREEN on current code).  If it turns
  * RED, there is a real graph-integrity bug where an edge was persisted with
@@ -224,30 +224,30 @@ TEST(invariant_fqn_same_stem_distinct) {
  *   caller.py imports callee.py and calls its function.
  *   Two Python files so the pipeline mints IMPORTS and CALLS edges.
  * ──────────────────────────────────────────────────────────────────────── */
-static int count_dangling_edges(cbm_store_t *store, const char *project,
+static int count_dangling_edges(lsm_store_t *store, const char *project,
                                 const char *edge_type) {
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    int rc = cbm_store_find_edges_by_type(store, project, edge_type,
+    int rc = lsm_store_find_edges_by_type(store, project, edge_type,
                                           &edges, &edge_count);
-    if (rc != CBM_STORE_OK) {
+    if (rc != LSM_STORE_OK) {
         return -1;
     }
 
     int dangling = 0;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t src_node;
-        cbm_node_t tgt_node;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id,
-                                      &src_node) != CBM_STORE_OK) {
+        lsm_node_t src_node;
+        lsm_node_t tgt_node;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id,
+                                      &src_node) != LSM_STORE_OK) {
             dangling++;
         }
-        if (cbm_store_find_node_by_id(store, edges[i].target_id,
-                                      &tgt_node) != CBM_STORE_OK) {
+        if (lsm_store_find_node_by_id(store, edges[i].target_id,
+                                      &tgt_node) != LSM_STORE_OK) {
             dangling++;
         }
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     return dangling;
 }
 
@@ -269,7 +269,7 @@ TEST(invariant_no_dangling_edges) {
     static const int nfiles = (int)(sizeof(files) / sizeof(files[0]));
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, nfiles);
+    lsm_store_t *store = rh_index_files(&lp, files, nfiles);
     ASSERT_NOT_NULL(store);
 
     int d_calls = count_dangling_edges(store, lp.project, "CALLS");
@@ -297,20 +297,20 @@ TEST(invariant_no_dangling_edges) {
 /* ─────────────────────────────────────────────────────────────────────────
  * INVARIANT 4: Enclosing-function helper parity — Perl symptom.
  *
- * QUALITY_ANALYSIS.md gap #3: cbm_find_enclosing_func() in helpers.c uses a
+ * QUALITY_ANALYSIS.md gap #3: lsm_find_enclosing_func() in helpers.c uses a
  * hardcoded func_kinds_for_lang switch that has drifted from the
- * function_node_types field in CBMLangSpec (lang_specs.c).
+ * function_node_types field in LSMLangSpec (lang_specs.c).
  *
  * Evidence from source:
  *   lang_specs.c  perl_func_types[] = {"subroutine_declaration_statement", NULL}
- *   helpers.c     func_kinds_for_lang(CBM_LANG_PERL) falls through to default
+ *   helpers.c     func_kinds_for_lang(LSM_LANG_PERL) falls through to default
  *                 which returns func_kinds_generic[] = {"function_declaration",
  *                 "function_definition", "method_declaration",
  *                 "method_definition", NULL}
  *
  * "subroutine_declaration_statement" is NOT in func_kinds_generic.  Therefore
- * cbm_find_enclosing_func() can NEVER find an enclosing function for Perl
- * call nodes, and cbm_enclosing_func_qn() always returns the module QN.
+ * lsm_find_enclosing_func() can NEVER find an enclosing function for Perl
+ * call nodes, and lsm_enclosing_func_qn() always returns the module QN.
  * Every CALLS edge for Perl code is sourced from Module, not Function.
  *
  * Symptom test:
@@ -319,14 +319,14 @@ TEST(invariant_no_dangling_edges) {
  *   (not "Module").  On buggy code ALL source nodes are Module → RED.
  *
  * WHY RED today:
- *   helpers.c func_kinds_for_lang has no CBM_LANG_PERL case.  The Perl
+ *   helpers.c func_kinds_for_lang has no LSM_LANG_PERL case.  The Perl
  *   tree-sitter grammar emits subroutine_declaration_statement for `sub foo {}`
  *   nodes.  Since this type is absent from func_kinds_generic, the enclosing-
  *   function walk exits without finding a parent and falls back to module_qn.
  *
  * Fix location:
- *   internal/cbm/helpers.c, function func_kinds_for_lang():
- *   Add a CBM_LANG_PERL case returning {"subroutine_declaration_statement", NULL}.
+ *   internal/lsm/helpers.c, function func_kinds_for_lang():
+ *   Add a LSM_LANG_PERL case returning {"subroutine_declaration_statement", NULL}.
  * ──────────────────────────────────────────────────────────────────────── */
 TEST(invariant_enclosing_func_perl_parity) {
     /* Perl subroutine that calls another subroutine — the call to bar()
@@ -346,24 +346,24 @@ TEST(invariant_enclosing_func_perl_parity) {
         "foo();\n";
 
     RProj lp;
-    cbm_store_t *store = rh_index(&lp, "main.pl", perl_src);
+    lsm_store_t *store = rh_index(&lp, "main.pl", perl_src);
     ASSERT_NOT_NULL(store);
 
     /* Retrieve all CALLS edges for this project */
-    cbm_edge_t *edges = NULL;
+    lsm_edge_t *edges = NULL;
     int edge_count = 0;
-    int rc = cbm_store_find_edges_by_type(store, lp.project, "CALLS",
+    int rc = lsm_store_find_edges_by_type(store, lp.project, "CALLS",
                                           &edges, &edge_count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    ASSERT_EQ(rc, LSM_STORE_OK);
 
     /* Walk edges: find at least one whose SOURCE node has label "Function".
      * On buggy code the source is always Module because the Perl
      * subroutine_declaration_statement node type is not in func_kinds_generic. */
     int callable_sourced = 0;
     for (int i = 0; i < edge_count; i++) {
-        cbm_node_t src_node;
-        if (cbm_store_find_node_by_id(store, edges[i].source_id,
-                                      &src_node) == CBM_STORE_OK) {
+        lsm_node_t src_node;
+        if (lsm_store_find_node_by_id(store, edges[i].source_id,
+                                      &src_node) == LSM_STORE_OK) {
             if (src_node.label &&
                 (strcmp(src_node.label, "Function") == 0 ||
                  strcmp(src_node.label, "Method") == 0)) {
@@ -371,15 +371,15 @@ TEST(invariant_enclosing_func_perl_parity) {
             }
         }
     }
-    cbm_store_free_edges(edges, edge_count);
+    lsm_store_free_edges(edges, edge_count);
     rh_cleanup(&lp, store);
 
     /*
-     * RED: callable_sourced == 0 because helpers.c has no CBM_LANG_PERL case.
+     * RED: callable_sourced == 0 because helpers.c has no LSM_LANG_PERL case.
      * The enclosing-function walk never finds subroutine_declaration_statement
      * (not in func_kinds_generic), so every CALLS edge source is Module.
      *
-     * GREEN when helpers.c adds CBM_LANG_PERL -> {"subroutine_declaration_statement"}.
+     * GREEN when helpers.c adds LSM_LANG_PERL -> {"subroutine_declaration_statement"}.
      */
     ASSERT_GTE(callable_sourced, 1);
 

@@ -7,8 +7,8 @@
  *   - CPU core count
  *   - File existence check
  */
-#ifndef CBM_PLATFORM_H
-#define CBM_PLATFORM_H
+#ifndef LSM_PLATFORM_H
+#define LSM_PLATFORM_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -81,51 +81,51 @@ static inline void safe_buf_free_impl(void **buf, size_t *count) {
 
 /* Map a file read-only into memory. Returns NULL on error.
  * *out_size is set to the file size. */
-void *cbm_mmap_read(const char *path, size_t *out_size);
+void *lsm_mmap_read(const char *path, size_t *out_size);
 
 /* Unmap a previously mapped region. */
-void cbm_munmap(void *addr, size_t size);
+void lsm_munmap(void *addr, size_t size);
 
 /* ── Timing ────────────────────────────────────────────────────── */
 
 /* Monotonic nanosecond timestamp (for elapsed time measurement). */
-uint64_t cbm_now_ns(void);
+uint64_t lsm_now_ns(void);
 
 /* Monotonic millisecond timestamp. */
-uint64_t cbm_now_ms(void);
+uint64_t lsm_now_ms(void);
 
 /* ── System info ───────────────────────────────────────────────── */
 
 /* Number of available CPU cores. */
-int cbm_nprocs(void);
+int lsm_nprocs(void);
 
 /* System topology: core types and RAM (only fields with production consumers). */
 typedef struct {
     int total_cores;  /* hw.ncpu (all cores) */
     int perf_cores;   /* P-cores (Apple) or total_cores (others) */
     size_t total_ram; /* total physical RAM in bytes */
-} cbm_system_info_t;
+} lsm_system_info_t;
 
 /* Query system information. Results are cached after first call. */
-cbm_system_info_t cbm_system_info(void);
+lsm_system_info_t lsm_system_info(void);
 
 /* Recommended worker count for parallel indexing.
  * initial=true:  all cores (user is waiting for initial index)
  * initial=false: max(1, perf_cores-1) (leave headroom for user apps) */
-int cbm_default_worker_count(bool initial);
+int lsm_default_worker_count(bool initial);
 
 /* ── Environment variables ──────────────────────────────────────── */
 
 /* Thread-safe getenv: copies the value into a caller-provided buffer.
  * Returns buf on success, or fallback if the variable is unset.
  * Returns NULL when the variable is unset and fallback is NULL. */
-const char *cbm_safe_getenv(const char *name, char *buf, size_t buf_sz, const char *fallback);
+const char *lsm_safe_getenv(const char *name, char *buf, size_t buf_sz, const char *fallback);
 
 /* ── Home directory ─────────────────────────────────────────────── */
 
 /* Cross-platform home directory: tries HOME first, then USERPROFILE (Windows).
  * Returns NULL when neither is set. */
-const char *cbm_get_home_dir(void);
+const char *lsm_get_home_dir(void);
 
 /* ── App config directories ────────────────────────────────────── */
 
@@ -133,33 +133,33 @@ const char *cbm_get_home_dir(void);
  * Windows: %APPDATA% (e.g. C:/Users/.../AppData/Roaming)
  * macOS:   $HOME (callers append Library/Application Support/...)
  * Linux:   $XDG_CONFIG_HOME or ~/.config */
-const char *cbm_app_config_dir(void);
+const char *lsm_app_config_dir(void);
 
 /* Windows: %LOCALAPPDATA% (e.g. C:/Users/.../AppData/Local)
- * macOS/Linux: same as cbm_app_config_dir(). */
-const char *cbm_app_local_dir(void);
+ * macOS/Linux: same as lsm_app_config_dir(). */
+const char *lsm_app_local_dir(void);
 
 /* ── Cache directory ────────────────────────────────────────────── */
 
 /* Resolve the database cache directory. All project indexes are stored here.
- * Priority: CBM_CACHE_DIR env var > ~/.cache/codebase-memory-mcp (default).
+ * Priority: LSM_CACHE_DIR env var > ~/.cache/logan-spine-mcp (default).
  * Returns static buffer or NULL if home is unavailable. */
-const char *cbm_resolve_cache_dir(void);
+const char *lsm_resolve_cache_dir(void);
 
 /* ── File system ───────────────────────────────────────────────── */
 
 /* Check if a path exists. */
-bool cbm_file_exists(const char *path);
+bool lsm_file_exists(const char *path);
 
 /* Check if path is a directory. */
-bool cbm_is_dir(const char *path);
+bool lsm_is_dir(const char *path);
 
 /* Get file size. Returns -1 on error. */
-int64_t cbm_file_size(const char *path);
+int64_t lsm_file_size(const char *path);
 
 /* Normalize path separators to forward slashes (in-place).
  * On Windows, converts backslashes to forward slashes.
  * On POSIX, this is a no-op. Returns the input pointer. */
-char *cbm_normalize_path_sep(char *path);
+char *lsm_normalize_path_sep(char *path);
 
-#endif /* CBM_PLATFORM_H */
+#endif /* LSM_PLATFORM_H */

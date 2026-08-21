@@ -1,7 +1,7 @@
 r"""Product guard for ``daemon start --open`` UI readiness.
 
 The control socket becomes available before the HTTP listener does.  ``--open``
-is the one synchronous user request in that flow: it must wait for the *CBM HTTP
+is the one synchronous user request in that flow: it must wait for the *LSM HTTP
 endpoint*, not merely for the daemon process, before it reports or opens the URL.
 
 This guard uses a real UI build and isolated daemon generations:
@@ -16,8 +16,8 @@ This guard uses a real UI build and isolated daemon generations:
 Build the fixture with test seams so browser launching is recorded rather than
 performed and the two negative cases can use a short deterministic deadline:
 
-    make -f Makefile.cbm cbm-with-ui TEST_SEAMS=1 BUILD_DIR=build/ui-open-test
-    python3 tests/test_daemon_open_readiness.py build/ui-open-test/codebase-memory-mcp
+    make -f Makefile.lsm lsm-with-ui TEST_SEAMS=1 BUILD_DIR=build/ui-open-test
+    python3 tests/test_daemon_open_readiness.py build/ui-open-test/logan-spine-mcp
 
 Exit code: 0 == green, 1 == behavior regression, 2 == fixture/setup error.
 """
@@ -34,9 +34,9 @@ import threading
 import time
 
 
-OPEN_MARKER_ENV = "CBM_TEST_DAEMON_OPEN_MARKER"
-READY_TIMEOUT_ENV = "CBM_TEST_DAEMON_UI_READY_TIMEOUT_MS"
-RUNTIME_PARENT_ENV = "CBM_TEST_DAEMON_RUNTIME_PARENT"
+OPEN_MARKER_ENV = "LSM_TEST_DAEMON_OPEN_MARKER"
+READY_TIMEOUT_ENV = "LSM_TEST_DAEMON_UI_READY_TIMEOUT_MS"
+RUNTIME_PARENT_ENV = "LSM_TEST_DAEMON_RUNTIME_PARENT"
 
 
 def output_text(result):
@@ -90,7 +90,7 @@ def occupied_loopback_port():
 class OldMarkerResponder:
     """Foreign HTTP service that exactly matches the former acceptance rule."""
 
-    BODY = b"<!doctype html><html><head><title>Codebase Memory</title></head></html>"
+    BODY = b"<!doctype html><html><head><title>Logan Spine</title></head></html>"
 
     def __init__(self):
         self.listener, self.port = occupied_loopback_port()
@@ -137,13 +137,13 @@ class OldMarkerResponder:
 
 def fixture_environment(work, cache, marker, timeout_ms):
     env = dict(os.environ)
-    env["CBM_CACHE_DIR"] = cache
+    env["LSM_CACHE_DIR"] = cache
     env[OPEN_MARKER_ENV] = marker
     env[READY_TIMEOUT_ENV] = str(timeout_ms)
     runtime_parent = os.path.join(work, "runtime-" + os.path.basename(cache))
     os.makedirs(runtime_parent, mode=0o700, exist_ok=True)
     env[RUNTIME_PARENT_ENV] = runtime_parent
-    env["CBM_TEST_FAKE_BROWSER_MARKER"] = marker
+    env["LSM_TEST_FAKE_BROWSER_MARKER"] = marker
 
     # Before the production fix exists, POSIX builds do not know the marker
     # seam.  A PATH-local opener lets the very same behavior test demonstrate
@@ -155,7 +155,7 @@ def fixture_environment(work, cache, marker, timeout_ms):
         opener_path = os.path.join(fake_bin, opener)
         if not os.path.exists(opener_path):
             with open(opener_path, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write("#!/bin/sh\nprintf '%s' \"$1\" > \"$CBM_TEST_FAKE_BROWSER_MARKER\"\n")
+                handle.write("#!/bin/sh\nprintf '%s' \"$1\" > \"$LSM_TEST_FAKE_BROWSER_MARKER\"\n")
             os.chmod(opener_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
         env["PATH"] = fake_bin + os.pathsep + env.get("PATH", "")
     return env
@@ -228,7 +228,7 @@ def assert_delayed_success(binary, work):
             return False
 
         # The daemon's first bind failed without delaying its control service.
-        # Releasing the port lets the background retry publish the real CBM UI.
+        # Releasing the port lets the background retry publish the real LSM UI.
         blocker.close()
         blocker = None
         result, text = collect(process, timeout=25)
@@ -345,7 +345,7 @@ def main():
     # runtime directly under /private/tmp rather than the much longer per-user
     # Darwin temporary root so the product endpoint itself remains valid.
     short_temp_root = "/private/tmp" if sys.platform == "darwin" else tempfile.gettempdir()
-    with tempfile.TemporaryDirectory(prefix="cbm_uiopen_", dir=short_temp_root) as work:
+    with tempfile.TemporaryDirectory(prefix="lsm_uiopen_", dir=short_temp_root) as work:
         if not assert_delayed_success(binary, work):
             return 1
         if not assert_bounded_foreign_port_failure(binary, work):

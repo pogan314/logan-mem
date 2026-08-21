@@ -10,17 +10,17 @@
  * ROOT CAUSE — handle_browse() in src/ui/http_server.c, specifically two
  * co-located defects in the GET /api/browse handler:
  *
- *   DEFECT A (line ~411) — missing cbm_normalize_path_sep() before cbm_is_dir():
+ *   DEFECT A (line ~411) — missing lsm_normalize_path_sep() before lsm_is_dir():
  *     The raw "path" query parameter (which may carry Windows backslash
- *     separators, e.g. "D:\projects\demo") is passed directly to cbm_is_dir()
+ *     separators, e.g. "D:\projects\demo") is passed directly to lsm_is_dir()
  *     without first normalizing backslashes to forward slashes via
- *     cbm_normalize_path_sep().  On POSIX cbm_is_dir() never matches a path
+ *     lsm_normalize_path_sep().  On POSIX lsm_is_dir() never matches a path
  *     containing literal backslashes (the backslash is a valid filename
  *     character on POSIX, so "D:\projects\demo" is a single path component
  *     that does not exist).  Result: a real directory on a Windows D: drive
  *     always triggers the "not a directory" 400 error — the UI can never open
- *     it.  cbm_normalize_path_sep() is already called on the repo_path in the
- *     MCP handler (mcp.c:2806) and in cbm_project_name_from_path() (fqn.c:332),
+ *     it.  lsm_normalize_path_sep() is already called on the repo_path in the
+ *     MCP handler (mcp.c:2806) and in lsm_project_name_from_path() (fqn.c:332),
  *     but the browse handler was skipped.
  *
  *   DEFECT B (line ~461) — drive-root parent truncated to bare "X:":
@@ -39,7 +39,7 @@
  *     path and sets parent = "D:" (strips the '/').  The resulting "parent"
  *     field in the JSON response is "D:" — a bare drive spec without a
  *     trailing separator.  When the UI navigates to that parent, the next
- *     browse request calls cbm_is_dir("D:") which on Windows resolves to the
+ *     browse request calls lsm_is_dir("D:") which on Windows resolves to the
  *     current directory on drive D (not the drive root), and on POSIX fails
  *     entirely.  The user is stuck: they can enter the drive but cannot
  *     navigate back to its root, blocking path selection.
@@ -50,7 +50,7 @@
  * EXPECTED (correct) behavior:
  *   A valid Windows path such as "D:/projects/demo" (or the backslash form
  *   "D:\projects\demo") submitted as a browse query must be:
- *     1. Normalized to forward slashes before reaching cbm_is_dir().
+ *     1. Normalized to forward slashes before reaching lsm_is_dir().
  *     2. Responded to with a 200 JSON listing (not a 400 error) when the
  *        directory exists.
  *   Additionally, when browsing a drive root "D:/", the returned "parent"
@@ -59,23 +59,23 @@
  *
  * ACTUAL (buggy) behavior:
  *   DEFECT A: browse with a backslash path (path=D:\projects\demo) returns 400
- *     because cbm_is_dir() sees the un-normalized backslash string.
+ *     because lsm_is_dir() sees the un-normalized backslash string.
  *   DEFECT B: browse for "D:/" returns parent="D:" instead of "D:/", stranding
- *     the user at the drive root because the next cbm_is_dir("D:") fails or
+ *     the user at the drive root because the next lsm_is_dir("D:") fails or
  *     resolves to the wrong directory.
  *
  * WHY RED on current code:
  *   test_repro_issue548_cbm_is_dir_rejects_backslash_path:
  *     Creates a real tmpdir on disk.  Converts the forward-slash path to a
  *     backslash form (simulating what the Windows UI sends).  Asserts that
- *     cbm_is_dir() returns true for the backslash form — exactly what
+ *     lsm_is_dir() returns true for the backslash form — exactly what
  *     handle_browse() would require after the missing normalize call.
- *     On POSIX, cbm_is_dir() always returns false for a backslash path
+ *     On POSIX, lsm_is_dir() always returns false for a backslash path
  *     (the OS treats backslash as a valid filename character, not a separator,
  *     so the path does not exist).  ASSERT fails → RED.
- *     This directly documents the missing cbm_normalize_path_sep() call in
+ *     This directly documents the missing lsm_normalize_path_sep() call in
  *     handle_browse(): the normalize function IS correct (see TEST C), but
- *     handle_browse() never calls it before cbm_is_dir().
+ *     handle_browse() never calls it before lsm_is_dir().
  *
  *   test_repro_issue548_drive_root_parent_correct:
  *     Reproduces the parent-path computation from handle_browse() using the
@@ -87,7 +87,7 @@
  *     required) and will be RED on all platforms including macOS CI.
  *
  * FIX LOCATION (not implemented here — reproduce only):
- *   DEFECT A: add cbm_normalize_path_sep(path) after cbm_http_query_param()
+ *   DEFECT A: add lsm_normalize_path_sep(path) after lsm_http_query_param()
  *     in handle_browse() (src/ui/http_server.c, around line 409).
  *   DEFECT B: in the parent-path computation block, check whether the stripped
  *     result ends with ':' (bare Windows drive spec) and restore the trailing
@@ -98,7 +98,7 @@
  *   Neither test exercises the full handle_browse() HTTP handler end-to-end
  *   (handle_browse is a static function; calling it requires a live HTTP
  *   server and a real socket connection).  TEST A is a direct call to
- *   cbm_is_dir() on the un-normalized path — it proves the gate that
+ *   lsm_is_dir() on the un-normalized path — it proves the gate that
  *   handle_browse() uses would reject the backslash form, but does not drive
  *   the HTTP layer.  TEST B is pure string logic verbatim-copied from the
  *   handler.  Both tests are sufficient to pin the root causes and will turn
@@ -114,61 +114,61 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ── TEST A: cbm_is_dir rejects a backslash path (the gate handle_browse uses) */
+/* ── TEST A: lsm_is_dir rejects a backslash path (the gate handle_browse uses) */
 
 /*
  * repro_issue548_cbm_is_dir_rejects_backslash_path
  *
  * WHY RED on current code (DEFECT A):
- *   handle_browse() (src/ui/http_server.c:411) calls cbm_is_dir(path) before
- *   calling cbm_normalize_path_sep(path).  When the query param carries
+ *   handle_browse() (src/ui/http_server.c:411) calls lsm_is_dir(path) before
+ *   calling lsm_normalize_path_sep(path).  When the query param carries
  *   Windows backslashes (e.g. "D:\projects\demo"), the raw backslash string
- *   reaches cbm_is_dir() un-normalized.
+ *   reaches lsm_is_dir() un-normalized.
  *
- *   On POSIX (macOS/Linux CI), cbm_is_dir() wraps stat(2).  The OS treats
+ *   On POSIX (macOS/Linux CI), lsm_is_dir() wraps stat(2).  The OS treats
  *   backslash as a valid filename character — not a path separator — so the
- *   path "tmp\cbm_repro548_abc123" (with backslashes) is a single component
+ *   path "tmp\lsm_repro548_abc123" (with backslashes) is a single component
  *   that does not exist in the filesystem.  stat() returns ENOENT →
- *   cbm_is_dir returns false.  The handler then returns 400 "not a directory".
+ *   lsm_is_dir returns false.  The handler then returns 400 "not a directory".
  *
- *   This test creates a real tmpdir so that cbm_is_dir() WOULD return true if
+ *   This test creates a real tmpdir so that lsm_is_dir() WOULD return true if
  *   the path were normalized (forward slashes).  It then converts the path to
  *   backslash form (mimicking the Windows browser UI) and asserts that
- *   cbm_is_dir() returns true for that backslash form.  On current code it
+ *   lsm_is_dir() returns true for that backslash form.  On current code it
  *   returns false → ASSERT fails → RED.
  *
- *   The test does not need a live server.  It calls cbm_is_dir() directly,
+ *   The test does not need a live server.  It calls lsm_is_dir() directly,
  *   which is exactly the function handle_browse() calls at the bug site.
  *
- *   Fix: add cbm_normalize_path_sep(path) in handle_browse() before cbm_is_dir().
- *   After the fix, handle_browse() converts backslashes first, so cbm_is_dir()
+ *   Fix: add lsm_normalize_path_sep(path) in handle_browse() before lsm_is_dir().
+ *   After the fix, handle_browse() converts backslashes first, so lsm_is_dir()
  *   sees forward-slash paths and succeeds → handler returns 200 → test GREEN.
  */
 TEST(repro_issue548_cbm_is_dir_rejects_backslash_path) {
     /*
-     * Create a real tmpdir on POSIX so cbm_is_dir() would succeed on the
+     * Create a real tmpdir on POSIX so lsm_is_dir() would succeed on the
      * forward-slash path.  The test then converts it to backslash form to
-     * reproduce what handle_browse() passes to cbm_is_dir() on current code.
+     * reproduce what handle_browse() passes to lsm_is_dir() on current code.
      */
     char tmpdir[256];
-    snprintf(tmpdir, sizeof(tmpdir), "/tmp/cbm_repro548_XXXXXX");
-    if (!cbm_mkdtemp(tmpdir)) {
-        FAIL("cbm_mkdtemp failed — cannot create fixture tmpdir");
+    snprintf(tmpdir, sizeof(tmpdir), "/tmp/lsm_repro548_XXXXXX");
+    if (!lsm_mkdtemp(tmpdir)) {
+        FAIL("lsm_mkdtemp failed — cannot create fixture tmpdir");
     }
 
     /*
      * Sanity: the forward-slash form is a real directory.
      * If this fails the fixture setup is broken, not the production code.
      */
-    if (!cbm_is_dir(tmpdir)) {
-        FAIL("sanity: cbm_is_dir on fresh tmpdir returned false — fixture broken");
+    if (!lsm_is_dir(tmpdir)) {
+        FAIL("sanity: lsm_is_dir on fresh tmpdir returned false — fixture broken");
     }
 
     /*
      * Convert every '/' in tmpdir to '\\' to produce the backslash form that
-     * the Windows browser UI sends (URL-decoded, e.g. \tmp\cbm_repro548_abc).
-     * handle_browse() receives exactly this string from cbm_http_query_param()
-     * before the missing cbm_normalize_path_sep() call.
+     * the Windows browser UI sends (URL-decoded, e.g. \tmp\lsm_repro548_abc).
+     * handle_browse() receives exactly this string from lsm_http_query_param()
+     * before the missing lsm_normalize_path_sep() call.
      */
     char backslash_path[256];
     snprintf(backslash_path, sizeof(backslash_path), "%s", tmpdir);
@@ -182,19 +182,19 @@ TEST(repro_issue548_cbm_is_dir_rejects_backslash_path) {
      *
      * handle_browse() is a static HTTP handler that cannot be called directly,
      * so we exercise the exact two-step sequence it now performs on the query
-     * param: cbm_normalize_path_sep(path) THEN cbm_is_dir(path).  This pins the
+     * param: lsm_normalize_path_sep(path) THEN lsm_is_dir(path).  This pins the
      * fix at the missing normalize call-site:
-     *   - BEFORE the fix, handle_browse() skipped cbm_normalize_path_sep(), so
-     *     the raw backslash string reached cbm_is_dir() and the directory was
+     *   - BEFORE the fix, handle_browse() skipped lsm_normalize_path_sep(), so
+     *     the raw backslash string reached lsm_is_dir() and the directory was
      *     rejected (the user could never open a D:/ path).
      *   - AFTER the fix (src/ui/http_server.c, normalize-before-is_dir), the
-     *     backslash form is converted to forward slashes first and cbm_is_dir()
+     *     backslash form is converted to forward slashes first and lsm_is_dir()
      *     sees the real tmpdir path → returns true.
-     * cbm_normalize_path_sep() itself is verified correct by TEST C; here it
+     * lsm_normalize_path_sep() itself is verified correct by TEST C; here it
      * stands in for the call handle_browse() makes before the gate.
      */
-    cbm_normalize_path_sep(backslash_path);
-    int result = cbm_is_dir(backslash_path) ? 1 : 0;
+    lsm_normalize_path_sep(backslash_path);
+    int result = lsm_is_dir(backslash_path) ? 1 : 0;
     ASSERT_EQ(result, 1);
 
     /*
@@ -248,7 +248,7 @@ TEST(repro_issue548_drive_root_parent_correct) {
      * This mirrors src/ui/http_server.c lines 459-465 exactly.
      *
      * Input: "D:/" — the normalized form of the Windows D: drive root, after
-     * cbm_normalize_path_sep() has converted "D:\" to "D:/".
+     * lsm_normalize_path_sep() has converted "D:\" to "D:/".
      *
      * Expected parent (correct): "D:/"   — drive root is its own parent.
      * Actual parent   (buggy):   "D:"    — bare drive spec, '/' stripped.
@@ -285,21 +285,21 @@ TEST(repro_issue548_drive_root_parent_correct) {
     PASS();
 }
 
-/* ── TEST C: cbm_normalize_path_sep handles D:\ backslash form ──────────── */
+/* ── TEST C: lsm_normalize_path_sep handles D:\ backslash form ──────────── */
 
 /*
  * repro_issue548_normalize_backslash_drive_path
  *
- * Documents that cbm_normalize_path_sep() itself correctly converts
+ * Documents that lsm_normalize_path_sep() itself correctly converts
  * "D:\projects\demo" to "D:/projects/demo" on all platforms.  This test is
  * GREEN on current code — it confirms that the normalize function is correct
  * and is AVAILABLE to be called; the bug (DEFECT A) is that handle_browse()
- * simply never calls it before the cbm_is_dir() gate.
+ * simply never calls it before the lsm_is_dir() gate.
  *
  * Including this GREEN test alongside the RED tests is intentional: it pins
  * the root cause precisely at the missing call-site in handle_browse() rather
  * than a defect in the normalization logic itself.  When the fixer adds
- * cbm_normalize_path_sep(path) to handle_browse(), all three tests in this
+ * lsm_normalize_path_sep(path) to handle_browse(), all three tests in this
  * suite will be GREEN.
  *
  * NOTE: this test is GREEN on current code.  It is included to document the
@@ -307,22 +307,22 @@ TEST(repro_issue548_drive_root_parent_correct) {
  * accidentally regress it.
  */
 TEST(repro_issue548_normalize_backslash_drive_path) {
-    /* Mutable copies so cbm_normalize_path_sep() can edit in-place. */
+    /* Mutable copies so lsm_normalize_path_sep() can edit in-place. */
     char path_backslash[]   = "D:\\projects\\demo";
     char path_upper[]       = "D:/projects/demo";
     char path_lower_drive[] = "d:/projects/demo";
 
-    /* cbm_normalize_path_sep converts '\' → '/' on all platforms and
+    /* lsm_normalize_path_sep converts '\' → '/' on all platforms and
      * uppercases a lowercase drive letter. */
-    cbm_normalize_path_sep(path_backslash);
+    lsm_normalize_path_sep(path_backslash);
     ASSERT_STR_EQ(path_backslash, "D:/projects/demo");
 
     /* Already forward-slash form: unchanged. */
-    cbm_normalize_path_sep(path_upper);
+    lsm_normalize_path_sep(path_upper);
     ASSERT_STR_EQ(path_upper, "D:/projects/demo");
 
     /* Lowercase drive letter is canonicalized to uppercase. */
-    cbm_normalize_path_sep(path_lower_drive);
+    lsm_normalize_path_sep(path_lower_drive);
     ASSERT_STR_EQ(path_lower_drive, "D:/projects/demo");
 
     PASS();
@@ -331,9 +331,9 @@ TEST(repro_issue548_normalize_backslash_drive_path) {
 /* ── Suite ───────────────────────────────────────────────────────────────── */
 SUITE(repro_issue548) {
     /*
-     * RED: cbm_is_dir() returns false for a backslash path, reproducing the
-     * effect of handle_browse() missing cbm_normalize_path_sep() before
-     * cbm_is_dir().  A real tmpdir exists on disk; the forward-slash form
+     * RED: lsm_is_dir() returns false for a backslash path, reproducing the
+     * effect of handle_browse() missing lsm_normalize_path_sep() before
+     * lsm_is_dir().  A real tmpdir exists on disk; the forward-slash form
      * would pass the gate, but handle_browse() passes the raw backslash form.
      */
     RUN_TEST(repro_issue548_cbm_is_dir_rejects_backslash_path);
@@ -346,7 +346,7 @@ SUITE(repro_issue548) {
     RUN_TEST(repro_issue548_drive_root_parent_correct);
 
     /*
-     * GREEN (intentional): cbm_normalize_path_sep() itself is correct.
+     * GREEN (intentional): lsm_normalize_path_sep() itself is correct.
      * Pins the root cause at the missing call-site, not the normalize logic.
      */
     RUN_TEST(repro_issue548_normalize_backslash_drive_path);

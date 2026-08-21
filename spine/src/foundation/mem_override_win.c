@@ -5,7 +5,7 @@
  *
  * On POSIX the build links mimalloc's object first, so its strong malloc/free
  * symbols win and every allocation in everything we compile — our code,
- * SQLite, the tree-sitter grammars, yyjson — lands in mimalloc. cbm_mem_init
+ * SQLite, the tree-sitter grammars, yyjson — lands in mimalloc. lsm_mem_init
  * then sets purge_delay=0 and purge_decommits=1, so a page that becomes empty
  * is decommitted immediately and the OS takes it straight back. That is why a
  * long-lived POSIX daemon stays flat.
@@ -16,7 +16,7 @@
  * compiled out, the generic fallback's plain malloc/free definitions lost the
  * link against the static CRT, and -DMI_MALLOC_OVERRIDE=1 was defined but
  * inert. Ordinary malloc went to the CRT heap, which keeps freed pages
- * committed — so every allocator tuning in cbm_mem_init was POSIX-only, and a
+ * committed — so every allocator tuning in lsm_mem_init was POSIX-only, and a
  * long-lived daemon ratcheted committed memory until Windows fell over (#581).
  *
  * HOW THIS FIXES IT

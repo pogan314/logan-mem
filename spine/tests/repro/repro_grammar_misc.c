@@ -3,63 +3,63 @@
  * remaining MISCELLANEOUS language family (hardware-description, CFML dialects,
  * niche scripting, structural assembly/linker/tablegen/ledger/IaC). This file
  * completes the all-161-grammar reproduce-first coverage: every grammar-backed
- * CBM_LANG_* now has a per-language RED/GREEN row on the bug-repro board.
- * CBM_LANG_OBJECTSCRIPT_EXPORT is intentionally excluded from the grammar
+ * LSM_LANG_* now has a per-language RED/GREEN row on the bug-repro board.
+ * LSM_LANG_OBJECTSCRIPT_EXPORT is intentionally excluded from the grammar
  * count because Studio Export XML is transformed to ObjectScript UDL first.
  *
  * One TEST() per language so per-language RED/GREEN shows on the board. Each
  * test runs the battery dimension appropriate to what the language's lang_spec
- * actually models (verified against internal/cbm/lang_specs.c and the
+ * actually models (verified against internal/lsm/lang_specs.c and the
  * *_func_types / *_class_types / *_call_types arrays):
  *
  *   CALLABLE family (func_types AND call_types both non-empty) -> FULL battery
  *   (dims 1-8) + robustness:
- *     VERILOG       -> CBM_LANG_VERILOG       (func: function_declaration/task;
+ *     VERILOG       -> LSM_LANG_VERILOG       (func: function_declaration/task;
  *                                              call: system_tf_call/subroutine_call)
- *     SYSTEMVERILOG -> CBM_LANG_SYSTEMVERILOG (func: function_declaration/task;
+ *     SYSTEMVERILOG -> LSM_LANG_SYSTEMVERILOG (func: function_declaration/task;
  *                                              call: function_subroutine_call)
- *     VHDL          -> CBM_LANG_VHDL          (func: subprogram_declaration/def;
+ *     VHDL          -> LSM_LANG_VHDL          (func: subprogram_declaration/def;
  *                                              call: function_call/procedure_call)
- *     CFML          -> CBM_LANG_CFML          (func: function_declaration;
+ *     CFML          -> LSM_LANG_CFML          (func: function_declaration;
  *                                              call: call_expression)
- *     CFSCRIPT      -> CBM_LANG_CFSCRIPT      (func: function_declaration; call:
+ *     CFSCRIPT      -> LSM_LANG_CFSCRIPT      (func: function_declaration; call:
  *                                              js_call_types = call_expression)
- *     RESCRIPT      -> CBM_LANG_RESCRIPT      (func: function; call: call_expression)
- *     SQUIRREL      -> CBM_LANG_SQUIRREL      (func: function_declaration; call:
+ *     RESCRIPT      -> LSM_LANG_RESCRIPT      (func: function; call: call_expression)
+ *     SQUIRREL      -> LSM_LANG_SQUIRREL      (func: function_declaration; call:
  *                                              call_expression)
- *     PINE          -> CBM_LANG_PINE          (func: function_declaration_statement;
+ *     PINE          -> LSM_LANG_PINE          (func: function_declaration_statement;
  *                                              call: call)
- *     TEMPL         -> CBM_LANG_TEMPL         (func: function_declaration/method;
+ *     TEMPL         -> LSM_LANG_TEMPL         (func: function_declaration/method;
  *                                              call: call_expression)
- *     SQL           -> CBM_LANG_SQL           (func: create_function; call:
+ *     SQL           -> LSM_LANG_SQL           (func: create_function; call:
  *                                              function_call/invocation/command)
- *     OBJECTSCRIPT_UDL -> CBM_LANG_OBJECTSCRIPT_UDL
+ *     OBJECTSCRIPT_UDL -> LSM_LANG_OBJECTSCRIPT_UDL
  *                                             (func: method/classmethod/query;
  *                                              call: four registered UDL forms)
- *     OBJECTSCRIPT_ROUTINE -> CBM_LANG_OBJECTSCRIPT_ROUTINE
+ *     OBJECTSCRIPT_ROUTINE -> LSM_LANG_OBJECTSCRIPT_ROUTINE
  *                                             (func: tag; call: extrinsic_function/
  *                                              routine_tag_call)
  *
  *   STRUCTURAL family (asm / linker / data / IaC) -> extract-clean +
  *   labels/fqn/ranges valid + defs-present (the entities each should extract) +
  *   robustness; NO call / pipeline dims:
- *     ASSEMBLY      -> CBM_LANG_ASSEMBLY      (func_types = {"label"}; defs are
+ *     ASSEMBLY      -> LSM_LANG_ASSEMBLY      (func_types = {"label"}; defs are
  *                                              labels routed through the func-def
  *                                              path -> "Function"). defs-present
  *                                              asserts "Function".
- *     LINKERSCRIPT  -> CBM_LANG_LINKERSCRIPT  (only module_types + call_types; no
+ *     LINKERSCRIPT  -> LSM_LANG_LINKERSCRIPT  (only module_types + call_types; no
  *                                              func/class/var defs in spec). NO
  *                                              defs-present assertion -- dims 1-4
  *                                              + robustness only.
- *     TABLEGEN      -> CBM_LANG_TABLEGEN      (func: def/multiclass/defm ->
+ *     TABLEGEN      -> LSM_LANG_TABLEGEN      (func: def/multiclass/defm ->
  *                                              "Function"; class: class -> "Class").
  *                                              defs-present asserts "Function" and
  *                                              "Class". No call_types -> no call dim.
- *     BEANCOUNT     -> CBM_LANG_BEANCOUNT     (only module_types + import_types; no
+ *     BEANCOUNT     -> LSM_LANG_BEANCOUNT     (only module_types + import_types; no
  *                                              func/class/var/call defs in spec).
  *                                              NO defs-present -- dims 1-4 +
  *                                              robustness only.
- *     BICEP         -> CBM_LANG_BICEP         (func: user_defined_function ->
+ *     BICEP         -> LSM_LANG_BICEP         (func: user_defined_function ->
  *                                              "Function"; class: resource/type/
  *                                              module_declaration -> "Class").
  *                                              defs-present asserts "Class" for the
@@ -69,7 +69,7 @@
  *
  * BATTERY DIMENSIONS
  * ------------------
- * SINGLE-FILE (cbm_extract_file, via inv_rx + inv_count_* helpers):
+ * SINGLE-FILE (lsm_extract_file, via inv_rx + inv_count_* helpers):
  *   1. extract-clean    : inv_extract_clean(src,lang,file) == 1
  *                         (parser returned a result and did not set has_error; a
  *                         hard crash would not return at all).
@@ -83,7 +83,7 @@
  *   6. calls-extracted  : inv_has_call(r, callee) == 1 (the in-body call was
  *                         captured). CALLABLE family only.
  *
- * FULL-PIPELINE (rh_index_files -> cbm_store_t*, via inv_count_* store helpers):
+ * FULL-PIPELINE (rh_index_files -> lsm_store_t*, via inv_count_* store helpers):
  *   7. callable-sourcing : inv_count_calls_by_source(store,project,&mod,&call);
  *                          assert mod == 0 AND call >= 1 -- every in-body call must
  *                          be sourced at a Function/Method node, NEVER at a Module
@@ -94,7 +94,7 @@
  *
  * ROBUSTNESS (every language):
  *   R. extract-on-malformed: the extractor must RETURN (not crash/hang) on a
- *      deliberately truncated/broken version of the fixture. cbm_extract_file may
+ *      deliberately truncated/broken version of the fixture. lsm_extract_file may
  *      set has_error but must not return NULL.
  *
  * HONEST RED CONTRACT (the point of this file): dimension 7 (callable-sourcing) is
@@ -102,7 +102,7 @@
  * SYSTEMVERILOG / VHDL / CFML / CFSCRIPT / RESCRIPT / SQUIRREL / PINE / TEMPL / SQL /
  * OBJECTSCRIPT_UDL / OBJECTSCRIPT_ROUTINE has a dedicated cross-LSP rescue, so
  * attribution depends solely on the
- * tree-sitter enclosing-func walk (cbm_find_enclosing_func + func_kinds_for_lang in
+ * tree-sitter enclosing-func walk (lsm_find_enclosing_func + func_kinds_for_lang in
  * helpers.c). When that mapping does not match the grammar's emitted func node
  * types, the in-body call falls back to the Module QN -- exactly the enclosing-func
  * drift documented for the compiled/OOP family in repro_grammar_core.c. Some of
@@ -131,7 +131,7 @@
  * expect_label). Returns 0 on PASS, 1 on FAIL.
  */
 static int misc_single_file_battery(const char *lang_tag, const char *src,
-                                    CBMLanguage lang, const char *file,
+                                    LSMLanguage lang, const char *file,
                                     const char *expect_label,
                                     const char *expect_label2,
                                     const char *callee) {
@@ -145,7 +145,7 @@ static int misc_single_file_battery(const char *lang_tag, const char *src,
         return 1; /* nothing else can be trusted */
     }
 
-    CBMFileResult *r = inv_rx(src, lang, file);
+    LSMFileResult *r = inv_rx(src, lang, file);
     if (!r) {
         printf("  %sFAIL%s  [%s] inv_rx returned NULL after clean extract\n",
                RED, RST, lang_tag);
@@ -197,7 +197,7 @@ static int misc_single_file_battery(const char *lang_tag, const char *src,
         fails++;
     }
 
-    cbm_free_result(r);
+    lsm_free_result(r);
     return fails ? 1 : 0;
 }
 
@@ -219,7 +219,7 @@ static int misc_pipeline_battery(const char *lang_tag, const char *filename,
     files[0].content = src;
 
     RProj lp;
-    cbm_store_t *store = rh_index_files(&lp, files, 1);
+    lsm_store_t *store = rh_index_files(&lp, files, 1);
     if (!store) {
         printf("  %sFAIL%s  [%s] pipeline: rh_index_files returned NULL\n",
                RED, RST, lang_tag);
@@ -259,24 +259,24 @@ static int misc_pipeline_battery(const char *lang_tag, const char *filename,
 
 /* ── Robustness helper: assert call RETURNS on malformed input ───────────────
  *
- * A truncated version of the fixture is passed through cbm_extract_file.
+ * A truncated version of the fixture is passed through lsm_extract_file.
  * has_error may be set (1) but the call must return non-NULL. If it returns NULL
  * the extractor crashed or aborted on bad input -- that is a RED robustness bug.
  * Returns 0 on PASS, 1 on FAIL.
  */
 static int misc_robustness(const char *lang_tag, const char *bad_src,
-                           CBMLanguage lang, const char *file) {
+                           LSMLanguage lang, const char *file) {
     const char *RED = tf_red();
     const char *RST = tf_reset();
 
-    CBMFileResult *r = cbm_extract_file(bad_src, (int)strlen(bad_src),
+    LSMFileResult *r = lsm_extract_file(bad_src, (int)strlen(bad_src),
                                         lang, "t", file, 0, NULL, NULL);
     if (!r) {
         printf("  %sFAIL%s  [%s] robustness: extractor returned NULL on malformed input\n",
                RED, RST, lang_tag);
         return 1;
     }
-    cbm_free_result(r);
+    lsm_free_result(r);
     return 0;
 }
 
@@ -305,10 +305,10 @@ TEST(repro_grammar_misc_assembly) {
         "    call add\n"
         "    ret\n";
     static const char bad[] = ".globl main\nmain:\n    call ";
-    if (misc_single_file_battery("ASSEMBLY", src, CBM_LANG_ASSEMBLY, "f.s",
+    if (misc_single_file_battery("ASSEMBLY", src, LSM_LANG_ASSEMBLY, "f.s",
                                  "Function", NULL, NULL) != 0)
         return 1;
-    return misc_robustness("ASSEMBLY", bad, CBM_LANG_ASSEMBLY, "f.s");
+    return misc_robustness("ASSEMBLY", bad, LSM_LANG_ASSEMBLY, "f.s");
 }
 
 /* ── BEANCOUNT (structural) ──────────────────────────────────────────────────
@@ -323,7 +323,7 @@ TEST(repro_grammar_misc_assembly) {
  */
 TEST(repro_grammar_misc_beancount) {
     static const char src[] =
-        "option \"title\" \"CBM Ledger\"\n"
+        "option \"title\" \"LSM Ledger\"\n"
         "\n"
         "2026-01-01 open Assets:Cash USD\n"
         "2026-01-01 open Expenses:Food USD\n"
@@ -332,10 +332,10 @@ TEST(repro_grammar_misc_beancount) {
         "  Expenses:Food   12.50 USD\n"
         "  Assets:Cash    -12.50 USD\n";
     static const char bad[] = "2026-06-26 * \"Lunch\"\n  Expenses:Food   12.50";
-    if (misc_single_file_battery("BEANCOUNT", src, CBM_LANG_BEANCOUNT,
+    if (misc_single_file_battery("BEANCOUNT", src, LSM_LANG_BEANCOUNT,
                                  "main.beancount", NULL, NULL, NULL) != 0)
         return 1;
-    return misc_robustness("BEANCOUNT", bad, CBM_LANG_BEANCOUNT,
+    return misc_robustness("BEANCOUNT", bad, LSM_LANG_BEANCOUNT,
                            "main.beancount");
 }
 
@@ -354,7 +354,7 @@ TEST(repro_grammar_misc_beancount) {
 TEST(repro_grammar_misc_bicep) {
     static const char src[] =
         "param location string = resourceGroup().location\n"
-        "var storageName = 'cbmstore'\n"
+        "var storageName = 'lsmstore'\n"
         "\n"
         "resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {\n"
         "  name: storageName\n"
@@ -365,10 +365,10 @@ TEST(repro_grammar_misc_bicep) {
         "  kind: 'StorageV2'\n"
         "}\n";
     static const char bad[] = "resource sa 'Microsoft.Storage@2023' = {\n  name:";
-    if (misc_single_file_battery("BICEP", src, CBM_LANG_BICEP, "main.bicep",
+    if (misc_single_file_battery("BICEP", src, LSM_LANG_BICEP, "main.bicep",
                                  "Class", NULL, NULL) != 0)
         return 1;
-    return misc_robustness("BICEP", bad, CBM_LANG_BICEP, "main.bicep");
+    return misc_robustness("BICEP", bad, LSM_LANG_BICEP, "main.bicep");
 }
 
 /* ── CFML (callable) ─────────────────────────────────────────────────────────
@@ -401,10 +401,10 @@ TEST(repro_grammar_misc_cfml) {
         "  <cfreturn add(arguments.x, 1)>\n"
         "</cffunction>\n";
     static const char bad[] = "<cffunction name=\"add\">\n  <cfreturn add(";
-    if (misc_single_file_battery("CFML", src, CBM_LANG_CFML, "calc.cfm",
+    if (misc_single_file_battery("CFML", src, LSM_LANG_CFML, "calc.cfm",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("CFML", bad, CBM_LANG_CFML, "calc.cfm") != 0)
+    if (misc_robustness("CFML", bad, LSM_LANG_CFML, "calc.cfm") != 0)
         return 1;
     return misc_pipeline_battery("CFML", "calc.cfm", src);
 }
@@ -435,10 +435,10 @@ TEST(repro_grammar_misc_cfscript) {
         "  }\n"
         "}\n";
     static const char bad[] = "component {\n  function add(a, b) {\n    return add(";
-    if (misc_single_file_battery("CFSCRIPT", src, CBM_LANG_CFSCRIPT, "Calc.cfc",
+    if (misc_single_file_battery("CFSCRIPT", src, LSM_LANG_CFSCRIPT, "Calc.cfc",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("CFSCRIPT", bad, CBM_LANG_CFSCRIPT, "Calc.cfc") != 0)
+    if (misc_robustness("CFSCRIPT", bad, LSM_LANG_CFSCRIPT, "Calc.cfc") != 0)
         return 1;
     return misc_pipeline_battery("CFSCRIPT", "Calc.cfc", src);
 }
@@ -471,10 +471,10 @@ TEST(repro_grammar_misc_linkerscript) {
         "  .data : { *(.data*) } > RAM\n"
         "}\n";
     static const char bad[] = "SECTIONS\n{\n  .text : { *(.text*) } > ";
-    if (misc_single_file_battery("LINKERSCRIPT", src, CBM_LANG_LINKERSCRIPT,
+    if (misc_single_file_battery("LINKERSCRIPT", src, LSM_LANG_LINKERSCRIPT,
                                  "link.ld", NULL, NULL, NULL) != 0)
         return 1;
-    return misc_robustness("LINKERSCRIPT", bad, CBM_LANG_LINKERSCRIPT, "link.ld");
+    return misc_robustness("LINKERSCRIPT", bad, LSM_LANG_LINKERSCRIPT, "link.ld");
 }
 
 /* ── OBJECTSCRIPT UDL (callable) ─────────────────────────────────────────────
@@ -502,10 +502,10 @@ TEST(repro_grammar_misc_objectscript_udl) {
                               "ClassMethod Run(watched As %String) As %String\n"
                               "{\n"
                               "    Quit ##class(Sample.Callbacks).Accept(\n";
-    if (misc_single_file_battery("OBJECTSCRIPT_UDL", src, CBM_LANG_OBJECTSCRIPT_UDL,
+    if (misc_single_file_battery("OBJECTSCRIPT_UDL", src, LSM_LANG_OBJECTSCRIPT_UDL,
                                  "Callbacks.cls", "Method", NULL, "Accept") != 0)
         return 1;
-    if (misc_robustness("OBJECTSCRIPT_UDL", bad, CBM_LANG_OBJECTSCRIPT_UDL, "Callbacks.cls") != 0)
+    if (misc_robustness("OBJECTSCRIPT_UDL", bad, LSM_LANG_OBJECTSCRIPT_UDL, "Callbacks.cls") != 0)
         return 1;
     return misc_pipeline_battery("OBJECTSCRIPT_UDL", "Callbacks.cls", src);
 }
@@ -529,10 +529,10 @@ TEST(repro_grammar_misc_objectscript_routine) {
                               "    Quit\n"
                               "Run(watched)\n"
                               "    Set result = $$Accept(\n";
-    if (misc_single_file_battery("OBJECTSCRIPT_ROUTINE", src, CBM_LANG_OBJECTSCRIPT_ROUTINE,
+    if (misc_single_file_battery("OBJECTSCRIPT_ROUTINE", src, LSM_LANG_OBJECTSCRIPT_ROUTINE,
                                  "Sample.mac", "Function", NULL, "Accept") != 0)
         return 1;
-    if (misc_robustness("OBJECTSCRIPT_ROUTINE", bad, CBM_LANG_OBJECTSCRIPT_ROUTINE, "Sample.mac") !=
+    if (misc_robustness("OBJECTSCRIPT_ROUTINE", bad, LSM_LANG_OBJECTSCRIPT_ROUTINE, "Sample.mac") !=
         0)
         return 1;
     return misc_pipeline_battery("OBJECTSCRIPT_ROUTINE", "Sample.mac", src);
@@ -558,7 +558,7 @@ TEST(repro_grammar_misc_objectscript_routine) {
 TEST(repro_grammar_misc_pine) {
     static const char src[] =
         "//@version=5\n"
-        "indicator(\"CBM EMA\", overlay=true)\n"
+        "indicator(\"LSM EMA\", overlay=true)\n"
         "\n"
         "ema2(src, len) =>\n"
         "    a = src + len\n"
@@ -568,10 +568,10 @@ TEST(repro_grammar_misc_pine) {
         "    b = ema2(src, len)\n"
         "    b\n";
     static const char bad[] = "//@version=5\nema2(src, len) =>\n    a = ta.ema(";
-    if (misc_single_file_battery("PINE", src, CBM_LANG_PINE, "ind.pine",
+    if (misc_single_file_battery("PINE", src, LSM_LANG_PINE, "ind.pine",
                                  "Function", NULL, "ema2") != 0)
         return 1;
-    if (misc_robustness("PINE", bad, CBM_LANG_PINE, "ind.pine") != 0)
+    if (misc_robustness("PINE", bad, LSM_LANG_PINE, "ind.pine") != 0)
         return 1;
     return misc_pipeline_battery("PINE", "ind.pine", src);
 }
@@ -598,10 +598,10 @@ TEST(repro_grammar_misc_rescript) {
         "  result\n"
         "}\n";
     static const char bad[] = "let compute = x => {\n  let result = add(";
-    if (misc_single_file_battery("RESCRIPT", src, CBM_LANG_RESCRIPT, "Calc.res",
+    if (misc_single_file_battery("RESCRIPT", src, LSM_LANG_RESCRIPT, "Calc.res",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("RESCRIPT", bad, CBM_LANG_RESCRIPT, "Calc.res") != 0)
+    if (misc_robustness("RESCRIPT", bad, LSM_LANG_RESCRIPT, "Calc.res") != 0)
         return 1;
     return misc_pipeline_battery("RESCRIPT", "Calc.res", src);
 }
@@ -635,10 +635,10 @@ TEST(repro_grammar_misc_sql) {
         "END;\n"
         "$$ LANGUAGE plpgsql;\n";
     static const char bad[] = "CREATE FUNCTION add(a integer) RETURNS integer AS $$\nBEGIN\n  RETURN add(";
-    if (misc_single_file_battery("SQL", src, CBM_LANG_SQL, "fn.sql",
+    if (misc_single_file_battery("SQL", src, LSM_LANG_SQL, "fn.sql",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("SQL", bad, CBM_LANG_SQL, "fn.sql") != 0)
+    if (misc_robustness("SQL", bad, LSM_LANG_SQL, "fn.sql") != 0)
         return 1;
     return misc_pipeline_battery("SQL", "fn.sql", src);
 }
@@ -667,10 +667,10 @@ TEST(repro_grammar_misc_squirrel) {
         "    return add(x, 1);\n"
         "}\n";
     static const char bad[] = "function add(a, b) {\n    return add(";
-    if (misc_single_file_battery("SQUIRREL", src, CBM_LANG_SQUIRREL, "calc.nut",
+    if (misc_single_file_battery("SQUIRREL", src, LSM_LANG_SQUIRREL, "calc.nut",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("SQUIRREL", bad, CBM_LANG_SQUIRREL, "calc.nut") != 0)
+    if (misc_robustness("SQUIRREL", bad, LSM_LANG_SQUIRREL, "calc.nut") != 0)
         return 1;
     return misc_pipeline_battery("SQUIRREL", "calc.nut", src);
 }
@@ -704,10 +704,10 @@ TEST(repro_grammar_misc_systemverilog) {
         "  endfunction\n"
         "endmodule\n";
     static const char bad[] = "module calc;\n  function automatic int add(int a);\n    return add(";
-    if (misc_single_file_battery("SYSTEMVERILOG", src, CBM_LANG_SYSTEMVERILOG,
+    if (misc_single_file_battery("SYSTEMVERILOG", src, LSM_LANG_SYSTEMVERILOG,
                                  "calc.sv", "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("SYSTEMVERILOG", bad, CBM_LANG_SYSTEMVERILOG,
+    if (misc_robustness("SYSTEMVERILOG", bad, LSM_LANG_SYSTEMVERILOG,
                         "calc.sv") != 0)
         return 1;
     return misc_pipeline_battery("SYSTEMVERILOG", "calc.sv", src);
@@ -726,7 +726,7 @@ TEST(repro_grammar_misc_systemverilog) {
 TEST(repro_grammar_misc_tablegen) {
     static const char src[] =
         "class Instruction {\n"
-        "  string Namespace = \"CBM\";\n"
+        "  string Namespace = \"LSM\";\n"
         "  bits<8> Opcode = 0;\n"
         "}\n"
         "\n"
@@ -738,10 +738,10 @@ TEST(repro_grammar_misc_tablegen) {
         "  let Opcode = 2;\n"
         "}\n";
     static const char bad[] = "class Instruction {\n  string Namespace = ";
-    if (misc_single_file_battery("TABLEGEN", src, CBM_LANG_TABLEGEN, "instr.td",
+    if (misc_single_file_battery("TABLEGEN", src, LSM_LANG_TABLEGEN, "instr.td",
                                  "Function", "Class", NULL) != 0)
         return 1;
-    return misc_robustness("TABLEGEN", bad, CBM_LANG_TABLEGEN, "instr.td");
+    return misc_robustness("TABLEGEN", bad, LSM_LANG_TABLEGEN, "instr.td");
 }
 
 /* ── TEMPL (callable) ────────────────────────────────────────────────────────
@@ -770,10 +770,10 @@ TEST(repro_grammar_misc_templ) {
         "    return greeting(name)\n"
         "}\n";
     static const char bad[] = "package main\nfunc greeting(name string) string {\n    return greeting(";
-    if (misc_single_file_battery("TEMPL", src, CBM_LANG_TEMPL, "page.templ",
+    if (misc_single_file_battery("TEMPL", src, LSM_LANG_TEMPL, "page.templ",
                                  "Function", NULL, "greeting") != 0)
         return 1;
-    if (misc_robustness("TEMPL", bad, CBM_LANG_TEMPL, "page.templ") != 0)
+    if (misc_robustness("TEMPL", bad, LSM_LANG_TEMPL, "page.templ") != 0)
         return 1;
     return misc_pipeline_battery("TEMPL", "page.templ", src);
 }
@@ -806,10 +806,10 @@ TEST(repro_grammar_misc_verilog) {
         "  endfunction\n"
         "endmodule\n";
     static const char bad[] = "module calc;\n  function integer add(input integer a);\n    add = add(";
-    if (misc_single_file_battery("VERILOG", src, CBM_LANG_VERILOG, "calc.v",
+    if (misc_single_file_battery("VERILOG", src, LSM_LANG_VERILOG, "calc.v",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("VERILOG", bad, CBM_LANG_VERILOG, "calc.v") != 0)
+    if (misc_robustness("VERILOG", bad, LSM_LANG_VERILOG, "calc.v") != 0)
         return 1;
     return misc_pipeline_battery("VERILOG", "calc.v", src);
 }
@@ -843,10 +843,10 @@ TEST(repro_grammar_misc_vhdl) {
         "  end function;\n"
         "end package body;\n";
     static const char bad[] = "package body calc is\n  function add(a : integer) return integer is\n  begin\n    return add(";
-    if (misc_single_file_battery("VHDL", src, CBM_LANG_VHDL, "calc.vhd",
+    if (misc_single_file_battery("VHDL", src, LSM_LANG_VHDL, "calc.vhd",
                                  "Function", NULL, "add") != 0)
         return 1;
-    if (misc_robustness("VHDL", bad, CBM_LANG_VHDL, "calc.vhd") != 0)
+    if (misc_robustness("VHDL", bad, LSM_LANG_VHDL, "calc.vhd") != 0)
         return 1;
     return misc_pipeline_battery("VHDL", "calc.vhd", src);
 }

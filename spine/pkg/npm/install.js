@@ -11,16 +11,16 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 const { pipeline } = require('stream');
 
-const REPO = 'DeusData/codebase-memory-mcp';
+const REPO = 'DeusData/logan-spine-mcp';
 const VERSION = require('./package.json').version;
 const BIN_DIR = path.join(__dirname, 'bin');
 const MAX_REDIRECTS = 5;
 const DOWNLOAD_HOP_TIMEOUT_MS = 120_000;
 const CANDIDATE_TIMEOUT_MS = 15_000;
 const MAX_CHECKSUM_MANIFEST_BYTES = 1024 * 1024;
-const WINDOWS_BINARY_NAME = 'codebase-memory-mcp.exe';
+const WINDOWS_BINARY_NAME = 'logan-spine-mcp.exe';
 const UNIX_ARCHIVE_NAMES = [
-  'codebase-memory-mcp',
+  'logan-spine-mcp',
   'LICENSE',
   'install.sh',
   'THIRD_PARTY_NOTICES.md',
@@ -31,7 +31,7 @@ const WINDOWS_ARCHIVE_NAMES = [
   'install.ps1',
   'THIRD_PARTY_NOTICES.md',
 ];
-const WINDOWS_PAIR_LOCK_NAME = '.codebase-memory-mcp-pair.lock';
+const WINDOWS_PAIR_LOCK_NAME = '.logan-spine-mcp-pair.lock';
 const WINDOWS_PAIR_LOCK_WAIT_MS = 45_000;
 const WINDOWS_PAIR_OWNERLESS_STALE_MS = 30_000;
 const WINDOWS_PAIR_LOCK_POLL_MS = 25;
@@ -395,7 +395,7 @@ function installWindowsBinaryAtomically(sourceDir, destDir, verifier = verifyCan
     const publishedDigests = new Map();
     try {
       for (const name of [WINDOWS_BINARY_NAME]) {
-        const staged = path.join(destDir, `.cbm-pair-stage-${transaction}-${name}`);
+        const staged = path.join(destDir, `.lsm-pair-stage-${transaction}-${name}`);
         fs.copyFileSync(path.join(sourceDir, name), staged, fs.constants.COPYFILE_EXCL);
         fs.chmodSync(staged, 0o755);
         stagedPaths.set(name, staged);
@@ -409,7 +409,7 @@ function installWindowsBinaryAtomically(sourceDir, destDir, verifier = verifyCan
         if (!status.isFile() || status.isSymbolicLink()) {
           throw new Error(`refusing unsafe Windows package-cache target: ${target}`);
         }
-        const backup = path.join(destDir, `.cbm-pair-backup-${transaction}-${name}`);
+        const backup = path.join(destDir, `.lsm-pair-backup-${transaction}-${name}`);
         fs.renameSync(target, backup);
         backups.set(name, backup);
       }
@@ -464,9 +464,9 @@ function extractZipOnWindows(archivePath, destPath, requiredNames, extractNames)
   const script = [
     "$ErrorActionPreference = 'Stop'",
     'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-    '$zip = [System.IO.Compression.ZipFile]::OpenRead($env:CBM_NPM_ARCHIVE_PATH)',
+    '$zip = [System.IO.Compression.ZipFile]::OpenRead($env:LSM_NPM_ARCHIVE_PATH)',
     "$seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)",
-    "$requiredNames = @($env:CBM_NPM_REQUIRED_NAMES.Split('|'))",
+    "$requiredNames = @($env:LSM_NPM_REQUIRED_NAMES.Split('|'))",
     '$targetCounts = @{}',
     'foreach ($requiredName in $requiredNames) { $targetCounts[$requiredName] = 0 }',
     'try { foreach ($entry in $zip.Entries) { ' +
@@ -490,12 +490,12 @@ function extractZipOnWindows(archivePath, destPath, requiredNames, extractNames)
       'throw "archive must contain exactly one $requiredName" } }',
     'if ($seen.Count -ne $requiredNames.Count) { ' +
       'throw "archive does not match the exact release root-file allowlist" }',
-    "$extractNames = @($env:CBM_NPM_EXTRACT_NAMES.Split('|'))",
-    '$extractZip = [System.IO.Compression.ZipFile]::OpenRead($env:CBM_NPM_ARCHIVE_PATH)',
+    "$extractNames = @($env:LSM_NPM_EXTRACT_NAMES.Split('|'))",
+    '$extractZip = [System.IO.Compression.ZipFile]::OpenRead($env:LSM_NPM_ARCHIVE_PATH)',
     'try { foreach ($extractName in $extractNames) { ' +
       '$entry = @($extractZip.Entries | Where-Object { $_.FullName -ceq $extractName })[0]; ' +
       '[System.IO.Compression.ZipFileExtensions]::ExtractToFile(' +
-      '$entry, (Join-Path $env:CBM_NPM_DEST_PATH $extractName), $false) ' +
+      '$entry, (Join-Path $env:LSM_NPM_DEST_PATH $extractName), $false) ' +
       '} } finally { $extractZip.Dispose() }',
   ].join('; ');
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
@@ -504,10 +504,10 @@ function extractZipOnWindows(archivePath, destPath, requiredNames, extractNames)
   ], {
     env: {
       ...process.env,
-      CBM_NPM_ARCHIVE_PATH: archivePath,
-      CBM_NPM_DEST_PATH: destPath,
-      CBM_NPM_REQUIRED_NAMES: requiredNames.join('|'),
-      CBM_NPM_EXTRACT_NAMES: extractNames.join('|'),
+      LSM_NPM_ARCHIVE_PATH: archivePath,
+      LSM_NPM_DEST_PATH: destPath,
+      LSM_NPM_REQUIRED_NAMES: requiredNames.join('|'),
+      LSM_NPM_EXTRACT_NAMES: extractNames.join('|'),
     },
     stdio: 'inherit',
     windowsHide: true,
@@ -536,7 +536,7 @@ async function verifyChecksum(archivePath, archiveName) {
         `Checksum mismatch for ${archiveName}:\n  expected: ${expected}\n  actual:   ${actual}`,
       );
     }
-    process.stdout.write('codebase-memory-mcp: checksum verified.\n');
+    process.stdout.write('logan-spine-mcp: checksum verified.\n');
   } finally {
     try { fs.unlinkSync(tmpChecksums); } catch (_) { /* ignore */ }
   }
@@ -550,7 +550,7 @@ async function main() {
   // per platform, entered directly.
   const binName = platform === 'windows'
     ? WINDOWS_BINARY_NAME
-    : 'codebase-memory-mcp';
+    : 'logan-spine-mcp';
   const binPath = path.join(BIN_DIR, binName);
   const cacheNames = platform === 'windows'
     ? [WINDOWS_BINARY_NAME]
@@ -581,15 +581,15 @@ async function main() {
   // have no such variant. Keep in sync with install.sh / pypi _cli.py / cli.c.
   const variant = platform === 'linux' ? '-portable' : '';
   // No UI/standard split since v0.10.0: one archive per platform, graph UI
-  // always embedded. The old CBM_VARIANT=ui opt-in pointed at ui-* archives
+  // always embedded. The old LSM_VARIANT=ui opt-in pointed at ui-* archives
   // that no longer exist, so honoring it could only 404 (#1538).
-  const archive = `codebase-memory-mcp-${platform}-${arch}${variant}.${ext}`;
+  const archive = `logan-spine-mcp-${platform}-${arch}${variant}.${ext}`;
   const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${archive}`;
 
-  process.stdout.write(`codebase-memory-mcp: downloading v${VERSION} for ${platform}/${arch}...\n`);
+  process.stdout.write(`logan-spine-mcp: downloading v${VERSION} for ${platform}/${arch}...\n`);
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cbm-install-'));
-  const tmpArchive = path.join(tmpDir, `cbm.${ext}`);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lsm-install-'));
+  const tmpArchive = path.join(tmpDir, `lsm.${ext}`);
 
   try {
     await download(url, tmpArchive);
@@ -650,14 +650,14 @@ async function main() {
       }
     }
 
-    process.stdout.write('codebase-memory-mcp: ready.\n');
+    process.stdout.write('logan-spine-mcp: ready.\n');
     if (platform === 'windows') {
       process.stdout.write(
-        'Windows package cache is portable. Run "codebase-memory-mcp install --yes" ' +
-        'to create the managed launcher (use "npx codebase-memory-mcp install --yes" ' +
+        'Windows package cache is portable. Run "logan-spine-mcp install --yes" ' +
+        'to create the managed launcher (use "npx logan-spine-mcp install --yes" ' +
         'for a local npm install). Package updates/removal remain ' +
-        '"npm install codebase-memory-mcp@latest" and ' +
-        '"npm uninstall codebase-memory-mcp" (add -g for a global install).\n',
+        '"npm install logan-spine-mcp@latest" and ' +
+        '"npm uninstall logan-spine-mcp" (add -g for a global install).\n',
       );
     }
   } finally {
@@ -667,7 +667,7 @@ async function main() {
 
 if (require.main === module || module.parent == null) {
   main().catch((err) => {
-    process.stderr.write(`\ncodebase-memory-mcp: install failed — ${err.message}\n`);
+    process.stderr.write(`\nlogan-spine-mcp: install failed — ${err.message}\n`);
     process.stderr.write(`You can install manually: https://github.com/${REPO}#installation\n`);
     process.exit(1);
   });

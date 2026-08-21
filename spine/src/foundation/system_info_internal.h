@@ -6,8 +6,8 @@
  * fake cgroup filesystem. Production code outside system_info.c should
  * use the public APIs in platform.h instead.
  */
-#ifndef CBM_FOUNDATION_SYSTEM_INFO_INTERNAL_H
-#define CBM_FOUNDATION_SYSTEM_INFO_INTERNAL_H
+#ifndef LSM_FOUNDATION_SYSTEM_INFO_INTERNAL_H
+#define LSM_FOUNDATION_SYSTEM_INFO_INTERNAL_H
 
 #include <stddef.h>
 
@@ -24,7 +24,7 @@
  * Returns -1 when no cgroup limit is present (caller should fall back to
  * sysconf(_SC_NPROCESSORS_ONLN)).
  */
-int cbm_detect_cgroup_cpus(const char *cgroup_root);
+int lsm_detect_cgroup_cpus(const char *cgroup_root);
 
 /*
  * Effective memory limit (bytes) for the cgroup rooted at `cgroup_root`.
@@ -37,8 +37,8 @@ int cbm_detect_cgroup_cpus(const char *cgroup_root);
  * no cgroup limit is present, the limit is "max"/unlimited, or the value
  * is so large it represents the cgroup-v1 "unlimited" sentinel.
  */
-size_t cbm_detect_cgroup_mem(const char *cgroup_root);
+size_t lsm_detect_cgroup_mem(const char *cgroup_root);
 
 #endif /* __linux__ */
 
-#endif /* CBM_FOUNDATION_SYSTEM_INFO_INTERNAL_H */
+#endif /* LSM_FOUNDATION_SYSTEM_INFO_INTERNAL_H */

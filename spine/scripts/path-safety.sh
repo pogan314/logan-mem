@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared destructive-path validation for build/test/clean entrypoints.
 
-cbm_require_safe_build_dir() {
+lsm_require_safe_build_dir() {
     local build_dir="${1-}"
     local root="${2:-$PWD}"
     local leaf
@@ -39,13 +39,13 @@ cbm_require_safe_build_dir() {
     fi
 }
 
-cbm_remove_build_dir() {
+lsm_remove_build_dir() {
     local root="${1-}"
     local build_dir="${2-}"
     local physical_root
     local leaf
 
-    cbm_require_safe_build_dir "$build_dir" "$root" || return 1
+    lsm_require_safe_build_dir "$build_dir" "$root" || return 1
     physical_root="$(cd "$root" 2>/dev/null && pwd -P)" || return 1
     leaf="${build_dir#build/}"
     rm -rf -- "$physical_root/build/$leaf"

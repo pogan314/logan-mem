@@ -32,10 +32,10 @@ CANONICAL entries:
   --soak <mins>    scripts/soak-legs.sh              (both CI soak legs)
 
 Environment:
-  CBM_VM_RUNNER      sanitizer-variant runner path (ubsan/trap-ubsan builds);
+  LSM_VM_RUNNER      sanitizer-variant runner path (ubsan/trap-ubsan builds);
                      switches to direct-runner mode for those iteration tools.
-  CBM_VM_SOAK_BINARY product binary for --soak (default build/c/codebase-memory-mcp.exe)
-  CBM_VM_TEST_LOG    VM-side log path (default /tmp/win-test.log)
+  LSM_VM_SOAK_BINARY product binary for --soak (default build/c/logan-spine-mcp.exe)
+  LSM_VM_TEST_LOG    VM-side log path (default /tmp/win-test.log)
 
 Exit codes: 0 success · 2 usage · 90 = GUARD: no completion summary (a run
 that died without its summary must never read as green) · else the leg's code.
@@ -45,19 +45,19 @@ case "${1:-}" in
 -h | --help) usage; exit 0 ;;
 esac
 
-RUNNER="${CBM_VM_RUNNER:-}"
+RUNNER="${LSM_VM_RUNNER:-}"
 
-# Per-run identity. The VM holds ONE checkout (/c/cbm), so two concurrent runs
+# Per-run identity. The VM holds ONE checkout (/c/lsm), so two concurrent runs
 # shared a FIXED log path and the same build dir: the later run's output
 # replaced the earlier one's, and -PruneStale could delete a live run's temp
 # root out from under it. The run id namespaces the log and the build dir; the
 # protected temp root is already unique per run.
-CALLER_RUN_ID="${CBM_CI_RUN_ID:-}"
-RUN_ID="${CBM_CI_RUN_ID:-$$-$(date +%s)}"
-export CBM_CI_RUN_ID="$RUN_ID"
-LOG="${CBM_VM_TEST_LOG:-/tmp/win-test-${RUN_ID}.log}"
+CALLER_RUN_ID="${LSM_CI_RUN_ID:-}"
+RUN_ID="${LSM_CI_RUN_ID:-$$-$(date +%s)}"
+export LSM_CI_RUN_ID="$RUN_ID"
+LOG="${LSM_VM_TEST_LOG:-/tmp/win-test-${RUN_ID}.log}"
 
-# A caller that sets CBM_CI_RUN_ID is declaring concurrency, so give that run
+# A caller that sets LSM_CI_RUN_ID is declaring concurrency, so give that run
 # its own BUILD_DIR; the default single-run path keeps the shared one and its
 # incremental reuse (a per-run build dir on the VM costs a full rebuild).
 if [ -n "$CALLER_RUN_ID" ]; then
@@ -75,11 +75,11 @@ if [ "$1" = "--soak" ]; then
     esac
     [ "$duration" -gt 0 ] ||
         { echo "usage: vm-run-tests.sh --soak <positive-minutes>" >&2; exit 2; }
-    binary="${CBM_VM_SOAK_BINARY:-build/c/codebase-memory-mcp.exe}"
+    binary="${LSM_VM_SOAK_BINARY:-build/c/logan-spine-mcp.exe}"
     [ -x "$binary" ] || { echo "ERROR: binary '$binary' missing — build first" >&2; exit 2; }
     artifact="$binary"
 elif [ -n "$RUNNER" ]; then
-    # Explicit CBM_VM_RUNNER = the sanitizer-variant iteration mode (ubsan /
+    # Explicit LSM_VM_RUNNER = the sanitizer-variant iteration mode (ubsan /
     # trap-ubsan runners built into their own BUILD_DIRs by win.sh). Those
     # builds carry non-default flags, so they keep the direct-runner path.
     [ -x "$RUNNER" ] || { echo "ERROR: runner '$RUNNER' missing — build first" >&2; exit 2; }
@@ -98,7 +98,7 @@ fi
 root_windows="$(MSYS2_ARG_CONV_EXCL='*' powershell.exe -NoProfile \
     -ExecutionPolicy Bypass \
     -File "$(cygpath -w scripts/ci/new-protected-temp-root.ps1)" \
-    -Prefix 'cbm-vm-tmp-' -PruneStale \
+    -Prefix 'lsm-vm-tmp-' -PruneStale \
     -ProtectDir "$(cygpath -w "$(dirname "$artifact")")" | tr -d '\r')"
 [ -n "$root_windows" ] || { echo "ERROR: protected temp root creation failed" >&2; exit 2; }
 
@@ -108,7 +108,7 @@ TMPDIR="$(cygpath -u "$root_windows")"
 export TEMP TMP TMPDIR
 
 # The runner's directory must look like a real user checkout: repos under a
-# profile carry no Authenticated-Users ACE, but C:\cbm (like CI's workspace
+# profile carry no Authenticated-Users ACE, but C:\lsm (like CI's workspace
 # drive) inherits Modify for Authenticated Users from the drive root, which
 # the activation transaction's source-directory policy correctly refuses —
 # install-flow tests would then fail on the environment, not the code.
@@ -138,7 +138,7 @@ fi
 # environment — the same file every CI test leg runs:
 #   --par         the full venue leg (clean build + contracts + parallel suites)
 #   <suite...>    scripts/test.sh --suites — the documented iteration mode
-# Only an explicit CBM_VM_RUNNER (sanitizer-variant builds) bypasses test.sh.
+# Only an explicit LSM_VM_RUNNER (sanitizer-variant builds) bypasses test.sh.
 if [ -n "$RUNNER" ]; then
     if [ "$1" = "--par" ]; then
         bash scripts/run-tests-parallel.sh "$RUNNER" 2>&1 | tee "$LOG"
@@ -159,7 +159,7 @@ fi
 
 # Tidy this run's own build dir on success; keep it on failure as the
 # post-mortem. Only ever touches a dir this run created (concurrent mode).
-if [ -n "$CALLER_RUN_ID" ] && [ "${CBM_CI_KEEP:-0}" != "1" ]; then
+if [ -n "$CALLER_RUN_ID" ] && [ "${LSM_CI_KEEP:-0}" != "1" ]; then
     if [ "${rc:-1}" -eq 0 ]; then
         rm -rf "build/vm-${RUN_ID}"
     else

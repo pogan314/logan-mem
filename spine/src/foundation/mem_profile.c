@@ -65,34 +65,34 @@ typedef struct {
  * profiler invisible to itself. */
 static _Thread_local bool g_profile_reentrant;
 
-static cbm_mutex_t g_profile_mutex;
+static lsm_mutex_t g_profile_mutex;
 static profile_site_t g_sites[PROFILE_SITES];
 static profile_pointer_t g_pointers[PROFILE_POINTERS];
-static cbm_mem_profile_totals_t g_totals;
+static lsm_mem_profile_totals_t g_totals;
 static atomic_int g_profile_enabled = -1;
 static size_t g_profile_min = PROFILE_DEFAULT_MIN;
 
-size_t cbm_mem_profile_threshold(void) {
-    (void)cbm_mem_profile_enabled();
+size_t lsm_mem_profile_threshold(void) {
+    (void)lsm_mem_profile_enabled();
     return g_profile_min;
 }
 
-bool cbm_mem_profile_enabled(void) {
+bool lsm_mem_profile_enabled(void) {
     int state = atomic_load_explicit(&g_profile_enabled, memory_order_acquire);
     if (state >= 0) {
         return state == 1;
     }
-    char buf[CBM_SZ_32];
-    bool on = cbm_safe_getenv("CBM_MEM_PROFILE", buf, sizeof(buf), NULL) != NULL && buf[0] == '1';
+    char buf[LSM_SZ_32];
+    bool on = lsm_safe_getenv("LSM_MEM_PROFILE", buf, sizeof(buf), NULL) != NULL && buf[0] == '1';
     if (on) {
-        char min_buf[CBM_SZ_32];
-        if (cbm_safe_getenv("CBM_MEM_PROFILE_MIN", min_buf, sizeof(min_buf), NULL) != NULL) {
+        char min_buf[LSM_SZ_32];
+        if (lsm_safe_getenv("LSM_MEM_PROFILE_MIN", min_buf, sizeof(min_buf), NULL) != NULL) {
             long parsed = strtol(min_buf, NULL, 10);
             if (parsed > 0) {
                 g_profile_min = (size_t)parsed;
             }
         }
-        cbm_mutex_init(&g_profile_mutex);
+        lsm_mutex_init(&g_profile_mutex);
     }
     atomic_store_explicit(&g_profile_enabled, on ? 1 : 0, memory_order_release);
     return on;
@@ -172,33 +172,33 @@ static size_t profile_pointer_slot(const void *block) {
     return (size_t)(value % PROFILE_POINTERS);
 }
 
-void cbm_mem_profile_alloc(void *block, size_t size) {
-    cbm_mem_profile_alloc_at(block, size, NULL);
+void lsm_mem_profile_alloc(void *block, size_t size) {
+    lsm_mem_profile_alloc_at(block, size, NULL);
 }
 
-void cbm_mem_profile_alloc_at(void *block, size_t size, void *caller) {
+void lsm_mem_profile_alloc_at(void *block, size_t size, void *caller) {
     if (!block || g_profile_reentrant) {
         return;
     }
     g_profile_reentrant = true;
-    if (!cbm_mem_profile_enabled() || size < g_profile_min) {
+    if (!lsm_mem_profile_enabled() || size < g_profile_min) {
         g_profile_reentrant = false;
         return;
     }
     void *frames[PROFILE_FRAMES];
     int count = profile_capture(frames, caller);
     if (count <= 0) {
-        cbm_mutex_lock(&g_profile_mutex);
+        lsm_mutex_lock(&g_profile_mutex);
         g_totals.capture_failed++;
-        cbm_mutex_unlock(&g_profile_mutex);
+        lsm_mutex_unlock(&g_profile_mutex);
         g_profile_reentrant = false;
         return;
     }
-    cbm_mutex_lock(&g_profile_mutex);
+    lsm_mutex_lock(&g_profile_mutex);
     size_t site_index = profile_intern_site_locked(frames, count);
     if (site_index == SIZE_MAX) {
         g_totals.site_table_full++;
-        cbm_mutex_unlock(&g_profile_mutex);
+        lsm_mutex_unlock(&g_profile_mutex);
         g_profile_reentrant = false;
         return;
     }
@@ -216,7 +216,7 @@ void cbm_mem_profile_alloc_at(void *block, size_t size, void *caller) {
     }
     if (!stored) {
         g_totals.pointer_table_full++;
-        cbm_mutex_unlock(&g_profile_mutex);
+        lsm_mutex_unlock(&g_profile_mutex);
         g_profile_reentrant = false;
         return;
     }
@@ -231,20 +231,20 @@ void cbm_mem_profile_alloc_at(void *block, size_t size, void *caller) {
     g_totals.live_bytes += size;
     g_totals.live_blocks++;
     g_totals.total_bytes += size;
-    cbm_mutex_unlock(&g_profile_mutex);
+    lsm_mutex_unlock(&g_profile_mutex);
     g_profile_reentrant = false;
 }
 
-void cbm_mem_profile_free(void *block) {
+void lsm_mem_profile_free(void *block) {
     if (!block || g_profile_reentrant) {
         return;
     }
     g_profile_reentrant = true;
-    if (!cbm_mem_profile_enabled()) {
+    if (!lsm_mem_profile_enabled()) {
         g_profile_reentrant = false;
         return;
     }
-    cbm_mutex_lock(&g_profile_mutex);
+    lsm_mutex_lock(&g_profile_mutex);
     size_t slot = profile_pointer_slot(block);
     for (size_t probe = 0; probe < PROFILE_POINTERS; probe++) {
         profile_pointer_t *entry = &g_pointers[slot];
@@ -257,7 +257,7 @@ void cbm_mem_profile_free(void *block) {
             entry->block = NULL;
             entry->size = 0;
             entry->site = 0;
-            cbm_mutex_unlock(&g_profile_mutex);
+            lsm_mutex_unlock(&g_profile_mutex);
             g_profile_reentrant = false;
             return;
         }
@@ -270,32 +270,32 @@ void cbm_mem_profile_free(void *block) {
      * not an error: it should track the small-allocation rate, not grow with
      * retained bytes. */
     g_totals.untracked_frees++;
-    cbm_mutex_unlock(&g_profile_mutex);
+    lsm_mutex_unlock(&g_profile_mutex);
     g_profile_reentrant = false;
 }
 
-void cbm_mem_profile_totals(cbm_mem_profile_totals_t *out) {
+void lsm_mem_profile_totals(lsm_mem_profile_totals_t *out) {
     if (!out) {
         return;
     }
     memset(out, 0, sizeof(*out));
-    if (!cbm_mem_profile_enabled()) {
+    if (!lsm_mem_profile_enabled()) {
         return;
     }
-    cbm_mutex_lock(&g_profile_mutex);
+    lsm_mutex_lock(&g_profile_mutex);
     *out = g_totals;
-    cbm_mutex_unlock(&g_profile_mutex);
+    lsm_mutex_unlock(&g_profile_mutex);
 }
 
-bool cbm_mem_profile_dump(const char *path, const char *label) {
-    if (!path || !cbm_mem_profile_enabled()) {
+bool lsm_mem_profile_dump(const char *path, const char *label) {
+    if (!path || !lsm_mem_profile_enabled()) {
         return false;
     }
-    FILE *out = cbm_fopen(path, "ab");
+    FILE *out = lsm_fopen(path, "ab");
     if (!out) {
         return false;
     }
-    cbm_mutex_lock(&g_profile_mutex);
+    lsm_mutex_lock(&g_profile_mutex);
     (void)fprintf(out,
                   "{\"label\":\"%s\",\"threshold\":%zu,\"sites\":%zu,\"live_bytes\":%zu,"
                   "\"live_blocks\":%zu,\"total_bytes\":%zu,\"untracked_frees\":%zu,"
@@ -319,7 +319,7 @@ bool cbm_mem_profile_dump(const char *path, const char *label) {
         }
         (void)fprintf(out, "]}\n");
     }
-    cbm_mutex_unlock(&g_profile_mutex);
+    lsm_mutex_unlock(&g_profile_mutex);
     (void)fclose(out);
     return true;
 }

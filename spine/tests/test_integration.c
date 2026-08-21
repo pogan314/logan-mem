@@ -26,13 +26,13 @@
 
 static char g_tmpdir[256];
 static char g_dbpath[512];
-static cbm_mcp_server_t *g_srv = NULL;
+static lsm_mcp_server_t *g_srv = NULL;
 static char *g_project = NULL;
 
 /* Create source files in temp directory */
 static int create_test_project(void) {
-    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/cbm_integ_XXXXXX");
-    if (!cbm_mkdtemp(g_tmpdir))
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/lsm_integ_XXXXXX");
+    if (!lsm_mkdtemp(g_tmpdir))
         return -1;
 
     char path[512];
@@ -102,16 +102,16 @@ static int integration_setup(void) {
         return -1;
 
     /* Derive project name (same logic the pipeline uses) */
-    g_project = cbm_project_name_from_path(g_tmpdir);
+    g_project = lsm_project_name_from_path(g_tmpdir);
     if (!g_project)
         return -1;
 
     /* Build db path for direct store queries (pipeline writes here) */
-    const char *cache_dir = cbm_resolve_cache_dir();
+    const char *cache_dir = lsm_resolve_cache_dir();
     int dbpath_length =
         cache_dir ? snprintf(g_dbpath, sizeof(g_dbpath), "%s/%s.db", cache_dir, g_project) : -1;
     if (dbpath_length <= 0 || (size_t)dbpath_length >= sizeof(g_dbpath) ||
-        !cbm_mkdir_p(cache_dir, 0700)) {
+        !lsm_mkdir_p(cache_dir, 0700)) {
         return -1;
     }
 
@@ -124,14 +124,14 @@ static int integration_setup(void) {
      *   3. Pipeline runs → dumps to ~/.cache/.../<project>.db
      *   4. Server reopens from that db
      * This exercises the exact same path as real usage. */
-    g_srv = cbm_mcp_server_new(NULL);
+    g_srv = lsm_mcp_server_new(NULL);
     if (!g_srv)
         return -1;
 
     /* Index our temp project via MCP tool handler */
     char args[512];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", g_tmpdir);
-    char *resp = cbm_mcp_handle_tool(g_srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(g_srv, "index_repository", args);
     if (!resp)
         return -1;
 
@@ -143,7 +143,7 @@ static int integration_setup(void) {
 
 static void integration_teardown(void) {
     if (g_srv) {
-        cbm_mcp_server_free(g_srv);
+        lsm_mcp_server_free(g_srv);
         g_srv = NULL;
     }
     free(g_project);
@@ -169,43 +169,43 @@ static void integration_teardown(void) {
 static char *call_tool(const char *tool, const char *args) {
     if (!g_srv)
         return NULL;
-    return cbm_mcp_handle_tool(g_srv, tool, args);
+    return lsm_mcp_handle_tool(g_srv, tool, args);
 }
 
 TEST(integ_index_has_nodes) {
     /* Open the indexed db directly and check node counts */
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    int nodes = cbm_store_count_nodes(store, g_project);
+    int nodes = lsm_store_count_nodes(store, g_project);
     /* We expect: 3 File nodes + 3+ Function/Method nodes per file +
      * Folder/Package/Module nodes. Should be at least 8. */
     ASSERT_TRUE(nodes >= 8);
 
-    cbm_store_close(store);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_index_has_edges) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    int edges = cbm_store_count_edges(store, g_project);
+    int edges = lsm_store_count_edges(store, g_project);
     /* We expect CONTAINS_FILE edges + CALLS edges + others */
     ASSERT_TRUE(edges >= 3);
 
-    cbm_store_close(store);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_index_has_functions) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    cbm_node_t *funcs = NULL;
+    lsm_node_t *funcs = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_label(store, g_project, "Function", &funcs, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_label(store, g_project, "Function", &funcs, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     /* Python: greet, farewell, main. Go: Add, Multiply, Compute. JS: validate, process */
     ASSERT_TRUE(count >= 6);
 
@@ -223,19 +223,19 @@ TEST(integ_index_has_functions) {
     ASSERT_TRUE(found_add);
     ASSERT_TRUE(found_validate);
 
-    cbm_store_free_nodes(funcs, count);
-    cbm_store_close(store);
+    lsm_store_free_nodes(funcs, count);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_index_has_files) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    cbm_node_t *files = NULL;
+    lsm_node_t *files = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_label(store, g_project, "File", &files, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_label(store, g_project, "File", &files, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     ASSERT_EQ(count, 3); /* main.py, utils.go, app.js */
 
     bool found_py = false, found_go = false, found_js = false;
@@ -251,22 +251,22 @@ TEST(integ_index_has_files) {
     ASSERT_TRUE(found_go);
     ASSERT_TRUE(found_js);
 
-    cbm_store_free_nodes(files, count);
-    cbm_store_close(store);
+    lsm_store_free_nodes(files, count);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_index_has_calls) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    int call_count = cbm_store_count_edges_by_type(store, g_project, "CALLS");
+    int call_count = lsm_store_count_edges_by_type(store, g_project, "CALLS");
     /* Python: main→greet, main→farewell, main→print
      * Go: Multiply→Add, Compute→Multiply, Compute→Add
      * JS: process→validate */
     ASSERT_TRUE(call_count >= 4);
 
-    cbm_store_close(store);
+    lsm_store_close(store);
     PASS();
 }
 
@@ -391,28 +391,28 @@ TEST(integ_mcp_trace_path) {
  * committed — exactly what a new MCP session sees after a cross-repo pass writes
  * CROSS_* edges (g_srv's cached connection predates this write). */
 TEST(integ_mcp_trace_path_cross_service) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    cbm_node_t *src = NULL;
-    cbm_node_t *dst = NULL;
+    lsm_node_t *src = NULL;
+    lsm_node_t *dst = NULL;
     int src_count = 0;
     int dst_count = 0;
-    cbm_store_find_nodes_by_name(store, g_project, "greet", &src, &src_count);
-    cbm_store_find_nodes_by_name(store, g_project, "farewell", &dst, &dst_count);
+    lsm_store_find_nodes_by_name(store, g_project, "greet", &src, &src_count);
+    lsm_store_find_nodes_by_name(store, g_project, "farewell", &dst, &dst_count);
     ASSERT_TRUE(src_count > 0 && dst_count > 0);
 
-    cbm_edge_t edge = {.project = g_project,
+    lsm_edge_t edge = {.project = g_project,
                        .source_id = src[0].id,
                        .target_id = dst[0].id,
                        .type = "CROSS_HTTP_CALLS"};
-    ASSERT_TRUE(cbm_store_insert_edge(store, &edge) > 0);
+    ASSERT_TRUE(lsm_store_insert_edge(store, &edge) > 0);
 
-    cbm_store_free_nodes(src, src_count);
-    cbm_store_free_nodes(dst, dst_count);
-    cbm_store_close(store);
+    lsm_store_free_nodes(src, src_count);
+    lsm_store_free_nodes(dst, dst_count);
+    lsm_store_close(store);
 
-    cbm_mcp_server_t *srv = cbm_mcp_server_new(NULL);
+    lsm_mcp_server_t *srv = lsm_mcp_server_new(NULL);
     ASSERT_NOT_NULL(srv);
 
     char args[256];
@@ -420,7 +420,7 @@ TEST(integ_mcp_trace_path_cross_service) {
              "{\"function_name\":\"greet\",\"project\":\"%s\","
              "\"direction\":\"outbound\",\"mode\":\"cross_service\"}",
              g_project);
-    char *resp = cbm_mcp_handle_tool(srv, "trace_path", args);
+    char *resp = lsm_mcp_handle_tool(srv, "trace_path", args);
     ASSERT_NOT_NULL(resp);
     ASSERT_NOT_NULL(strstr(resp, "farewell"));
     free(resp);
@@ -429,12 +429,12 @@ TEST(integ_mcp_trace_path_cross_service) {
              "{\"function_name\":\"greet\",\"project\":\"%s\","
              "\"direction\":\"outbound\",\"mode\":\"calls\"}",
              g_project);
-    resp = cbm_mcp_handle_tool(srv, "trace_path", args);
+    resp = lsm_mcp_handle_tool(srv, "trace_path", args);
     ASSERT_NOT_NULL(resp);
     ASSERT_TRUE(strstr(resp, "farewell") == NULL);
     free(resp);
 
-    cbm_mcp_server_free(srv);
+    lsm_mcp_server_free(srv);
     PASS();
 }
 
@@ -473,7 +473,7 @@ TEST(integ_mcp_delete_project) {
  * ══════════════════════════════════════════════════════════════════ */
 
 TEST(integ_pipeline_fqn_compute) {
-    char *fqn = cbm_pipeline_fqn_compute("myproject", "src/utils.go", "Add");
+    char *fqn = lsm_pipeline_fqn_compute("myproject", "src/utils.go", "Add");
     ASSERT_NOT_NULL(fqn);
     ASSERT_STR_EQ(fqn, "myproject.src.utils.Add");
     free(fqn);
@@ -481,7 +481,7 @@ TEST(integ_pipeline_fqn_compute) {
 }
 
 TEST(integ_pipeline_fqn_module) {
-    char *fqn = cbm_pipeline_fqn_module("myproject", "src/utils.go");
+    char *fqn = lsm_pipeline_fqn_module("myproject", "src/utils.go");
     ASSERT_NOT_NULL(fqn);
     ASSERT_STR_EQ(fqn, "myproject.src.utils");
     free(fqn);
@@ -489,7 +489,7 @@ TEST(integ_pipeline_fqn_module) {
 }
 
 TEST(integ_pipeline_project_name) {
-    char *name = cbm_project_name_from_path("/home/user/my-project");
+    char *name = lsm_project_name_from_path("/home/user/my-project");
     ASSERT_NOT_NULL(name);
     /* Should contain "my-project" or a sanitized version */
     ASSERT_NOT_NULL(strstr(name, "my-project"));
@@ -499,16 +499,16 @@ TEST(integ_pipeline_project_name) {
 
 TEST(integ_pipeline_cancel) {
     /* Create and immediately cancel a pipeline */
-    cbm_pipeline_t *p = cbm_pipeline_new(g_tmpdir, NULL, CBM_MODE_FULL);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_tmpdir, NULL, LSM_MODE_FULL);
     ASSERT_NOT_NULL(p);
 
-    cbm_pipeline_cancel(p);
-    int rc = cbm_pipeline_run(p);
+    lsm_pipeline_cancel(p);
+    int rc = lsm_pipeline_run(p);
     /* Should return -1 (cancelled) or complete with partial results */
     /* Either way, it shouldn't crash */
     (void)rc;
 
-    cbm_pipeline_free(p);
+    lsm_pipeline_free(p);
     PASS();
 }
 
@@ -517,65 +517,65 @@ TEST(integ_pipeline_cancel) {
  * ══════════════════════════════════════════════════════════════════ */
 
 TEST(integ_store_search_by_degree) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
     /* Find functions with at least 1 outbound call */
-    cbm_search_params_t params = {0};
+    lsm_search_params_t params = {0};
     params.project = g_project;
     params.label = "Function";
     params.min_degree = 1;
     params.max_degree = -1;
     params.limit = 10;
 
-    cbm_search_output_t out = {0};
-    int rc = cbm_store_search(store, &params, &out);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    lsm_search_output_t out = {0};
+    int rc = lsm_store_search(store, &params, &out);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     /* main, Multiply, Compute, process should all have outbound calls */
     ASSERT_TRUE(out.count >= 1);
 
-    cbm_store_search_free(&out);
-    cbm_store_close(store);
+    lsm_store_search_free(&out);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_store_find_by_file) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
-    cbm_node_t *nodes = NULL;
+    lsm_node_t *nodes = NULL;
     int count = 0;
-    int rc = cbm_store_find_nodes_by_file(store, g_project, "main.py", &nodes, &count);
-    ASSERT_EQ(rc, CBM_STORE_OK);
+    int rc = lsm_store_find_nodes_by_file(store, g_project, "main.py", &nodes, &count);
+    ASSERT_EQ(rc, LSM_STORE_OK);
     /* main.py should have: greet, farewell, main functions + Module node */
     ASSERT_TRUE(count >= 3);
 
-    cbm_store_free_nodes(nodes, count);
-    cbm_store_close(store);
+    lsm_store_free_nodes(nodes, count);
+    lsm_store_close(store);
     PASS();
 }
 
 TEST(integ_store_bfs_traversal) {
-    cbm_store_t *store = cbm_store_open_path_existing(g_dbpath);
+    lsm_store_t *store = lsm_store_open_path_existing(g_dbpath);
     ASSERT_NOT_NULL(store);
 
     /* Find a function node to start BFS from */
-    cbm_node_t *results = NULL;
+    lsm_node_t *results = NULL;
     int count = 0;
-    cbm_store_find_nodes_by_name(store, g_project, "Multiply", &results, &count);
+    lsm_store_find_nodes_by_name(store, g_project, "Multiply", &results, &count);
 
     if (count > 0) {
         /* BFS outbound from Multiply */
-        cbm_traverse_result_t trav = {0};
-        int rc = cbm_store_bfs(store, results[0].id, "outbound", NULL, 0, 3, 20, &trav);
-        ASSERT_EQ(rc, CBM_STORE_OK);
+        lsm_traverse_result_t trav = {0};
+        int rc = lsm_store_bfs(store, results[0].id, "outbound", NULL, 0, 3, 20, &trav);
+        ASSERT_EQ(rc, LSM_STORE_OK);
         /* Should visit at least Add */
         ASSERT_TRUE(trav.visited_count >= 0); /* might be 0 if no edges */
-        cbm_store_traverse_free(&trav);
+        lsm_store_traverse_free(&trav);
     }
 
-    cbm_store_free_nodes(results, count);
-    cbm_store_close(store);
+    lsm_store_free_nodes(results, count);
+    lsm_store_close(store);
     PASS();
 }
 
@@ -586,17 +586,17 @@ TEST(integ_store_bfs_traversal) {
  * 1200 callers (id string ≈ 4.6KB) must surface every edge. RED on the fixed
  * buffer, GREEN with the temp-table join. */
 TEST(store_bfs_edges_survive_large_visited_set) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "star", "/tmp/star"), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(s, "star", "/tmp/star"), LSM_STORE_OK);
 
-    cbm_node_t hub = {0};
+    lsm_node_t hub = {0};
     hub.project = "star";
     hub.label = "Function";
     hub.name = "hub";
     hub.qualified_name = "star.hub";
     hub.file_path = "hub.c";
-    int64_t hub_id = cbm_store_upsert_node(s, &hub);
+    int64_t hub_id = lsm_store_upsert_node(s, &hub);
     ASSERT_GT(hub_id, 0);
 
     enum { SPOKES = 1200 };
@@ -605,30 +605,30 @@ TEST(store_bfs_edges_survive_large_visited_set) {
         char qn[64];
         snprintf(nm, sizeof(nm), "caller_%04d", i);
         snprintf(qn, sizeof(qn), "star.caller_%04d", i);
-        cbm_node_t sp = {0};
+        lsm_node_t sp = {0};
         sp.project = "star";
         sp.label = "Function";
         sp.name = nm;
         sp.qualified_name = qn;
         sp.file_path = "spokes.c";
-        int64_t sid = cbm_store_upsert_node(s, &sp);
+        int64_t sid = lsm_store_upsert_node(s, &sp);
         ASSERT_GT(sid, 0);
-        cbm_edge_t e = {0};
+        lsm_edge_t e = {0};
         e.project = "star";
         e.source_id = sid;
         e.target_id = hub_id;
         e.type = "CALLS";
-        ASSERT_GT(cbm_store_insert_edge(s, &e), 0); /* returns the edge id */
+        ASSERT_GT(lsm_store_insert_edge(s, &e), 0); /* returns the edge id */
     }
 
-    cbm_traverse_result_t tr = {0};
-    ASSERT_EQ(cbm_store_bfs(s, hub_id, "inbound", NULL, 0, 1, SPOKES + 10, &tr), CBM_STORE_OK);
+    lsm_traverse_result_t tr = {0};
+    ASSERT_EQ(lsm_store_bfs(s, hub_id, "inbound", NULL, 0, 1, SPOKES + 10, &tr), LSM_STORE_OK);
     ASSERT_EQ(tr.visited_count, SPOKES);
     /* Every caller->hub edge must be collected — none silently dropped. */
     ASSERT_EQ(tr.edge_count, SPOKES);
 
-    cbm_store_traverse_free(&tr);
-    cbm_store_close(s);
+    lsm_store_traverse_free(&tr);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -642,23 +642,23 @@ TEST(store_bfs_edges_survive_large_visited_set) {
  * and A->B directly (B reachable from A). Impact set must be {mid, leaf} with
  * leaf at hop 1, and must NOT contain A or B. */
 TEST(store_bfs_multi_excludes_seeds_and_takes_min_hop) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "impact", "/tmp/impact"), CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_upsert_project(s, "impact", "/tmp/impact"), LSM_STORE_OK);
 
     int64_t ids[4];
     const char *names[4] = {"A", "B", "mid", "leaf"};
     for (int i = 0; i < 4; i++) {
         char qn[32];
         snprintf(qn, sizeof(qn), "impact.%s", names[i]);
-        cbm_node_t n = {.project = "impact",
+        lsm_node_t n = {.project = "impact",
                         .label = "Function",
                         .name = names[i],
                         .qualified_name = qn,
                         .file_path = "m.c",
                         .start_line = 1,
                         .end_line = 5};
-        ids[i] = cbm_store_upsert_node(s, &n);
+        ids[i] = lsm_store_upsert_node(s, &n);
         ASSERT_GT(ids[i], 0);
     }
     int64_t A = ids[0];
@@ -670,18 +670,18 @@ TEST(store_bfs_multi_excludes_seeds_and_takes_min_hop) {
         int64_t to;
     } edges[] = {{A, mid}, {mid, leaf}, {B, leaf}, {A, B}};
     for (size_t i = 0; i < sizeof(edges) / sizeof(edges[0]); i++) {
-        cbm_edge_t e = {.project = "impact",
+        lsm_edge_t e = {.project = "impact",
                         .source_id = edges[i].from,
                         .target_id = edges[i].to,
                         .type = "CALLS"};
-        ASSERT_GT(cbm_store_insert_edge(s, &e), 0);
+        ASSERT_GT(lsm_store_insert_edge(s, &e), 0);
     }
 
     int64_t seeds[2] = {A, B};
-    cbm_traverse_result_t tr = {0};
+    lsm_traverse_result_t tr = {0};
     bool truncated = true;
-    ASSERT_EQ(cbm_store_bfs_multi(s, seeds, 2, "outbound", NULL, 0, 5, 100, &tr, &truncated),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_bfs_multi(s, seeds, 2, "outbound", NULL, 0, 5, 100, &tr, &truncated),
+              LSM_STORE_OK);
     ASSERT_FALSE(truncated);
 
     /* Impact set = {mid, leaf}; A and B (seeds) excluded even though B is
@@ -703,8 +703,8 @@ TEST(store_bfs_multi_excludes_seeds_and_takes_min_hop) {
     }
     ASSERT_TRUE(seen_mid && seen_leaf);
     ASSERT_EQ(leaf_hop, 1); /* MIN(hop): 1 from B, not 2 from A */
-    cbm_store_traverse_free(&tr);
-    cbm_store_close(s);
+    lsm_store_traverse_free(&tr);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -712,42 +712,42 @@ TEST(store_bfs_multi_excludes_seeds_and_takes_min_hop) {
  * A star of N callees from one seed, ceiling = N/2, must return exactly N/2
  * rows with *truncated = true. */
 TEST(store_bfs_multi_reports_truncation_at_ceiling) {
-    cbm_store_t *s = cbm_store_open_memory();
+    lsm_store_t *s = lsm_store_open_memory();
     ASSERT_NOT_NULL(s);
-    ASSERT_EQ(cbm_store_upsert_project(s, "cap", "/tmp/cap"), CBM_STORE_OK);
-    cbm_node_t hub = {.project = "cap",
+    ASSERT_EQ(lsm_store_upsert_project(s, "cap", "/tmp/cap"), LSM_STORE_OK);
+    lsm_node_t hub = {.project = "cap",
                       .label = "Function",
                       .name = "hub",
                       .qualified_name = "cap.hub",
                       .file_path = "h.c",
                       .start_line = 1,
                       .end_line = 2};
-    int64_t hub_id = cbm_store_upsert_node(s, &hub);
+    int64_t hub_id = lsm_store_upsert_node(s, &hub);
     ASSERT_GT(hub_id, 0);
     enum { N = 40, CEIL = 20 };
     for (int i = 0; i < N; i++) {
         char qn[32];
         snprintf(qn, sizeof(qn), "cap.c%02d", i);
-        cbm_node_t n = {.project = "cap",
+        lsm_node_t n = {.project = "cap",
                         .label = "Function",
                         .name = qn + 4,
                         .qualified_name = qn,
                         .file_path = "c.c",
                         .start_line = 1,
                         .end_line = 2};
-        int64_t nid = cbm_store_upsert_node(s, &n);
+        int64_t nid = lsm_store_upsert_node(s, &n);
         ASSERT_GT(nid, 0);
-        cbm_edge_t e = {.project = "cap", .source_id = hub_id, .target_id = nid, .type = "CALLS"};
-        ASSERT_GT(cbm_store_insert_edge(s, &e), 0);
+        lsm_edge_t e = {.project = "cap", .source_id = hub_id, .target_id = nid, .type = "CALLS"};
+        ASSERT_GT(lsm_store_insert_edge(s, &e), 0);
     }
-    cbm_traverse_result_t tr = {0};
+    lsm_traverse_result_t tr = {0};
     bool truncated = false;
-    ASSERT_EQ(cbm_store_bfs_multi(s, &hub_id, 1, "outbound", NULL, 0, 5, CEIL, &tr, &truncated),
-              CBM_STORE_OK);
+    ASSERT_EQ(lsm_store_bfs_multi(s, &hub_id, 1, "outbound", NULL, 0, 5, CEIL, &tr, &truncated),
+              LSM_STORE_OK);
     ASSERT_EQ(tr.visited_count, CEIL);
     ASSERT_TRUE(truncated);
-    cbm_store_traverse_free(&tr);
-    cbm_store_close(s);
+    lsm_store_traverse_free(&tr);
+    lsm_store_close(s);
     PASS();
 }
 
@@ -761,8 +761,8 @@ TEST(store_bfs_multi_reports_truncation_at_ceiling) {
  * RED until the index response reports excluded subtrees. Self-contained. */
 TEST(index_reports_excluded_subtrees_issue411) {
     char tmp[256];
-    snprintf(tmp, sizeof(tmp), "/tmp/cbm_excl_XXXXXX");
-    ASSERT_NOT_NULL(cbm_mkdtemp(tmp));
+    snprintf(tmp, sizeof(tmp), "/tmp/lsm_excl_XXXXXX");
+    ASSERT_NOT_NULL(lsm_mkdtemp(tmp));
 
     char path[512];
     /* one real source file ... */
@@ -773,18 +773,18 @@ TEST(index_reports_excluded_subtrees_issue411) {
     fclose(f);
     /* ... and a node_modules subtree that is excluded in EVERY mode. */
     snprintf(path, sizeof(path), "%s/node_modules", tmp);
-    cbm_mkdir_p(path, 0755);
+    lsm_mkdir_p(path, 0755);
     snprintf(path, sizeof(path), "%s/node_modules/dep.js", tmp);
     f = fopen(path, "wb");
     ASSERT_NOT_NULL(f);
     fputs("export function dep() { return 2; }\n", f);
     fclose(f);
 
-    cbm_mcp_server_t *srv = cbm_mcp_server_new(NULL);
+    lsm_mcp_server_t *srv = lsm_mcp_server_new(NULL);
     ASSERT_NOT_NULL(srv);
     char args[600];
     snprintf(args, sizeof(args), "{\"repo_path\":\"%s\"}", tmp);
-    char *resp = cbm_mcp_handle_tool(srv, "index_repository", args);
+    char *resp = lsm_mcp_handle_tool(srv, "index_repository", args);
     ASSERT_NOT_NULL(resp);
 
     /* The dropped node_modules/dep.js must be reported somewhere compact in the
@@ -792,7 +792,7 @@ TEST(index_reports_excluded_subtrees_issue411) {
      * excluded/skipped summary at all → this fails (reproduces the silent drop). */
     bool reports_excluded = strstr(resp, "excluded") != NULL || strstr(resp, "skipped") != NULL;
     free(resp);
-    cbm_mcp_server_free(srv);
+    lsm_mcp_server_free(srv);
     th_rmtree(tmp);
     ASSERT_TRUE(reports_excluded);
     PASS();

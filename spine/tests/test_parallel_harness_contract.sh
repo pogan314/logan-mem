@@ -13,7 +13,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 driver="$ROOT/scripts/run-tests-parallel.sh"
 scheduler="$ROOT/scripts/run-test-wave.py"
-fixture="$(mktemp -d "${TMPDIR:-/tmp}/cbm-parallel-harness.XXXXXX")"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/lsm-parallel-harness.XXXXXX")"
 trap 'rm -rf -- "$fixture"' EXIT
 
 if grep -Eq '(^|[[:space:]])xargs([[:space:]]|$)|export[[:space:]]+-f|bash[[:space:]]+-c' \
