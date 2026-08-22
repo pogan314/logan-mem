@@ -630,6 +630,9 @@ int lsm_pipeline_pass_semantic_edges(lsm_pipeline_ctx_t *ctx);
  * cycles (recursive). Runs on the graph buffer before the dump. */
 void lsm_pipeline_pass_complexity(lsm_pipeline_ctx_t *ctx);
 
+/* B6: DOCUMENTS edges from Markdown Section nodes to the code they name. */
+void lsm_pipeline_pass_documents(lsm_pipeline_ctx_t *ctx);
+
 /* ── Env URL scanner (pass_envscan.c) ────────────────────────────── */
 
 typedef struct {

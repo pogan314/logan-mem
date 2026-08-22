@@ -6665,6 +6665,86 @@ TEST(pipeline_semantic_search_returns_markdown_section) {
     PASS();
 }
 
+/* Count DOCUMENTS edges from the Section named `section_name` to nodes named `target_name`. */
+static int count_documents_edges(lsm_store_t *s, const char *proj, const char *section_name,
+                                 const char *target_name) {
+    lsm_node_t *secs = NULL;
+    int sc = 0;
+    lsm_store_find_nodes_by_name(s, proj, section_name, &secs, &sc);
+    lsm_node_t *targets = NULL;
+    int tc = 0;
+    lsm_store_find_nodes_by_name(s, proj, target_name, &targets, &tc);
+    int hits = 0;
+    for (int i = 0; i < sc; i++) {
+        if (strcmp(secs[i].label, "Section") != 0)
+            continue;
+        lsm_edge_t *edges = NULL;
+        int ec = 0;
+        lsm_store_find_edges_by_source(s, secs[i].id, &edges, &ec);
+        for (int j = 0; j < ec; j++) {
+            if (strcmp(edges[j].type, "DOCUMENTS") != 0)
+                continue;
+            for (int k = 0; k < tc; k++)
+                if (targets[k].id == edges[j].target_id)
+                    hits++;
+        }
+        lsm_store_free_edges(edges, ec);
+    }
+    lsm_store_free_nodes(targets, tc);
+    lsm_store_free_nodes(secs, sc);
+    return hits;
+}
+
+TEST(pipeline_documents_edge_from_backtick_to_function_and_file) {
+    const char *files[] = {"guide.md", "src/add.js"};
+    const char *contents[] = {"# Guide\n\n## Adding\n\nCall `add` with two numbers. See `src/add.js`.\n",
+                              "export function add(a, b) { return a + b; }\n"};
+    if (setup_lang_repo(files, contents, 2) != 0)
+        FAIL("tmpdir");
+    char db[512];
+    snprintf(db, sizeof(db), "%s/test.db", g_lang_tmpdir);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_lang_tmpdir, db, LSM_MODE_FAST);
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(lsm_pipeline_run(p), 0);
+    lsm_store_t *s = lsm_store_open_path(db);
+    ASSERT_NOT_NULL(s);
+    const char *proj = lsm_pipeline_project_name(p);
+    ASSERT_EQ(count_documents_edges(s, proj, "Adding", "add"), 1);
+    ASSERT_EQ(count_documents_edges(s, proj, "Adding", "add.js"), 1);
+    lsm_store_close(s);
+    lsm_pipeline_free(p);
+    teardown_lang_repo();
+    PASS();
+}
+
+TEST(pipeline_documents_edge_links_five_but_not_six) {
+    const char *files[] = {"guide.md", "a.js", "b.js", "c.js", "d.js", "e.js", "f.js"};
+    const char *contents[] = {
+        "# Guide\n\n## Five\n\nCall `five`.\n\n## Six\n\nCall `six`.\n",
+        "export function five() {}\nexport function six() {}\n",
+        "export function five() {}\nexport function six() {}\n",
+        "export function five() {}\nexport function six() {}\n",
+        "export function five() {}\nexport function six() {}\n",
+        "export function five() {}\nexport function six() {}\n",
+        "export function six() {}\n"};
+    if (setup_lang_repo(files, contents, 7) != 0)
+        FAIL("tmpdir");
+    char db[512];
+    snprintf(db, sizeof(db), "%s/test.db", g_lang_tmpdir);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_lang_tmpdir, db, LSM_MODE_FAST);
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(lsm_pipeline_run(p), 0);
+    lsm_store_t *s = lsm_store_open_path(db);
+    ASSERT_NOT_NULL(s);
+    const char *proj = lsm_pipeline_project_name(p);
+    ASSERT_EQ(count_documents_edges(s, proj, "Five", "five"), 5);
+    ASSERT_EQ(count_documents_edges(s, proj, "Six", "six"), 0);
+    lsm_store_close(s);
+    lsm_pipeline_free(p);
+    teardown_lang_repo();
+    PASS();
+}
+
 TEST(pipeline_docstring_python_function) {
     /* Python function with triple-quoted docstring */
     const char *files[] = {"main.py"};
@@ -12139,6 +12219,8 @@ SUITE(pipeline) {
     RUN_TEST(pipeline_module_node_carries_file_docstring);
     RUN_TEST(pipeline_section_docstring_survives_long_quoted_body);
     RUN_TEST(pipeline_semantic_search_returns_markdown_section);
+    RUN_TEST(pipeline_documents_edge_from_backtick_to_function_and_file);
+    RUN_TEST(pipeline_documents_edge_links_five_but_not_six);
     RUN_TEST(pipeline_docstring_python_function);
     RUN_TEST(pipeline_docstring_java_method);
     RUN_TEST(pipeline_docstring_kotlin_function);
