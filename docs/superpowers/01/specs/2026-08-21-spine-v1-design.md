@@ -3,7 +3,7 @@ title: Spine v1 — design for the first logan-spine-mcp tweaks and the Claude C
 type: spec
 status: decided
 created: "2026-08-21 16:36 CDT"
-updated: "2026-08-22 10:41 CDT"
+updated: "2026-08-22 11:53 CDT"
 version: "01"
 sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21]
 ---
@@ -99,7 +99,7 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 ## Coverage report (plugin)
 
-- `plugin/scripts/docstring-coverage.sh [--all] [dir]`: `git -C "$dir" ls-files -z | xargs -0r logan-spine-mcp docstrings $all`. `xargs` reports a child exit of 1 as 123, so the script maps 123 → 1; exit 0 means nothing missing, 1 means findings. Anyone wanting a per-directory breakdown pipes to `cut -d/ -f1 | sort | uniq -c`.
+- `plugin/scripts/docstring-coverage.sh [--all] [dir]`: `git -C "$dir" ls-files -z > list; [ -s list ] || exit 0; (cd "$dir" && xargs -0 logan-spine-mcp docstrings $all) < list`. No `xargs -r` (GNU-only; empty input is checked before `xargs` runs instead) and no reliance on `xargs` mapping a failed child to 123 (GNU-specific — BSD/macOS leaves that case unspecified): a 0 exit stays 0, 126/127 map to 2, any other nonzero exit maps to 1 (findings). Anyone wanting a per-directory breakdown pipes to `cut -d/ -f1 | sort | uniq -c`.
 
 ## B5 — file-level docstring
 

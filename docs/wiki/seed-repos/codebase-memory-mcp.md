@@ -3,13 +3,15 @@ title: codebase-memory-mcp (DeusData/codebase-memory-mcp)
 type: wiki
 status: research-fact
 created: "2026-08-21 13:08 CDT"
-updated: "2026-08-21 13:08 CDT"
-sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/DeusData/codebase-memory-mcp` call on 2026-08-21]
+updated: "2026-08-22 11:53 CDT"
+sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/DeusData/codebase-memory-mcp` calls on 2026-08-21 and 2026-08-22]
 ---
+
+**This is no longer just a candidate we're evaluating.** As of logan-mem version 01, this repo is vendored wholesale into `spine/` via `git subtree` (upstream tag `v0.10.8`) and renamed `logan-spine-mcp`. This file stays a research-fact page about the **upstream** project — what it does on its own, independent of our fork — because that's still a fact about a repo we don't control. For what we changed and why, see `spine/LOGAN-CHANGES.md` in this repo (not wiki content — it's a running changelog of our modifications, owned outside `docs/wiki/`).
 
 - URL: github.com/DeusData/codebase-memory-mcp
 - License: MIT
-- Stars: 39,792 — last push: 2026-08-21 (verified live 2026-08-21)
+- Stars: 39,863 — last push: 2026-08-22 (verified live 2026-08-22)
 
 ## What it does
 
