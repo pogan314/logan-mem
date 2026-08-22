@@ -23,8 +23,9 @@ static const char *USAGE =
     "Usage: logan-spine-mcp docstrings [--all] <file>...\n"
     "  Prints 'path:line kind name' for each missing docstring; exit 1 if any, 0 if none.\n"
     "  Checks Python, Go, JavaScript, TypeScript, TSX, Java, C#, Kotlin, Rust, C, C++;\n"
-    "  other files are skipped. Default = exported symbols only: Go/Python/Java/C#/Kotlin\n"
-    "  per the language's visibility rules; JS/TS functions with `export` (classes always);\n"
+    "  other files are skipped. Default = exported symbols only: Go/Java/C#/Kotlin by an\n"
+    "  uppercase first letter (a name heuristic, not the language's visibility modifiers),\n"
+    "  Python by a name not starting with `_`; JS/TS functions with `export` (classes always);\n"
     "  Rust/C/C++ report all symbols. --all reports all symbols in every language.\n";
 
 static bool reportable_label(const char *label) {
