@@ -11986,6 +11986,105 @@ TEST(cli_config_get_set) {
     PASS();
 }
 
+static int cli_docstrings_cmd_capture(int argc, char **argv, char *out, size_t cap) {
+    out[0] = '\0';
+    FILE *capture = tmpfile();
+    int saved = capture ? dup(fileno(stdout)) : -1;
+    if (!capture || saved < 0) {
+        if (capture)
+            fclose(capture);
+        if (saved >= 0)
+            close(saved);
+        return -1000;
+    }
+    fflush(stdout);
+    if (dup2(fileno(capture), fileno(stdout)) < 0) {
+        fclose(capture);
+        close(saved);
+        return -1000;
+    }
+    int rc = lsm_cmd_docstrings(argc, argv);
+    fflush(stdout);
+    (void)dup2(saved, fileno(stdout));
+    close(saved);
+    rewind(capture);
+    size_t got = fread(out, 1, cap - 1, capture);
+    out[got] = '\0';
+    fclose(capture);
+    return rc;
+}
+
+static void write_fixture(const char *dir, const char *name, const char *body, char *out_path,
+                          size_t cap) {
+    snprintf(out_path, cap, "%s/%s", dir, name);
+    FILE *f = fopen(out_path, "wb");
+    if (f) {
+        fputs(body, f);
+        fclose(f);
+    }
+}
+
+TEST(cli_docstrings_reports_missing_file_and_exported_symbols) {
+    char tmpdir[512];
+    snprintf(tmpdir, sizeof(tmpdir), "%s/cli-doc-XXXXXX", lsm_tmpdir());
+    if (!lsm_mkdtemp(tmpdir))
+        FAIL("tmpdir");
+    char js[600], py[600], go[600];
+    write_fixture(tmpdir, "a.js",
+                  "export function undocumented() {}\n/** ok */\nexport function documented() {}\n"
+                  "function internal() {}\n",
+                  js, sizeof(js));
+    write_fixture(tmpdir, "b.py",
+                  "\"\"\"Module doc.\"\"\"\n\ndef public_fn():\n    pass\n\ndef _private_fn():\n    pass\n",
+                  py, sizeof(py));
+    write_fixture(tmpdir, "c.go", "// Package c is documented.\npackage c\n\nfunc Exported() {}\n", go,
+                  sizeof(go));
+
+    char out[4096];
+    char *argv1[] = {js, py, go};
+    int rc = cli_docstrings_cmd_capture(3, argv1, out, sizeof(out));
+    ASSERT_EQ(rc, 1);
+    /* a.js: no header; undocumented export reported; documented export not; internal() not exported */
+    ASSERT_NOT_NULL(strstr(out, "a.js:1 file "));
+    ASSERT_NOT_NULL(strstr(out, ":1 function undocumented\n"));
+    ASSERT_NULL(strstr(out, " function documented\n"));
+    ASSERT_NULL(strstr(out, "function internal"));
+    /* b.py: header present; public_fn reported; _private_fn not (Python exported = no leading _) */
+    ASSERT_NULL(strstr(out, "b.py:1 file"));
+    ASSERT_NOT_NULL(strstr(out, ":3 function public_fn\n"));
+    ASSERT_NULL(strstr(out, "_private_fn"));
+    /* c.go: header present; Exported reported */
+    ASSERT_NULL(strstr(out, "c.go:1 file"));
+    ASSERT_NOT_NULL(strstr(out, ":4 function Exported\n"));
+
+    /* --all adds the non-exported ones */
+    char *argv2[] = {"--all", js, py};
+    rc = cli_docstrings_cmd_capture(3, argv2, out, sizeof(out));
+    ASSERT_EQ(rc, 1);
+    ASSERT_NOT_NULL(strstr(out, "function internal"));
+    ASSERT_NOT_NULL(strstr(out, "_private_fn"));
+
+    /* a fully documented file exits 0 with no output */
+    char ok[600];
+    write_fixture(tmpdir, "ok.py", "\"\"\"Doc.\"\"\"\n\ndef f():\n    \"\"\"Doc.\"\"\"\n", ok, sizeof(ok));
+    char *argv3[] = {ok};
+    rc = cli_docstrings_cmd_capture(1, argv3, out, sizeof(out));
+    ASSERT_EQ(rc, 0);
+    ASSERT_STR_EQ(out, "");
+
+    /* unknown language and config formats are skipped silently; missing file is exit 2 */
+    char txt[600], json[600];
+    write_fixture(tmpdir, "n.txt", "hello\n", txt, sizeof(txt));
+    write_fixture(tmpdir, "cfg.json", "{\"a\": 1}\n", json, sizeof(json));
+    char *argv4[] = {txt, json};
+    ASSERT_EQ(cli_docstrings_cmd_capture(2, argv4, out, sizeof(out)), 0);
+    ASSERT_STR_EQ(out, "");
+    char *argv5[] = {"/nonexistent/zz.py"};
+    ASSERT_EQ(cli_docstrings_cmd_capture(1, argv5, out, sizeof(out)), 2);
+    test_rmdir_r(tmpdir);
+    PASS();
+}
+
 /* Capture stdout across one lsm_cmd_config invocation. Returns the command's
  * rc and copies captured stdout (NUL-terminated, truncated to cap) out.
  * tmpfile+dup2+rewind is the file's established portable capture idiom —
@@ -13291,4 +13390,5 @@ SUITE(cli) {
     /* Stdin argument gate (#1359) */
     RUN_TEST(cli_zero_argument_tool_never_reads_stdin_issue1359);
     RUN_TEST(cli_stdin_args_gate_tracks_tool_schema_issue1359);
+    RUN_TEST(cli_docstrings_reports_missing_file_and_exported_symbols);
 }

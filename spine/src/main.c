@@ -899,6 +899,8 @@ static void print_help(void) {
     printf("  logan-spine-mcp uninstall [-y|-n] [--dry-run]\n");
     printf("  logan-spine-mcp update [-y|-n]\n");
     printf("  logan-spine-mcp config <list|get|set|reset>\n");
+    printf("  logan-spine-mcp docstrings [--all] <file>...\n"
+           "                                      List missing docstrings (exit 1 if any)\n");
     printf("  logan-spine-mcp --version    Print version\n");
     printf("  logan-spine-mcp --help       Print this help\n");
     printf("\nUI options:\n");
@@ -1074,6 +1076,9 @@ static int handle_subcommand(int argc, char **argv, lsm_project_lock_manager_t *
         }
         if (strcmp(argv[i], "config") == 0) {
             return lsm_cmd_config(argc - i - SKIP_ONE, argv + i + SKIP_ONE);
+        }
+        if (strcmp(argv[i], "docstrings") == 0) {
+            return lsm_cmd_docstrings(argc - i - SKIP_ONE, argv + i + SKIP_ONE);
         }
     }
     return LSM_NOT_FOUND;

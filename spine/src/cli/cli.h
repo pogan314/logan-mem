@@ -492,6 +492,7 @@ int lsm_cmd_update(int argc, char **argv);
 
 /* config: get/set/list/reset runtime config values. */
 int lsm_cmd_config(int argc, char **argv);
+int lsm_cmd_docstrings(int argc, char **argv);
 
 /* hook-augment: stdin-driven Claude Code PreToolUse augmenter.
  * Reads the hook JSON from stdin and emits hookSpecificOutput.additionalContext
