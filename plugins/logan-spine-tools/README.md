@@ -1,6 +1,6 @@
 # logan-spine-tools
 
-The Claude Code plugin half of logan-spine. The engine is `logan-spine-mcp` in `../spine/` (our renamed vendored copy of DeusData/codebase-memory-mcp; every divergence is logged in `../spine/LOGAN-CHANGES.md`).
+The Claude Code plugin half of logan-spine. The engine is `logan-spine-mcp` in `../../spine/` (our renamed vendored copy of DeusData/codebase-memory-mcp; every divergence is logged in `../../spine/LOGAN-CHANGES.md`).
 
 ## What is in here
 
