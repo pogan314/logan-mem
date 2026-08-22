@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 BIN="${1:-}"
-if [ -n "$BIN" ]; then export PATH="$(dirname "$BIN"):$PATH"; fi
+if [ -n "$BIN" ]; then BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"; export PATH="$(dirname "$BIN"):$PATH"; fi
 command -v logan-spine-mcp >/dev/null || { echo "logan-spine-mcp not on PATH (pass path as \$1)"; exit 2; }
 command -v jq >/dev/null || { echo "jq not installed — the hook no-ops without it"; exit 2; }
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
