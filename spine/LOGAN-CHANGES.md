@@ -2,7 +2,7 @@
 
 - Upstream: https://github.com/DeusData/codebase-memory-mcp (MIT)
 - Upstream base: tag `v0.10.8` (upstream commit `46ae198`, imported as squash commit `787ab8c` in this repo)
-- Our version: `v0.10.8-logan.1`
+- Our version: `v0.10.8-logan.2`
 - Every commit that touches `spine/` must add or update an entry here. A pre-commit hook at `.githooks/pre-commit` enforces it.
 - The diff against pristine upstream at any time: `git diff 787ab8c HEAD:spine` (run from the repo root).
 
