@@ -8582,7 +8582,7 @@ int lsm_store_vector_search(lsm_store_t *s, const char *project, const char **ke
                       " FROM node_vectors v"
                       " INNER JOIN nodes n ON n.id = v.node_id"
                       " WHERE v.project = ?2"
-                      " AND n.label IN (" LSM_SQL_CALLABLE_OR_TYPE_LABELS ")"
+                      " AND n.label IN (" LSM_SQL_CALLABLE_OR_TYPE_LABELS ",'Section','Module')"
                       " ORDER BY score DESC"
                       " LIMIT ?3";
 

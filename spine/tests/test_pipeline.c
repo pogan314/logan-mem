@@ -6631,6 +6631,40 @@ TEST(pipeline_section_docstring_survives_long_quoted_body) {
     PASS();
 }
 
+TEST(pipeline_semantic_search_returns_markdown_section) {
+    const char *files[] = {"auth.md", "src/a.js"};
+    const char *contents[] = {
+        "# Auth\n\n## Token refresh\n\nThe refresh flow rotates the session token "
+        "when it is within five minutes of expiry.\n",
+        "export function unrelated() { return 1; }\n"};
+    if (setup_lang_repo(files, contents, 2) != 0)
+        FAIL("tmpdir");
+    char db[512];
+    snprintf(db, sizeof(db), "%s/test.db", g_lang_tmpdir);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_lang_tmpdir, db, LSM_MODE_FULL);
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(lsm_pipeline_run(p), 0);
+    lsm_store_t *s = lsm_store_open_path(db);
+    ASSERT_NOT_NULL(s);
+    const char *proj = lsm_pipeline_project_name(p);
+
+    const char *kw[] = {"refresh", "token", "expiry"};
+    lsm_vector_result_t *res = NULL;
+    int rc = 0;
+    ASSERT_EQ(lsm_store_vector_search(s, proj, kw, 3, 50, &res, &rc), LSM_STORE_OK);
+    bool found = false;
+    for (int i = 0; i < rc; i++) {
+        if (strcmp(res[i].label, "Section") == 0 && strcmp(res[i].name, "Token refresh") == 0)
+            found = true;
+    }
+    ASSERT_TRUE(found);
+    lsm_store_free_vector_results(res, rc);
+    lsm_store_close(s);
+    lsm_pipeline_free(p);
+    teardown_lang_repo();
+    PASS();
+}
+
 TEST(pipeline_docstring_python_function) {
     /* Python function with triple-quoted docstring */
     const char *files[] = {"main.py"};
@@ -12104,6 +12138,7 @@ SUITE(pipeline) {
     RUN_TEST(pipeline_docstring_go_function);
     RUN_TEST(pipeline_module_node_carries_file_docstring);
     RUN_TEST(pipeline_section_docstring_survives_long_quoted_body);
+    RUN_TEST(pipeline_semantic_search_returns_markdown_section);
     RUN_TEST(pipeline_docstring_python_function);
     RUN_TEST(pipeline_docstring_java_method);
     RUN_TEST(pipeline_docstring_kotlin_function);

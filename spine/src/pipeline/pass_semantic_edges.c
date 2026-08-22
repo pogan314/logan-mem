@@ -944,7 +944,8 @@ static int cmp_node_ptr_by_qn(const void *pa, const void *pb) {
 }
 
 /* Phase 1a: seed the funcs[] / node_ptrs[] arrays from all Function and
- * Method nodes in the graph buffer.  Returns the number of functions collected
+ * Method nodes in the graph buffer, plus Section and Module nodes that carry a
+ * docstring (B6).  Returns the number of entries collected
  * (0 on OOM), and fills *out_funcs / *out_nodes with newly malloc'd arrays. */
 static int phase1_scan_functions(lsm_gbuf_t *gbuf, lsm_sem_func_t **out_funcs,
                                  const lsm_gbuf_node_t ***out_nodes) {
@@ -954,7 +955,7 @@ static int phase1_scan_functions(lsm_gbuf_t *gbuf, lsm_sem_func_t **out_funcs,
     const lsm_gbuf_node_t **node_ptrs = NULL;
     int func_count = 0;
     int func_cap = 0;
-    const char *labels[] = {"Function", "Method", NULL};
+    const char *labels[] = {"Function", "Method", "Section", "Module", NULL};
     for (int li = 0; labels[li]; li++) {
         const lsm_gbuf_node_t **nodes = NULL;
         int node_count = 0;
@@ -962,6 +963,11 @@ static int phase1_scan_functions(lsm_gbuf_t *gbuf, lsm_sem_func_t **out_funcs,
             continue;
         }
         for (int i = 0; i < node_count; i++) {
+            if ((strcmp(labels[li], "Section") == 0 || strcmp(labels[li], "Module") == 0) &&
+                !(nodes[i]->properties_json &&
+                  strstr(nodes[i]->properties_json, "\"docstring\":\""))) {
+                continue; /* B6: only embed prose-bearing Section/Module nodes */
+            }
             if (func_count >= func_cap) {
                 int new_cap = func_cap < MAX_FUNCS_INIT ? MAX_FUNCS_INIT : func_cap * GROW;
                 lsm_sem_func_t *grown = realloc(funcs, (size_t)new_cap * sizeof(lsm_sem_func_t));

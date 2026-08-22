@@ -621,7 +621,7 @@ int lsm_pipeline_pass_configlink(lsm_pipeline_ctx_t *ctx);
 int lsm_pipeline_pass_similarity(lsm_pipeline_ctx_t *ctx);
 
 /* Pre-dump pass: SEMANTICALLY_RELATED edges via algorithmic embeddings.
- * Opt-in: only runs when LSM_SEMANTIC_ENABLED=1. */
+ * Runs in MODERATE/FULL/ADVANCED modes; skipped in FAST (see run_predump_passes). */
 int lsm_pipeline_pass_semantic_edges(lsm_pipeline_ctx_t *ctx);
 
 /* Pre-dump pass: interprocedural complexity propagation (Tier B).
