@@ -1,9 +1,9 @@
 ---
 title: Drift analysis — what was asked vs what was built
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:03 CDT"
-updated: "2026-08-21 13:03 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [owner-quotes-timeline.md, what-was-built.md, live-store-evidence.md, /home/ubuntu/.pogan/memory/*/events/ read on 2026-08-21]
 ---

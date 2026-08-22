@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Refuse a commit that changes spine/ without also staging spine/LOGAN-CHANGES.md.
+# Activate once per clone:  git config core.hooksPath .githooks
+staged="$(git diff --cached --name-only)"
+if grep -q '^spine/' <<<"$staged" && ! grep -qx 'spine/LOGAN-CHANGES.md' <<<"$staged"; then
+  echo "pre-commit: this commit changes spine/ but spine/LOGAN-CHANGES.md is not staged." >&2
+  echo "pre-commit: add an entry to spine/LOGAN-CHANGES.md describing the change, then commit again." >&2
+  exit 1
+fi

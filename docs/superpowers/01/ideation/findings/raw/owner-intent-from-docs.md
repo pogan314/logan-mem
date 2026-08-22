@@ -1,9 +1,9 @@
 ---
 title: Raw — owner statements recorded in the old design docs
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:16 CDT"
-updated: "2026-08-21 13:16 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [../pogan-mem/docs/*.md and ../pogan-toolkit/docs/superpowers/**, read 2026-08-21]
 ---

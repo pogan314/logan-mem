@@ -1,9 +1,9 @@
 ---
 title: feat/memory — ideas about what a memory is and how it moves
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:00 CDT"
-updated: "2026-08-21 13:00 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [owner-requirements.md, what-went-wrong.md, docs/wiki/seed-repos/, docs/wiki/retrieval-methods-primer.md]
 ---

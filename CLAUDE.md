@@ -4,11 +4,11 @@ A memory system for AI coding agents, rebuilt from scratch. This repo replaces `
 
 ## Status (update this line when it changes)
 
-- **Stage: ideation.** Nothing is designed, nothing is built, nothing is installed on any machine.
-- Brainstorming has not started. When it does, everything under `docs/superpowers/01/ideation/` becomes stale.
-- Do not install anything from this repo on any machine (hooks, MCP servers, skills, symlinks, git hooks) until the owner says so in that session.
-- **There is no code and no build.** No `package.json`, no test suite, no dev server, nothing to run. If you are about to run `npm install` or look for a build command, stop — this repo is Markdown only.
-- **Entry point for the next session:** `docs/superpowers/01/ideation/START-HERE.md`. It gives the reading order, the decision order, and the one document the first brainstorming session must produce.
+- **Stage: version 01 = the spine, shipped.** Merged to `dev/version-01-brainstorming`, tagged `v0.10.8-logan.2`, installed on the EC2 box. Engine vendored at `spine/` (renamed codebase-memory-mcp, see `spine/LOGAN-CHANGES.md`); spec at `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md`, status `decided`, ending in the end-to-end Verified table.
+- Brainstorming for 01 happened in chat on 2026-08-21; `docs/superpowers/01/ideation/` is stale (every file marked). The owner chose not to write a separate brainstorming doc; the decisions live in `spine/LOGAN-CHANGES.md` and the spec.
+- The spine installs **once per machine**, never per repo: `plugin/scripts/install.sh` places the binary in `~/.local/bin`, registers the MCP server in `~/.claude.json` (user scope, so every repo sees it), and copies the plugin to `~/.claude/skills/logan-spine-tools`. Only the index is per repo — `~/.cache/logan-spine-mcp/<project>.db`, built on the first session in that repo because `auto_index` is true, skipped above 50,000 tracked files. Still ask the owner before installing on a machine that does not have it.
+- **The only code is under `spine/`** (C, built with `spine/scripts/build.sh`, tested with `spine/scripts/test.sh --suites <name>`). Everything else is Markdown. There is no `package.json`.
+- **Entry point for the next session:** the spec above, then `spine/LOGAN-CHANGES.md`.
 
 ## Folder map
 
@@ -41,8 +41,8 @@ A memory system for AI coding agents, rebuilt from scratch. This repo replaces `
 ```yaml
 ---
 title: Short name of the file
-type: wiki | ideation
-status: research-fact | ideation | stale | superseded
+type: wiki | ideation | spec | plan
+status: research-fact | ideation | draft | decided | stale | superseded
 created: "2026-08-21 13:15 CDT"   # date, 24-hour time, and zone — always quoted
 updated: "2026-08-21 13:15 CDT"
 version: "01"            # ideation files only — which build version this belongs to
@@ -50,10 +50,15 @@ sources: []              # where the content came from; for wiki, what was verif
 ---
 ```
 
-- `status` is the one field agents must read before trusting a file. `research-fact` means verified as of `updated`. `ideation` means scratchpad. `stale` and `superseded` mean do not rely on it.
+- `status` is the one field agents must read before trusting a file. `research-fact` means verified as of `updated`. `ideation` means scratchpad. `draft` means a spec or plan under review. `decided` means the owner approved it. `stale` and `superseded` mean do not rely on it.
 - `created` and `updated` are **timestamps, not dates**: `YYYY-MM-DD HH:MM ZONE`, US Central, 24-hour clock. Get the value from `date '+%Y-%m-%d %H:%M %Z'` on the machine — never type one from memory. The zone prints as `CDT` in summer and `CST` in winter; both mean US Central, so write whatever `date` reports rather than forcing one of them.
 - Always wrap both values in double quotes. Unquoted, a bare `2026-08-21` is a YAML date object while `2026-08-21 13:15 CDT` is a string, so the same field would change type between files.
 - Bump `updated` on every edit. Never edit a file's `created`.
+
+## Repo gotchas
+
+- **Every `gh` command in this repo needs `--repo pogan314/logan-mem`.** There are two remotes — `origin` (ours) and `upstream` (DeusData/codebase-memory-mcp, the vendored engine's source). `gh` picks `upstream` on its own, so a bare `gh pr create` aims at the third-party repo. Verified 2026-08-22: `gh repo view --json owner` returned `DeusData`, and the first PR attempt failed with "No commits between main and dev/version-01-brainstorming" because it was asking about their repo, not ours.
+- `spine/internal/lsm/vendored/grammars/lean/parser.c` is 99.6 MB, and GitHub warns on every push that it is over the 50 MB recommendation. It is upstream's file, unmodified. The hard limit is 100 MB, so this one file is 0.4 MB from blocking a push; if upstream grows it, the fix is `git lfs` or dropping that grammar, not a force-push.
 
 ## Writing rules for this repo
 
@@ -70,4 +75,4 @@ sources: []              # where the content came from; for wiki, what was verif
 ## Versions
 
 - This system ships in versions. `01` is the first, and it is still a substantial build — not a throwaway.
-- Each version gets its own `docs/superpowers/<nn>/` folder holding its `ideation/`, then (later) its `brainstorming/`, spec, and plans. None of those later folders exist yet; `docs/superpowers/01/ideation/START-HERE.md` says what the first brainstorming session must produce and where it goes.
+- Each version gets its own `docs/superpowers/<nn>/` folder holding its `ideation/`, then its `specs/` and `plans/`. For 01, `ideation/` is stale and `specs/` exists; `plans/` is written from the approved spec.
