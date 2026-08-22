@@ -3,12 +3,15 @@ title: Spine v1 — design for the first logan-spine-mcp tweaks and the Claude C
 type: spec
 status: decided
 created: "2026-08-21 16:36 CDT"
-updated: "2026-08-22 11:53 CDT"
+updated: "2026-08-22 12:48 CDT"
 version: "01"
 sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21]
 ---
 
 # Spine v1 design
+
+> **Path note (2026-08-22 12:48 CDT).** Everything this document calls `plugin/` now lives at `plugins/logan-spine-tools/`. The directory was moved after this document was written, to make room for the memory system's own plugin beside it; paths in the body are left as they were when the work was done, so this file stays an accurate record of what was actually run. `spine/` did not move — its location is pinned by the git subtree metadata.
+
 
 ## What this is
 

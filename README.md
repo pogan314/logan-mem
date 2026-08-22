@@ -9,4 +9,4 @@ A memory system for AI coding agents. Clean rebuild, started 2026-08-21.
 
 This repo replaces the abandoned `pogan-mem` / `pogan-toolkit` build, which stays beside it as reference only.
 
-`spine/` is the code map engine (`logan-spine-mcp`, a renamed vendored copy of DeusData/codebase-memory-mcp; see `spine/LOGAN-CHANGES.md` for every divergence from upstream). `plugin/` is the Claude Code plugin that installs and enforces it: `plugin/scripts/install.sh` builds, installs for Claude Code only, and copies the plugin into `~/.claude/skills/`. Design: `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md`.
+`spine/` is the code map engine (`logan-spine-mcp`, a renamed vendored copy of DeusData/codebase-memory-mcp; see `spine/LOGAN-CHANGES.md` for every divergence from upstream). `plugins/` holds one directory per Claude Code plugin this repo ships; today that is `plugins/logan-spine-tools/`, the spine's plugin, which installs and enforces it: `plugins/logan-spine-tools/scripts/install.sh` builds, installs for Claude Code only, and copies the plugin into `~/.claude/skills/`. Design: `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md`.
