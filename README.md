@@ -2,7 +2,7 @@
 
 A memory system for AI coding agents. Clean rebuild, started 2026-08-21.
 
-- **Stage: version 01 = the spine, built and installed on this machine, merged to `main` (PRs #1-4). `dev/version-01-brainstorming` is tagged `v0.10.8-logan.4`.**
+- **Stage: version 01 = the spine, built and installed on this machine, merged to `main` (PRs #1-6), engine tagged `v0.10.8-logan.4`.**
 - `docs/wiki/` — research facts about things outside our control (other memory systems, Claude Code's features).
 - `docs/superpowers/01/ideation/` — stale scratchpad from before version 01 was designed. Never fact.
 - Read `CLAUDE.md` first for the rules.
