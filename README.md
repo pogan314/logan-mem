@@ -2,9 +2,9 @@
 
 A memory system for AI coding agents. Clean rebuild, started 2026-08-21.
 
-- **Stage: ideation.** Nothing is built or installed.
+- **Stage: version 01 = the spine, built on branch `dev/spine-v1`; not yet installed on any machine.**
 - `docs/wiki/` — research facts about things outside our control (other memory systems, Claude Code's features).
-- `docs/superpowers/01/ideation/` — the scratchpad for version 01. Never fact.
+- `docs/superpowers/01/ideation/` — stale scratchpad from before version 01 was designed. Never fact.
 - Read `CLAUDE.md` first for the rules.
 
 This repo replaces the abandoned `pogan-mem` / `pogan-toolkit` build, which stays beside it as reference only.

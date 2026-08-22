@@ -56,6 +56,14 @@ check "$rc" "1" "coverage exits 1 when something is missing"
 check "$(grep -c 'bad.js' "$tmp/cov")" "2" "coverage lists bad.js twice (file + function)"
 check "$(grep -c 'good.js' "$tmp/cov")" "0" "coverage lists nothing for good.js"
 
+# coverage: non-git directory -> not 0, not 1 (a real error, not a false green)
+nogit="$(mktemp -d)"; trap 'rm -rf "$tmp" "$nogit"' EXIT
+printf 'export function f() {}\n' > "$nogit/x.js"
+set +e
+"$ROOT/plugin/scripts/docstring-coverage.sh" "$nogit" >/dev/null 2>&1; rc=$?
+set -e
+if [ "$rc" != "0" ] && [ "$rc" != "1" ]; then echo "ok   coverage errors on non-git dir"; else echo "FAIL coverage errors on non-git dir: got rc=$rc"; fail=1; fi
+
 # timing: one hook invocation, for the record
 TIMEFORMAT='hook wall time: %R s'; time ( printf '{"tool_input":{"file_path":"%s"}}' "$tmp/bad.js" | "$ROOT/plugin/scripts/docstring-check.sh" >/dev/null 2>&1 || true )
 exit $fail

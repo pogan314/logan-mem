@@ -4,7 +4,7 @@ A memory system for AI coding agents, rebuilt from scratch. This repo replaces `
 
 ## Status (update this line when it changes)
 
-- **Stage: version 01 = the spine, in design.** Engine vendored at `spine/` (renamed codebase-memory-mcp, see `spine/LOGAN-CHANGES.md`); spec at `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md`. Nothing is installed on any machine.
+- **Stage: version 01 = the spine, built on branch `dev/spine-v1`; not yet installed.** Engine vendored at `spine/` (renamed codebase-memory-mcp, see `spine/LOGAN-CHANGES.md`); spec at `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md`. Nothing is installed on any machine.
 - Brainstorming for 01 happened in chat on 2026-08-21; `docs/superpowers/01/ideation/` is stale (every file marked). The owner chose not to write a separate brainstorming doc; the decisions live in `spine/LOGAN-CHANGES.md` and the spec.
 - Do not install anything from this repo on any machine (hooks, MCP servers, skills, symlinks, git hooks) until the owner says so in that session.
 - **The only code is under `spine/`** (C, built with `spine/scripts/build.sh`, tested with `spine/scripts/test.sh --suites <name>`). Everything else is Markdown. There is no `package.json`.
