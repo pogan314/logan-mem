@@ -292,11 +292,16 @@ TEST(daemon_bootstrap_classifies_stateless_commands_without_client) {
     char *install[] = {"logan-spine-mcp", "install", "--dry-run", NULL};
     char *uninstall[] = {"logan-spine-mcp", "uninstall", NULL};
     char *update[] = {"logan-spine-mcp", "update", "-n", NULL};
+    char *doc[] = {"logan-spine-mcp", "docstrings", "x.py", NULL};
+    char *cli_doc[] = {"logan-spine-mcp", "cli", "search", "docstrings", NULL};
     ASSERT_EQ(classify(2, version), LSM_DAEMON_PROCESS_STATELESS);
     ASSERT_EQ(classify(3, help), LSM_DAEMON_PROCESS_STATELESS);
     ASSERT_EQ(classify(3, install), LSM_DAEMON_PROCESS_STATELESS);
     ASSERT_EQ(classify(2, uninstall), LSM_DAEMON_PROCESS_STATELESS);
     ASSERT_EQ(classify(3, update), LSM_DAEMON_PROCESS_STATELESS);
+    ASSERT_EQ(classify(3, doc), LSM_DAEMON_PROCESS_STATELESS);
+    /* `docstrings` as opaque `cli` tool input must stay LOCAL_CLI, not become stateless. */
+    ASSERT_EQ(classify(4, cli_doc), LSM_DAEMON_PROCESS_LOCAL_CLI);
     ASSERT_FALSE(lsm_daemon_process_role_requires_client(LSM_DAEMON_PROCESS_STATELESS));
     PASS();
 }
