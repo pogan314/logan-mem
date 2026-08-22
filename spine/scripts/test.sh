@@ -121,6 +121,37 @@ if [ "$TSAN" -eq 1 ] && [ -n "$SUITES" ]; then
     echo "test.sh: --tsan and --suites are separate modes (the TSan leg has its own suite set). Please consult --help." >&2
     exit 2
 fi
+
+# The cli suite drives the real install and uninstall paths. HOME isolation is
+# per-test (test_cli.c sets it 58 times; this script sets it none), so what the
+# suite touches depends on the HOME it inherits. Observed on 2026-08-22: against a
+# real HOME its results were unstable (12 then 14 failures, different tests each
+# run) where an isolated HOME gives the upstream baseline, and all 7 lsm-* hook
+# entries went missing from a live ~/.claude/settings.json during a window in
+# which it ran repeatedly. A controlled replay against a populated copy of that
+# HOME did NOT reproduce the removal, so the suite is not a proven cause — but it
+# demonstrably reads and writes whatever HOME it is given, which is reason enough
+# not to point it at yours. Default mode (no --suites) runs every suite too.
+lsm_cli_suite_selected=0
+if [ -z "$SUITES" ]; then
+    lsm_cli_suite_selected=1
+else
+    for lsm_suite in $SUITES; do
+        if [ "$lsm_suite" = "cli" ]; then
+            lsm_cli_suite_selected=1
+        fi
+    done
+fi
+if [ "$lsm_cli_suite_selected" -eq 1 ] && [ "${LSM_ALLOW_REAL_HOME:-0}" != "1" ] &&
+   { [ -e "$HOME/.claude.json" ] || [ -d "$HOME/.claude" ]; }; then
+    echo "test.sh: refusing to run the cli suite against a real HOME ($HOME)." >&2
+    echo "  That suite installs and uninstalls agent configurations for real, against" >&2
+    echo "  whatever HOME it inherits, and its results are unreliable outside isolation." >&2
+    echo "  Run it isolated instead:" >&2
+    echo "    HOME=\"\$(mktemp -d)\" CCACHE_DIR=\"$HOME/.ccache\" scripts/test.sh $*" >&2
+    echo "  Set LSM_ALLOW_REAL_HOME=1 to override, accepting that it edits your config." >&2
+    exit 2
+fi
 prev_arg=""
 
 # Also support --arch=value
