@@ -3,7 +3,7 @@ title: Spine v1 — design for the first logan-spine-mcp tweaks and the Claude C
 type: spec
 status: draft
 created: "2026-08-21 16:36 CDT"
-updated: "2026-08-21 17:40 CDT"
+updated: "2026-08-21 20:45 CDT"
 version: "01"
 sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21]
 ---
@@ -63,7 +63,7 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 ## `docstrings` subcommand (serves A4, B5 enforcement, and the coverage report)
 
-- Invocation: `logan-spine-mcp docstrings [--all] <file>...`. Files only; the coverage script supplies the list. Dispatched beside `cli`/`install` in `spine/src/main.c:1056-1075`. No JSON flag — nothing consumes JSON.
+- Invocation: `logan-spine-mcp docstrings [--all] <file>...`. Files only; the coverage script supplies the list. Dispatched beside `cli`/`install` in `spine/src/main.c:1056-1075`. The daemon bootstrap classifies the first argv token before `main.c`'s dispatch runs (`spine/src/daemon/bootstrap.c`, `lsm_daemon_process_role`), and unknown tokens go to MCP-client mode, so `docstrings` is listed in `stateless_commands` beside `install`/`uninstall`/`update`/`allow-root` (found during execution, Task 6). No JSON flag — nothing consumes JSON.
 - Per file: `lsm_language_for_filename` (`spine/src/discover/language.c:880`; returns `LSM_LANG_COUNT` for unknown → skip silently), then `lsm_extract_file` (`spine/internal/lsm/lsm.h:637`; callable standalone — it allocates its own arena and resolves the grammar lazily, as `spine/tests/test_extraction.c:78-82` shows). Report:
   1. `path:1 file <path>` when `LSMFileResult.file_docstring` (new field, B5) is NULL. Languages the subcommand checks at all: Python, Go, JavaScript, TypeScript, TSX, Java, C#, Kotlin, Rust, C, C++ (the ones with a B5 rule and a docstring concept). Markdown and the config formats (JSON, YAML, TOML, INI, XML, HCL) are skipped entirely — they have no docstrings, and the config extractors label their tables `Class`, which would otherwise be reported.
   2. `path:<start_line> <kind> <name>` for each definition whose `docstring` is NULL and whose label is Function, Method, Class, Struct, Interface, Enum, Type, or Trait. `kind` is the label lowercased.
