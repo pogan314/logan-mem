@@ -1,9 +1,9 @@
 ---
 title: feat/learning — automatic learning, as the owner defines it
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 13:01 CDT"
-updated: "2026-08-21 13:01 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [owner-requirements.md #1 #4 #5 #6, what-went-wrong.md, docs/wiki/claude-code-harness-facts.md]
 ---

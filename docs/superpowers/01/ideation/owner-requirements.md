@@ -1,9 +1,9 @@
 ---
 title: Owner requirements — what Logan said they want
 type: ideation
-status: ideation
+status: stale
 created: "2026-08-21 12:57 CDT"
-updated: "2026-08-21 12:57 CDT"
+updated: "2026-08-21 16:43 CDT"
 version: "01"
 sources: [owner messages in the 2026-08-21 session; findings/owner-quotes-timeline.md for the July-August history]
 ---

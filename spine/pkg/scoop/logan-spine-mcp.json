@@ -1,0 +1,27 @@
+{
+  "version": "0.8.1",
+  "description": "Fast code intelligence engine — native executable with verified runtime assets",
+  "homepage": "https://github.com/DeusData/logan-spine-mcp",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/DeusData/logan-spine-mcp/releases/download/v0.8.1/logan-spine-mcp-windows-amd64.zip",
+      "hash": "a602ad090ed3f49d86c55472f73f27ad7055222806a82358f2e08513e027f00f",
+      "bin": "logan-spine-mcp.exe"
+    }
+  },
+  "checkver": {
+    "github": "https://github.com/DeusData/logan-spine-mcp"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/DeusData/logan-spine-mcp/releases/download/v$version/logan-spine-mcp-windows-amd64.zip",
+        "hash": {
+          "url": "https://github.com/DeusData/logan-spine-mcp/releases/download/v$version/checksums.txt",
+          "find": "([a-f0-9]{64})\\s+logan-spine-mcp-windows-amd64\\.zip"
+        }
+      }
+    }
+  }
+}
