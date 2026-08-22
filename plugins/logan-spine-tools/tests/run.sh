@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for plugin/scripts. Needs the built binary: pass its path as $1 or have logan-spine-mcp on PATH.
+# Tests for this plugin's scripts. Needs the built binary: pass its path as $1 or have logan-spine-mcp on PATH.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
