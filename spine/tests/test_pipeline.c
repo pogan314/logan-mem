@@ -6596,6 +6596,41 @@ TEST(pipeline_module_node_carries_file_docstring) {
     PASS();
 }
 
+TEST(pipeline_section_docstring_survives_long_quoted_body) {
+    static char body[1600];
+    memset(body, '"', 1550);
+    body[1550] = '\0';
+    static char md[2048];
+    snprintf(md, sizeof(md), "# Doc\n\n## Body\n\n%s\n", body);
+    const char *files[] = {"guide.md"};
+    const char *contents[] = {md};
+    if (setup_lang_repo(files, contents, 1) != 0)
+        FAIL("tmpdir");
+    char db[512];
+    snprintf(db, sizeof(db), "%s/test.db", g_lang_tmpdir);
+    lsm_pipeline_t *p = lsm_pipeline_new(g_lang_tmpdir, db, LSM_MODE_FULL);
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(lsm_pipeline_run(p), 0);
+    lsm_store_t *s = lsm_store_open_path(db);
+    ASSERT_NOT_NULL(s);
+    const char *proj = lsm_pipeline_project_name(p);
+    lsm_node_t *nodes = NULL;
+    int nc = 0;
+    lsm_store_find_nodes_by_name(s, proj, "Body", &nodes, &nc);
+    bool found = false;
+    for (int i = 0; i < nc; i++) {
+        if (strcmp(nodes[i].label, "Section") == 0 && nodes[i].properties_json &&
+            strstr(nodes[i].properties_json, "\"docstring\":\"\\\"\\\"\\\""))
+            found = true;
+    }
+    ASSERT_TRUE(found);
+    lsm_store_free_nodes(nodes, nc);
+    lsm_store_close(s);
+    lsm_pipeline_free(p);
+    teardown_lang_repo();
+    PASS();
+}
+
 TEST(pipeline_docstring_python_function) {
     /* Python function with triple-quoted docstring */
     const char *files[] = {"main.py"};
@@ -12068,6 +12103,7 @@ SUITE(pipeline) {
     /* Docstring integration (port of TestDocstringIntegration) */
     RUN_TEST(pipeline_docstring_go_function);
     RUN_TEST(pipeline_module_node_carries_file_docstring);
+    RUN_TEST(pipeline_section_docstring_survives_long_quoted_body);
     RUN_TEST(pipeline_docstring_python_function);
     RUN_TEST(pipeline_docstring_java_method);
     RUN_TEST(pipeline_docstring_kotlin_function);

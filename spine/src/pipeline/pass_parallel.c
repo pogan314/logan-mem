@@ -681,7 +681,7 @@ enum { PP_OVERSIZED_WARN_MAX = 32 };
 /* Insert one definition node (and its route if present) into the local gbuf. */
 static void insert_def_into_gbuf(extract_worker_state_t *ws, const lsm_file_info_t *fi,
                                  LSMDefinition *def) {
-    char props[LSM_SZ_2K];
+    char props[LSM_SZ_4K];
     build_def_props(props, sizeof(props), def);
     int64_t func_id =
         lsm_gbuf_upsert_node(ws->local_gbuf, def->label ? def->label : "Function", def->name,

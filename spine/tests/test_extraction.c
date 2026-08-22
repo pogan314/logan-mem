@@ -3007,6 +3007,38 @@ TEST(markdown_heading_content) {
     PASS();
 }
 
+TEST(markdown_section_body_and_end_line) {
+    LSMFileResult *r = extract("# Title\n\nIntro text.\n\n## Usage\n\nCall `add` then `sub`.\n"
+                               "Second line.\n\n## Notes\n\nOther.\n",
+                               LSM_LANG_MARKDOWN, "t", "README.md");
+    ASSERT_NOT_NULL(r);
+    ASSERT_FALSE(r->has_error);
+    const LSMDefinition *usage = NULL, *title = NULL;
+    for (int i = 0; i < r->defs.count; i++) {
+        if (strcmp(r->defs.items[i].label, "Section") != 0)
+            continue;
+        if (strcmp(r->defs.items[i].name, "Usage") == 0)
+            usage = &r->defs.items[i];
+        if (strcmp(r->defs.items[i].name, "Title") == 0)
+            title = &r->defs.items[i];
+    }
+    ASSERT_NOT_NULL(usage);
+    ASSERT_EQ(usage->start_line, 5);
+    ASSERT_GTE(usage->end_line, 8);
+    ASSERT_TRUE(usage->end_line < 10); /* stops before "## Notes" on line 10 */
+    ASSERT_NOT_NULL(usage->docstring);
+    ASSERT_NOT_NULL(strstr(usage->docstring, "Call `add` then `sub`."));
+    ASSERT_NOT_NULL(strstr(usage->docstring, "Second line."));
+    ASSERT_NULL(strstr(usage->docstring, "Other."));
+    ASSERT_TRUE(usage->docstring[0] != '\n'); /* trimmed */
+    /* Sections nest: the H1's body spans the whole document (spec, known limitation). */
+    ASSERT_NOT_NULL(title);
+    ASSERT_NOT_NULL(title->docstring);
+    ASSERT_NOT_NULL(strstr(title->docstring, "Other."));
+    lsm_free_result(r);
+    PASS();
+}
+
 TEST(markdown_no_headings) {
     LSMFileResult *r =
         extract("Just a paragraph\n\nAnother paragraph\n", LSM_LANG_MARKDOWN, "t", "README.md");
@@ -5703,6 +5735,7 @@ SUITE(extraction) {
     RUN_TEST(markdown_setext_headings);
     RUN_TEST(markdown_heading_content);
     RUN_TEST(markdown_no_headings);
+    RUN_TEST(markdown_section_body_and_end_line);
     RUN_TEST(file_docstring_js_fileoverview_tag);
     RUN_TEST(file_docstring_js_blank_line_separates_header);
     RUN_TEST(file_docstring_js_attached_comment_is_not_header);

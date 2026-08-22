@@ -322,7 +322,7 @@ static void process_def(lsm_pipeline_ctx_t *ctx, const LSMDefinition *def, const
     if (!def->qualified_name || !def->name) {
         return;
     }
-    char props[LSM_SZ_2K];
+    char props[LSM_SZ_4K];
     build_def_props(props, sizeof(props), def);
     int64_t node_id = lsm_gbuf_upsert_node(
         ctx->gbuf, def->label ? def->label : "Function", def->name, def->qualified_name,

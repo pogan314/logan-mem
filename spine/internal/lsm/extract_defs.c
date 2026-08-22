@@ -17,6 +17,7 @@
 
 // Buffer sizes for local arrays (base classes, params, return types).
 #define MAX_COMMENT_LEN 500
+#define LSM_SECTION_BODY_MAX 1500 // B6: bytes of a Markdown section body kept as docstring
 #define MAX_BASES 16
 #define MAX_BASES_MINUS_1 15
 #define MAX_PARAMS LSM_SZ_32
@@ -3930,6 +3931,52 @@ static void push_simple_class_def(LSMExtractCtx *ctx, TSNode node, char *name, c
     lsm_defs_push(&ctx->result->defs, a, def);
 }
 
+// B6: a Markdown heading becomes a Section whose span is the enclosing
+// `section` node (to the next heading of equal or higher level) and whose
+// docstring is the trimmed body text, capped at LSM_SECTION_BODY_MAX bytes.
+static void push_markdown_section_def(LSMExtractCtx *ctx, TSNode heading, char *name) {
+    LSMArena *a = ctx->arena;
+    LSMDefinition def;
+    memset(&def, 0, sizeof(def));
+    def.name = name;
+    def.qualified_name = lsm_fqn_compute(a, ctx->project, ctx->rel_path, qn_safe_segment(a, name));
+    def.label = "Section";
+    def.file_path = ctx->rel_path;
+    def.start_line = ts_node_start_point(heading).row + TS_LINE_OFFSET;
+
+    TSNode section = ts_node_parent(heading);
+    TSNode span = ts_node_is_null(section) ? heading : section;
+    TSPoint end = ts_node_end_point(span);
+    def.end_line = (int)end.row + TS_LINE_OFFSET - (end.column == 0 ? 1 : 0);
+    if (def.end_line < def.start_line) {
+        def.end_line = def.start_line;
+    }
+
+    uint32_t b = ts_node_end_byte(heading), e = ts_node_end_byte(span);
+    if (e > b) {
+        const char *s = ctx->source + b;
+        size_t len = e - b;
+        while (len > 0 && isspace((unsigned char)s[0])) {
+            s++;
+            len--;
+        }
+        while (len > 0 && isspace((unsigned char)s[len - 1])) {
+            len--;
+        }
+        if (len > LSM_SECTION_BODY_MAX) {
+            len = LSM_SECTION_BODY_MAX;
+            while (len > 0 && ((unsigned char)s[len] & 0xC0) == 0x80) {
+                len--;
+            }
+        }
+        if (len > 0) {
+            def.docstring = lsm_arena_strndup(a, s, len);
+        }
+    }
+    def.is_exported = true;
+    lsm_defs_push(&ctx->result->defs, a, def);
+}
+
 // Find TOML table key name from children.
 static char *find_toml_key_name(LSMArena *a, TSNode node, const char *source) {
     uint32_t nc = ts_node_child_count(node);
@@ -4110,7 +4157,11 @@ static bool extract_config_class_def(LSMExtractCtx *ctx, TSNode node, const char
     }
 
     if (name && name[0]) {
-        push_simple_class_def(ctx, node, name, label);
+        if (ctx->language == LSM_LANG_MARKDOWN) {
+            push_markdown_section_def(ctx, node, name);
+        } else {
+            push_simple_class_def(ctx, node, name, label);
+        }
     }
     return true;
 }

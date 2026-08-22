@@ -23,6 +23,7 @@
 | 4 | 2026-08-21 18:14 CDT | `src/cli/hook_augment.c` | `HA_DEADLINE_DEFAULT_MS` 2000 → 3000. | Decision A3: our hardware has headroom inside the 5 s outer hook timeout. |
 | 5 | 2026-08-21 18:45 CDT | `internal/lsm/lsm.h`, `internal/lsm/extract_defs.c`, tests | B5: `LSMFileResult.file_docstring` from the leading comment (JS `@file`/`@fileoverview` or blank-line-separated run; Python module docstring; Go package comment), capped at `MAX_COMMENT_LEN` 500; also set as the Module def's `docstring`. | Decision B5. Module def chosen over File node because it already flows through `build_def_props`; Go/Java have folder Modules so the graph does not carry it for them (spec, known limitation). |
 | 6 | 2026-08-21 18:45 CDT | `internal/lsm/extract_defs.c`, tests | B5b: `extract_docstring` also looks before an enclosing `export_statement`, so `/** doc */ export function f()` keeps its docstring. | Upstream dropped docstrings on every exported JS/TS function; A4 would nag on documented code. |
+| 7 | 2026-08-21 19:18 CDT | `internal/lsm/extract_defs.c`, `src/pipeline/pass_definitions.c`, `src/pipeline/pass_parallel.c`, tests | B6: Markdown Section defs span the enclosing `section` node and carry the trimmed body (≤ 1,500 bytes) as `docstring`; definition props buffer 2K → 4K at both `build_def_props` call sites so the escaped body is never dropped. An H1's section spans the whole document (nested sections). | Decision B6. The 2K buffer skipped the field atomically (`append_json_string`). |
 
 ## Decided, not yet built (2026-08-21)
 
