@@ -2,7 +2,7 @@
 
 - Upstream: https://github.com/DeusData/codebase-memory-mcp (MIT)
 - Upstream base: tag `v0.10.8` (upstream commit `46ae198`, imported as squash commit `787ab8c` in this repo)
-- Our version: `v0.10.8-logan.3`
+- Our version: `v0.10.8-logan.4`
 - Every commit that touches `spine/` must add or update an entry here. A pre-commit hook at `.githooks/pre-commit` enforces it.
 - The diff against pristine upstream at any time: `git diff 787ab8c HEAD:spine` (run from the repo root).
 
@@ -28,6 +28,7 @@
 | 9 | 2026-08-21 20:05 CDT | `src/pipeline/pass_documents.c` (new), `pipeline.c`, `pipeline_internal.h`, `Makefile.lsm`, `tests/test_pipeline.c` | B6: `DOCUMENTS` edges from a Section to ≤ 5 code nodes per backticked token (paths → File nodes by suffix; names → Function/Method/type nodes by simple name). Registered in `run_predump_passes` before `semantic_edges`, `moderate_only=false`; `PREDUMP_PASS_COUNT` 6 → 7. | Decision B6. Full-index only; incremental does not refresh these edges (spec, known limitation). |
 | 10 | 2026-08-21 20:42 CDT | `src/cli/docstrings.c` (new), `src/cli/cli.h`, `src/main.c`, `src/daemon/bootstrap.c`, `Makefile.lsm`, `tests/test_cli.c`, `tests/test_daemon_bootstrap.c` | New `docstrings [--all] <file>...` subcommand: lists file-level and per-symbol missing docstrings from a standalone parse for Python/Go/JS/TS/TSX/Java/C#/Kotlin/Rust/C/C++; exit 0/1/2. Added to `stateless_commands` in the daemon role classifier so the shipped binary reaches the subcommand instead of starting an MCP client; routing pinned in `tests/test_daemon_bootstrap.c`. | Decision A4 + coverage report. Reads from disk so the PostToolUse hook sees just-written content. Its own header comment is followed by a blank line so the generic file-docstring rule (`gap >= 2`) captures it — verified 2026-08-22 by indexing this repo and reading the Module node back. |
 | 11 | 2026-08-22 11:35 CDT | `src/cli/docstrings.c` | `--help` said Go/Python/Java/C#/Kotlin exported symbols are decided "per the language's visibility rules". They are not: `lsm_is_exported` (`internal/lsm/helpers.c:238-254`) tests an uppercase first letter for Go/Java/C#/Kotlin and a leading `_` for Python, and never reads `public`/`private`. The text now says what the code does. | Shipped help text that described the code inaccurately. No behaviour change; no test pinned the wording. |
+| 12 | 2026-08-22 13:47 CDT | `src/discover/discover.c`, `tests/test_discover.c` | `safe_stat` reports a symlink as not-found by policy, and `walk_dir_process_entry` turned any not-found into `out->failed` when `count_only` was set — so one symlink anywhere aborted the whole bounded count. `safe_stat` now reports whether the entry was a symlink, and a count skips symlinks while still aborting on an entry it genuinely cannot observe. | Upstream bug. `lsm_discover_count_bounded` is what auto-index admission calls, so any repo containing any symlink could never auto-index: it failed with `reason=unsafe_or_unavailable_path files=-1`, which named the wrong cause. This tree hits it via `spine/Formula`, upstream's symlink to `pkg/homebrew/Formula`. Reproduced and fixed with a regression test that fails without the change (113/1) and passes with it (114/0). Worth sending upstream. |
 
 ## Decided, not yet built (2026-08-21)
 
