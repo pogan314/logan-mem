@@ -1,9 +1,9 @@
 ---
 title: Spine v1 — design for the first logan-spine-mcp tweaks and the Claude Code plugin
 type: spec
-status: draft
+status: decided
 created: "2026-08-21 16:36 CDT"
-updated: "2026-08-21 20:45 CDT"
+updated: "2026-08-22 10:41 CDT"
 version: "01"
 sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21]
 ---
@@ -183,3 +183,24 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 - Every change inside `spine/` gets a row in `spine/LOGAN-CHANGES.md`; `.githooks/pre-commit` enforces it once `git config core.hooksPath .githooks` is set per clone.
 - Tag `v0.10.8-logan.2` when this spec's work lands.
 - Upstream pull procedure is unchanged (run `spine/scripts/logan-rename.sh` on upstream's tree first). New files (`docstrings.c`, `pass_documents.c`) never conflict; the edits to `extract_defs.c`, `lsm.h`, `pass_semantic_edges.c`, `pass_definitions.c`, `pass_parallel.c`, `store.c`, `hook_augment.c`, `main.c`, and `pipeline.c` are the conflict surface, each a few lines.
+
+
+## Verified (end-to-end on this machine, 2026-08-22)
+
+Installed with `plugin/scripts/install.sh` (default `LSM_BIN_DIR=~/.local/bin`) at tag `v0.10.8-logan.2`; this repo indexed with `logan-spine-mcp cli index_repository --repo-path . --mode full` → 24,371 nodes, 134,569 edges, vendored trees auto-excluded.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `/hooks` lists the plugin's `PostToolUse` hook | Pending your session reload. The installed `~/.claude/skills/logan-spine-tools/hooks/hooks.json` has matcher `Edit|Write` (exact, so `NotebookEdit` is not covered) and command `"${CLAUDE_PLUGIN_ROOT}"/scripts/docstring-check.sh`, timeout 10 |
+| 2 | `/mcp` shows `logan-spine-mcp` connected; auto-index works | Server verified directly: stdio `initialize` returns `logan-spine-mcp 0.10.8-logan.2` and `tools/list` returns 15 tools including `search_graph` and `trace_path`; registered in `~/.claude.json` (user scope); `config get auto_index` → `true`. The `/mcp` panel itself is pending your session reload |
+| 3 | `search_graph label:"Module" fields:["docstring"] file_pattern:"spine/src/cli/docstrings.c"` | Pass, after the fallback this spec names: the generic branch of `extract_file_docstring` requires a blank line between the header comment and the next node (`gap >= 2`, `spine/internal/lsm/extract_defs.c:1377`), and the file had none. Added one; re-indexed; the Module row now carries the header comment as its docstring |
+| 4 | `search_graph label:"Section" fields:["docstring"]` over the spec | Pass — 23 Section nodes from this file, each with its body as the docstring. Note: `file_pattern` is a SQL-LIKE pattern, so the argument is `docs/superpowers/01/specs/%`, not a regex |
+| 5 | `semantic_query` finds a spec Section | Pass — `["docstrings","subcommand"]` ranks this spec's `` `docstrings` subcommand `` section **#1**. Sections and Modules are in the semantic index, which is the B6 change |
+| 6 | `trace_path` inbound on `DOCUMENTS` for `lsm_cmd_docstrings` | Pass — 3 inbound edges, all from the plan's Markdown sections (`File structure`, `Spine v1 Implementation Plan`, `Task 8`). They come from the plan rather than this spec because this spec never names `lsm_cmd_docstrings`; the plan names it 8 times |
+| 7 | Docstring nudge on Edit/Write; silent on `.txt` | Pass — `plugin/tests/run.sh` (15 checks) passes against both the repo copy and the installed copy at `~/.claude/skills/logan-spine-tools`, covering exit 2 with the header line, the ≤10-finding cap and remainder line, exit 0 on a complete file, and exit 0 with no output on a `.txt` path. Hook wall time 0.001-0.039 s |
+
+Two defects were found by running these checks and fixed in the same commit: the missing blank line in `spine/src/cli/docstrings.c` (check 3), and `plugin/tests/run.sh` resolving its scripts as `<two levels up>/plugin/scripts/`, which only exists in the repo layout — it now resolves `<plugin root>/scripts/`, so the suite passes from the installed copy too.
+
+What the installer wrote, confirmed after the run: `~/.local/bin/logan-spine-mcp`; MCP entry in `~/.claude.json`; upstream's own skill `~/.claude/skills/logan-spine/` and three subagents `~/.claude/agents/logan-spine{,-scout,-auditor}.md`; four upstream hook scripts wired into `~/.claude/settings.json` (`PreToolUse` Grep/Glob and `PostToolUse` Read discovery gate, `SessionStart` and `SubagentStart` reminders); a `PATH` line appended to `~/.bashrc`; and our plugin at `~/.claude/skills/logan-spine-tools/`. The three files `~/.claude/hooks/lsm-{session-reminder,code-discovery-gate,subagent-reminder}` hard-code the absolute path `/home/ubuntu/.local/bin/logan-spine-mcp`.
+
+Install scope: one install per machine, not per repo. The binary, the MCP registration (`~/.claude.json` is user-level — `spine/src/cli/cli.c:2342` resolves it from `$CLAUDE_CONFIG_DIR` or `$HOME`, never from the project), and both plugins are machine-wide. Only the index is per repo: `~/.cache/logan-spine-mcp/<project>.db`, built on first session in that repo because `auto_index` is true, skipped above 50,000 tracked files (`spine/src/mcp/mcp_internal.h:28`, raise with `config set auto_index_limit`).

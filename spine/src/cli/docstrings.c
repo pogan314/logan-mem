@@ -8,6 +8,7 @@
  * reports every symbol. Exit 0 = nothing missing, 1 = something missing,
  * 2 = usage error or unreadable file. No index, no daemon, no database.
  */
+
 #include "cli/cli.h"
 #include "discover/discover.h"
 #include "lsm.h"
