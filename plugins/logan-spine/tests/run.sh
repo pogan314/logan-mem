@@ -146,6 +146,8 @@ out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":
 check "$rc" "2" "docstring-check exits 2 on a finding"
 check "$out" "" "docstring-check prints nothing on stdout"
 check "$(head -1 "$tmp/err")" "logan-spine: add docstrings before moving on:" "docstring-check header line"
+# Assert the content of the findings, not only the line counts: a hook that printed the right number of generic placeholder lines would otherwise pass every check in this block.
+check "$(grep -c ' function f1$' "$tmp/err")" "1" "docstring-check names the undocumented function"
 out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/good.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err")"; rc=$?
 check "$rc" "0" "docstring-check exits 0 on a clean file"
 check "$(cat "$tmp/err")" "" "docstring-check is silent on a clean file"
@@ -160,6 +162,7 @@ check "$rc" "0" "docstring-check exits 0 when the binary is missing"
 LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/many.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err"
 check "$(grep -c 'and 5 more' "$tmp/err")" "1" "docstring-check reports the remainder"
 check "$(grep -c . "$tmp/err")" "12" "docstring-check prints header + 10 findings + remainder"
+check "$(grep -c ' function f' "$tmp/err")" "10" "docstring-check lists ten named findings before the remainder"
 
 # ---------- agents ----------
 for a in scout verify auditor; do
@@ -197,13 +200,14 @@ done
 # ---------- docstring-coverage ----------
 COV="$PLUGIN/scripts/docstring-coverage.sh"
 [ -x "$COV" ]; check "$?" "0" "docstring-coverage.sh is executable"
-# It resolves through lsm_bin now, not PATH, so a missing binary is exit 2 even when PATH would have found one.
-LOGAN_SPINE_BIN="$tmp/nope" "$COV" "$tmp" >/dev/null 2>&1
-check "$?" "2" "coverage exits 2 when the binary is missing"
-
 covdir="$tmp/cov"; mkdir -p "$covdir"
 cp "$tmp/bad.js" "$tmp/good.js" "$tmp/note.txt" "$covdir/"
 ( cd "$covdir" && git init -q && git add bad.js good.js note.txt ) >/dev/null 2>&1
+
+# It resolves through lsm_bin now, not PATH, so a missing binary is exit 2 even when PATH would have found one. This must run against a real git work tree: the script also exits 2 when `git ls-files` fails, so pointing it at a non-repository would make the assertion pass for the wrong reason and a silent PATH fallback would go undetected.
+LOGAN_SPINE_BIN="$tmp/nope" "$COV" "$covdir" >/dev/null 2>&1
+check "$?" "2" "coverage exits 2 when the binary is missing"
+
 LOGAN_SPINE_BIN="$dstub" "$COV" "$covdir" > "$tmp/covout" 2>&1
 check "$?" "1" "coverage exits 1 when something is missing"
 check "$(grep -c 'bad.js' "$tmp/covout")" "1" "coverage lists bad.js"
@@ -229,6 +233,8 @@ if [ -n "$realbin" ] && [ -x "$realbin" ]; then
   out="$("$realbin" docstrings "$tmp/bad.js" 2>/dev/null)"; rc=$?
   check "$rc" "1" "the real engine calls the undocumented fixture dirty"
   check "$(printf '%s\n' "$out" | grep -c ' function f$')" "1" "the real engine names the undocumented function"
+  # The engine emits a file line as well as a function line per finding. Assert both, so the guarded block covers the whole documented shape rather than half of it.
+  check "$(printf '%s\n' "$out" | grep -c 'bad\.js')" "2" "the real engine emits both a file line and a function line"
 else
   echo "skip real-engine docstrings tests: no logan-spine-mcp resolvable"
 fi
