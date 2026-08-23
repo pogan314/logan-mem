@@ -279,25 +279,24 @@ All four graph hook scripts run the same command, `"$BIN" hook-augment`, with no
 
 ### Per-repo enablement
 
-This repository's `.claude/settings.json` is committed and carries both halves:
+This repository's `.claude/settings.json` is committed and carries one key:
 
 ```json
 {
-  "extraKnownMarketplaces": {
-    "logan-mem": { "source": { "source": "directory", "path": "." } }
-  },
   "enabledPlugins": { "logan-spine@logan-mem": true }
 }
 ```
 
-The marketplace half means a clone does not need a separate `marketplace add`; the enable half means the plugin loads. A repository that lists neither gets nothing.
+`extraKnownMarketplaces` is deliberately **not** committed alongside it. Measured on 2026-08-23: `claude plugin marketplace add` always stores an absolute path in that entry — a bare `.` is rejected outright and `./` is accepted but resolved — so the portable shape this spec originally proposed is one Claude Code never writes. An absolute path in a tracked file is a machine path, which this repository forbids and which is wrong on any other machine by construction.
 
-Two things about this are **UNVERIFIED** and the plan settles both before anything depends on them:
+Registering the marketplace is therefore a per-machine step, and `install.sh` performs it. That is not an extra burden: measured in the same session, a project-scope `enabledPlugins` entry does **not** load the plugin until the marketplace is registered under `$HOME`, and a fresh clone has to install the 280 MB binary anyway. Once the marketplace is registered, the committed `enabledPlugins` entry alone is sufficient. A repository that does not carry that entry gets nothing.
 
-1. Whether an `enabledPlugins` entry alone causes the plugin to load, or whether `claude plugin install logan-spine@logan-mem --scope project` must also run to create a record in `~/.claude/plugins/installed_plugins.json`. On this machine every `enabledPlugins` entry also has an install record; no counter-example was found. **This cannot be settled under a fixture `HOME`**: measured on 2026-08-23, `claude plugin list` there enumerates install records rather than what a session would load, and a session under a fixture `HOME` cannot start at all because the credentials live in the real one. The plan settles it in a scratch **project** directory under the real `HOME`, carrying only a `.claude/settings.json`, since project settings are per-directory and give the isolation the question needs. The answer determines what `install.sh` prints as next steps.
-2. The exact JSON shape of a local-directory `extraKnownMarketplaces` entry, and whether a relative `path` resolves against the repository. Live state shows `claude plugin marketplace add` records marketplaces in `~/.claude/plugins/known_marketplaces.json` — three of the five on this machine appear only there and not in `extraKnownMarketplaces` — so the two mechanisms are not interchangeable and the committed form must be confirmed by running it against a fixture `HOME`.
+Both halves of this were open when the spec was first written and are now measured, on 2026-08-23:
 
-Whichever mechanism wins, the committed file is the per-repo switch and `install.sh` prints the exact commands.
+1. A project-scope `enabledPlugins` entry alone does **not** load the plugin. The marketplace must first be registered under `$HOME` with `claude plugin marketplace add`; after that, the committed entry is sufficient on its own. One thing remains unknown and is recorded as such: `marketplace add` writes both `~/.claude/plugins/known_marketplaces.json` and `~/.claude/settings.json`'s `extraKnownMarketplaces` in the same command, so which of the two a project-scope enable actually depends on was not separated. It does not matter operationally, because the one command `install.sh` runs writes both.
+2. `marketplace add` always stores an absolute path. This is what rules `extraKnownMarketplaces` out of the committed file, above.
+
+The committed file is the per-repo switch; `install.sh` handles the per-machine half and prints the exact commands.
 
 ### Development loop
 

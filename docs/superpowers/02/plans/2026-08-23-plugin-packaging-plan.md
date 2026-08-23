@@ -1074,7 +1074,7 @@ To turn it off for that repository again:
 EOF
 ```
 
-If harvest finding 3 established that a committed `enabledPlugins` entry alone is enough, replace the `claude plugin install` line in the closing message with the two-key `.claude/settings.json` fragment from task 9. The harvested answer decides which instruction is correct; print one, not both.
+Harvest finding 3 settled which instruction is correct: the marketplace registration this script performs is a prerequisite, and once it has run a committed `enabledPlugins` entry is sufficient. Keep the `claude plugin install` line as the interactive route, and add one line pointing at the committed-settings route for a repository that already carries the entry. Do not print a `extraKnownMarketplaces` fragment: finding 4 shows Claude Code always stores an absolute path there, so it cannot be committed.
 
 - [ ] **Step 2: Verify it is syntactically sound without running the build**
 
@@ -1402,18 +1402,15 @@ Expected: five steps complete. Step 5 will report that the main checkout has no 
 
 - [ ] **Step 3: Write `.claude/settings.json`**
 
-Use the shape harvest finding 4 recorded. If that finding confirmed the spec's guess:
+Harvest findings 3 and 4 settled this. The file carries one key, and **not** `extraKnownMarketplaces`: `marketplace add` always stores an absolute path there, which would be a machine path in a tracked file. Step 2's `install.sh` run already registered the marketplace under `$HOME`, which finding 3 shows is a prerequisite for a project-scope enable to do anything.
 
 ```json
 {
-  "extraKnownMarketplaces": {
-    "logan-mem": { "source": { "source": "directory", "path": "." } }
-  },
   "enabledPlugins": { "logan-spine@logan-mem": true }
 }
 ```
 
-If harvest finding 3 established that an `enabledPlugins` entry alone does not load the plugin, run the install that creates the record instead of hand-writing the file, and record what it wrote:
+Then confirm the enable took effect, and record what the command wrote if you use it instead of hand-writing the file:
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
