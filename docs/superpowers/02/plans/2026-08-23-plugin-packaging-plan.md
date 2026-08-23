@@ -1246,6 +1246,8 @@ check "$(ls "$F3/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l
 ( env -u HOME "$UG" --yes >/dev/null 2>&1 ); check "$?" "1" "refuses when HOME is unset and --home is absent"
 ```
 
+This listing is the set this task starts from, not the set it ends with. The review rounds added fixtures F4 through F9 and a `[ -s … ] &&` guard on the "still parses" assertion, because `jq -e .` exits 0 on a zero-byte file. `plugins/logan-spine/tests/run.sh` is the authority on what actually runs; read it rather than this block when the two disagree.
+
 - [ ] **Step 2: Run them to make sure they fail**
 
 ```bash
