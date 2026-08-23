@@ -182,4 +182,14 @@ for a in scout verify auditor; do
   check "$(grep -c 'do not stall and do not guess' "$PLUGIN/agents/$a.md")" "1" "$a.md keeps the graph-unavailable fallback paragraph"
 done
 
+# ---------- skill ----------
+S="$PLUGIN/skills/graph/SKILL.md"
+[ -f "$S" ]; check "$?" "0" "SKILL.md exists at skills/graph/"
+# A plugin skill's frontmatter name overrides its directory name, so a stale name: logan-spine here would address the skill as /logan-spine:logan-spine and silently break every agent's skills: entry.
+check "$(awk '/^name:/{print $2; exit}' "$S")" "graph" "SKILL.md name matches its directory"
+check "$(grep -c 'Use the codebase knowledge graph for structural code queries' "$S")" "1" "SKILL.md keeps its trigger description"
+for a in scout verify auditor; do
+  check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [graph]" "$a.md names the skill by the name SKILL.md declares"
+done
+
 exit $fail
