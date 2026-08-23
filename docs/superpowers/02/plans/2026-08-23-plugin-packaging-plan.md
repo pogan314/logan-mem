@@ -802,7 +802,7 @@ Sourced from the installed files rather than the C renderer, because the graph-u
 **Files:**
 - Create: `plugins/logan-spine/skills/graph/SKILL.md`
 - Modify: `plugins/logan-spine/tests/run.sh`
-- Modify: `plugins/logan-spine/.claude-plugin/plugin.json` (bump `version` to `0.4.0`)
+- Modify: `plugins/logan-spine/.claude-plugin/plugin.json` (bump `version` to `0.4.0`, then `0.4.1` in the fix round)
 
 **Interfaces:**
 - Consumes: the test harness from task 1, the agents from task 4, and harvest finding 2 from `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` — **read that file first** for the `skills:` form the agents use.
@@ -819,8 +819,10 @@ S="$PLUGIN/skills/graph/SKILL.md"
 # A plugin skill's frontmatter name overrides its directory name, so a stale name: logan-spine here would address the skill as /logan-spine:logan-spine and silently break every agent's skills: entry.
 check "$(awk '/^name:/{print $2; exit}' "$S")" "graph" "SKILL.md name matches its directory"
 check "$(grep -c 'Use the codebase knowledge graph for structural code queries' "$S")" "1" "SKILL.md keeps its trigger description"
+# Derive the expected value from SKILL.md rather than repeating the literal, so this check verifies the relationship its description claims instead of relying on two independent literals staying in sync.
+skillname="$(awk '/^name:/{print $2; exit}' "$S")"
 for a in scout verify auditor; do
-  check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [graph]" "$a.md names the skill by the name SKILL.md declares"
+  check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [$skillname]" "$a.md names the skill by the name SKILL.md declares"
 done
 ```
 
