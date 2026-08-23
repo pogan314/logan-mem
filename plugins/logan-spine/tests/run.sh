@@ -188,8 +188,10 @@ S="$PLUGIN/skills/graph/SKILL.md"
 # A plugin skill's frontmatter name overrides its directory name, so a stale name: logan-spine here would address the skill as /logan-spine:logan-spine and silently break every agent's skills: entry.
 check "$(awk '/^name:/{print $2; exit}' "$S")" "graph" "SKILL.md name matches its directory"
 check "$(grep -c 'Use the codebase knowledge graph for structural code queries' "$S")" "1" "SKILL.md keeps its trigger description"
+# Derive the expected value from SKILL.md rather than repeating the literal, so this check verifies the relationship its description claims instead of relying on two independent literals staying in sync.
+skillname="$(awk '/^name:/{print $2; exit}' "$S")"
 for a in scout verify auditor; do
-  check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [graph]" "$a.md names the skill by the name SKILL.md declares"
+  check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [$skillname]" "$a.md names the skill by the name SKILL.md declares"
 done
 
 exit $fail
