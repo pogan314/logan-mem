@@ -436,7 +436,7 @@ Tool names, the skills: form that actually loads, whether enabledPlugins alone i
 - Create: `plugins/logan-spine/hooks/subagent-reminder.sh`
 - Create: `plugins/logan-spine/hooks/docstring-check.sh`
 - Modify: `plugins/logan-spine/tests/run.sh`
-- Modify: `plugins/logan-spine/.claude-plugin/plugin.json` (bump `version` to `0.2.0`)
+- Modify: `plugins/logan-spine/.claude-plugin/plugin.json` (bump `version` to `0.2.0`, then `0.2.1` in the fix round)
 
 **Interfaces:**
 - Consumes: `lsm_bin()` and the test harness from task 1.
@@ -478,6 +478,13 @@ out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":\"logan-spine:
 check "$out" "scout" "subagent-reminder strips the logan-spine: prefix"
 out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":\"general-purpose\"}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -r .agent_type)"
 check "$out" "general-purpose" "subagent-reminder leaves other agent types alone"
+# Specificity matters: a strip loosened to any "word:" prefix would hand another plugin's scout agent a Tier 1 classification it should not get, and a colon-free agent type cannot detect that.
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":\"other-plugin:scout\"}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -r .agent_type)"
+check "$out" "other-plugin:scout" "subagent-reminder only strips its own plugin prefix"
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":null}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -c .)"
+check "$out" '{"agent_type":null}' "subagent-reminder passes a null agent_type through unchanged"
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":123}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -c .)"
+check "$out" '{"agent_type":123}' "subagent-reminder passes a non-string agent_type through unchanged"
 out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -c .)"
 check "$out" "{}" "subagent-reminder is a no-op on a payload with no agent_type"
 
@@ -503,6 +510,9 @@ chmod +x "$dstub"
 # Prove the stub itself behaves, or every assertion below is measuring the wrong thing.
 "$dstub" docstrings "$tmp/good.js" >/dev/null 2>&1; check "$?" "0" "the stub calls the documented fixture clean"
 "$dstub" docstrings "$tmp/bad.js" >/dev/null 2>&1; check "$?" "1" "the stub calls the undocumented fixture dirty"
+# The stub must also accept many files in one invocation, because docstring-coverage.sh in task 6 passes the whole list through a single xargs call. Without this check, a stub that read only "$1" would leave the suite green here and fail only in task 6.
+"$dstub" docstrings "$tmp/good.js" "$tmp/bad.js" > "$tmp/multi.out" 2>&1
+check "$(grep -c 'bad.js' "$tmp/multi.out")" "1" "the stub reports findings across multiple files in one invocation"
 
 # ---------- docstring-check contract ----------
 out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/bad.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err")"; rc=$?
