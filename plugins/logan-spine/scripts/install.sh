@@ -46,7 +46,7 @@ echo "[4/5] auto-index on"
 "$BIN_DIR/logan-spine-mcp" config set auto_index true
 
 echo "[5/5] marketplace -> $MARKET"
-# `add` fails when the marketplace is already registered and `update` fails when it is not, so try each and require only that one succeeds.
+# `add` is idempotent and self-healing on claude 2.1.241, measured against fixture homes: it exits 0 whether registering fresh, confirming an unchanged registration, or re-pointing an existing name at a new path — which is exactly what a post-merge re-run needs. `update` fails when the name is not registered yet. The elif is defensive only, for a claude version where `add` does fail on a duplicate name.
 if claude plugin marketplace add "$MARKET" 2>&1; then
   echo "  registered"
 elif claude plugin marketplace update logan-mem 2>&1; then

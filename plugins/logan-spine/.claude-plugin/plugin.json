@@ -1,6 +1,6 @@
 {
   "name": "logan-spine",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Codebase knowledge graph for Claude Code: MCP server, tiered graph agents, discovery hooks, and a docstring nudge.",
   "author": {
     "name": "Logan G"
