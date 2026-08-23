@@ -161,4 +161,25 @@ LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/
 check "$(grep -c 'and 5 more' "$tmp/err")" "1" "docstring-check reports the remainder"
 check "$(grep -c . "$tmp/err")" "12" "docstring-check prints header + 10 findings + remainder"
 
+# ---------- agents ----------
+for a in scout verify auditor; do
+  f="$PLUGIN/agents/$a.md"
+  [ -f "$f" ]; check "$?" "0" "agent file exists: $a.md"
+  check "$(awk '/^name:/{print $2; exit}' "$f")" "$a" "$a.md name matches its filename"
+  check "$(grep -c 'logan-spine-mcp' "$f")" "0" "$a.md never names the old server, in tools or in prose"
+  check "$(grep -c '^mcpServers:' "$f")" "0" "$a.md drops mcpServers (ignored for plugin agents)"
+  check "$(grep -c '^permissionMode:' "$f")" "0" "$a.md drops permissionMode (ignored for plugin agents)"
+  check "$(grep -c '  - mcp__' "$f")" "$(grep -c '  - mcp__plugin_logan-spine_spine__' "$f")" "$a.md: every mcp__ tool uses the plugin prefix"
+  check "$(awk '/^skills:/{print; exit}' "$f")" "skills: [graph]" "$a.md preloads the graph skill"
+  # No write tool is reachable. This is what replaces the permissionMode: plan that plugin agents ignore.
+  check "$(grep -cE '^  - (Write|Edit|Bash|NotebookEdit|Task|Agent)$' "$f")" "0" "$a.md grants no write or spawn tool"
+done
+check "$(grep -c 'mcp__plugin_logan-spine_spine__' "$PLUGIN/agents/verify.md")" "11" "verify.md carries 11 graph tools"
+check "$(grep -c 'mcp__plugin_logan-spine_spine__' "$PLUGIN/agents/auditor.md")" "11" "auditor.md carries 11 graph tools"
+check "$(grep -c 'mcp__plugin_logan-spine_spine__' "$PLUGIN/agents/scout.md")" "7" "scout.md carries 7 graph tools"
+# The graph-unavailable paragraph exists only on the installed files and in no commit; losing it in the move is the specific regression this guards.
+for a in scout verify auditor; do
+  check "$(grep -c 'do not stall and do not guess' "$PLUGIN/agents/$a.md")" "1" "$a.md keeps the graph-unavailable fallback paragraph"
+done
+
 exit $fail
