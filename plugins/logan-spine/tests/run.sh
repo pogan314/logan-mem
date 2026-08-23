@@ -242,4 +242,93 @@ fi
 # ---------- logan-spine-tools is gone ----------
 [ ! -e "$REPO/plugins/logan-spine-tools" ]; check "$?" "0" "logan-spine-tools is removed"
 
+
+# ---------- unregister-global ----------
+UG="$PLUGIN/scripts/unregister-global.sh"
+[ -x "$UG" ]; check "$?" "0" "unregister-global.sh is executable"
+
+make_fixture() {
+  local F="$1"
+  mkdir -p "$F/.claude/hooks" "$F/.claude/agents" "$F/.claude/skills/logan-spine" "$F/.claude/skills/logan-spine-tools" "$F/.claude/skills/unrelated"
+  for h in lsm-code-discovery-gate lsm-session-reminder lsm-subagent-reminder; do printf '#!/bin/sh\nexit 0\n' > "$F/.claude/hooks/$h"; chmod +x "$F/.claude/hooks/$h"; done
+  printf 'x\n' > "$F/.claude/hooks/unrelated-hook"
+  for a in logan-spine logan-spine-scout logan-spine-auditor unrelated-agent; do printf -- '---\nname: %s\n---\nbody\n' "$a" > "$F/.claude/agents/$a.md"; done
+  printf -- '---\nname: logan-spine\n---\n' > "$F/.claude/skills/logan-spine/SKILL.md"
+  printf -- '---\nname: unrelated\n---\n' > "$F/.claude/skills/unrelated/SKILL.md"
+  cat > "$F/.claude/settings.json" <<'JSON'
+{
+  "hooks": {
+    "PreToolUse": [ { "matcher": "Grep|Glob", "hooks": [ { "type": "command", "command": "\"$HOME/.claude/hooks/lsm-code-discovery-gate\"", "timeout": 5 } ] } ],
+    "PostToolUse": [ { "matcher": "Read", "hooks": [ { "type": "command", "command": "\"$HOME/.claude/hooks/lsm-code-discovery-gate\"", "timeout": 5 } ] } ],
+    "SessionStart": [
+      { "matcher": "startup", "hooks": [ { "type": "command", "command": "\"$HOME/.claude/hooks/lsm-session-reminder\"", "timeout": 5 } ] },
+      { "matcher": "resume", "hooks": [ { "type": "command", "command": "\"$HOME/.claude/hooks/lsm-session-reminder\"", "timeout": 5 } ] }
+    ],
+    "SubagentStart": [ { "matcher": "*", "hooks": [
+      { "type": "command", "command": "\"$HOME/.claude/hooks/lsm-subagent-reminder\"", "timeout": 5 },
+      { "type": "command", "command": "tmux-counter-placeholder", "timeout": 5 }
+    ] } ],
+    "Stop": [ { "matcher": "*", "hooks": [ { "type": "command", "command": "unrelated-stop-hook", "timeout": 5 } ] } ]
+  },
+  "enabledPlugins": { "something@else": true }
+}
+JSON
+  cat > "$F/.claude.json" <<'JSON'
+{ "mcpServers": { "logan-spine-mcp": { "command": "/somewhere/logan-spine-mcp", "args": [] }, "other-server": { "command": "other", "args": [] } }, "projects": { "/some/path": { "allowedTools": [] } } }
+JSON
+}
+
+# Dry run changes nothing and lists everything.
+F1="$tmp/fx1"; make_fixture "$F1"
+before="$(find "$F1" -type f | sort | xargs md5sum | md5sum)"
+out="$("$UG" --home "$F1" 2>&1)"; rc=$?
+after="$(find "$F1" -type f | sort | xargs md5sum | md5sum)"
+check "$rc" "0" "dry run exits 0"
+check "$before" "$after" "dry run changes nothing"
+check "$(printf '%s' "$out" | grep -c '^remove: .*/hooks/lsm-code-discovery-gate$')" "1" "dry run names the gate script file"
+check "$(printf '%s' "$out" | grep -c '^remove: .*/agents/logan-spine-auditor.md$')" "1" "dry run names the auditor agent"
+check "$(printf '%s' "$out" | grep -c 'mcpServers.logan-spine-mcp')" "1" "dry run names the MCP entry"
+check "$(printf '%s' "$out" | grep -ci 'to restore')" "1" "dry run prints the restore command"
+
+# --yes removes ours and only ours.
+F2="$tmp/fx2"; make_fixture "$F2"
+"$UG" --home "$F2" --yes > "$tmp/ugout" 2>&1
+check "$?" "0" "--yes exits 0"
+check "$(jq '[.hooks[]?[]?.hooks[]? | select((.command // "") | test("lsm-"))] | length' "$F2/.claude/settings.json")" "0" "no lsm- handler survives"
+check "$(jq -r '.hooks.SubagentStart[0].hooks[0].command' "$F2/.claude/settings.json")" "tmux-counter-placeholder" "the unrelated tmux handler survives in place"
+check "$(jq '.hooks.SubagentStart | length' "$F2/.claude/settings.json")" "1" "the SubagentStart group is kept, not dropped"
+# Note the .hooks prefix: has() on the root object would be false before the script ever ran, and the assertion would be vacuous.
+check "$(jq '.hooks | has("SessionStart")' "$F2/.claude/settings.json")" "false" "an event left with no groups is dropped"
+check "$(jq '[.hooks[] | .[] | select((.hooks|length) == 0)] | length' "$F2/.claude/settings.json")" "0" "no empty matcher group survives"
+check "$(jq -r '.hooks.Stop[0].hooks[0].command' "$F2/.claude/settings.json")" "unrelated-stop-hook" "an unrelated event is untouched"
+check "$(jq -r '.enabledPlugins["something@else"]' "$F2/.claude/settings.json")" "true" "unrelated settings keys survive"
+check "$(jq '.mcpServers | has("logan-spine-mcp")' "$F2/.claude.json")" "false" "the MCP entry is gone"
+check "$(jq -r '.mcpServers["other-server"].command' "$F2/.claude.json")" "other" "the unrelated MCP server survives"
+check "$(jq -r '.projects["/some/path"] | type' "$F2/.claude.json")" "object" "per-project state in .claude.json survives"
+for f in hooks/lsm-code-discovery-gate hooks/lsm-session-reminder hooks/lsm-subagent-reminder agents/logan-spine.md agents/logan-spine-scout.md agents/logan-spine-auditor.md skills/logan-spine skills/logan-spine-tools; do
+  [ ! -e "$F2/.claude/$f" ]; check "$?" "0" "removed: $f"
+done
+for f in hooks/unrelated-hook agents/unrelated-agent.md skills/unrelated/SKILL.md; do
+  [ -e "$F2/.claude/$f" ]; check "$?" "0" "kept: $f"
+done
+check "$(ls "$F2/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "settings.json was backed up"
+check "$(ls "$F2/.claude.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "claude.json was backed up"
+
+# Running it twice is safe.
+"$UG" --home "$F2" --yes >/dev/null 2>&1
+check "$?" "0" "a second --yes run is a no-op that still exits 0"
+
+# A malformed group must leave the file intact rather than truncating it. A shell redirect empties its target before jq runs, so a jq that aborts mid-filter destroys the file unless the rewrite goes via a temporary.
+F3="$tmp/fx3"; make_fixture "$F3"
+jq '.hooks.PostToolUse[0] |= del(.hooks)' "$F3/.claude/settings.json" > "$F3/.claude/settings.tmp" && mv "$F3/.claude/settings.tmp" "$F3/.claude/settings.json"
+size_before="$(wc -c < "$F3/.claude/settings.json")"
+"$UG" --home "$F3" --yes >/dev/null 2>&1; rc=$?
+size_after="$(wc -c < "$F3/.claude/settings.json")"
+if [ "$size_after" -eq 0 ]; then echo "FAIL malformed group truncated settings.json"; fail=1; else echo "ok   malformed group leaves settings.json non-empty"; fi
+jq -e . "$F3/.claude/settings.json" >/dev/null 2>&1
+check "$?" "0" "settings.json is still valid JSON after a malformed group"
+
+# It refuses without a HOME.
+( env -u HOME "$UG" --yes >/dev/null 2>&1 ); check "$?" "1" "refuses when HOME is unset and --home is absent"
+
 exit $fail
