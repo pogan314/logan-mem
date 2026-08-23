@@ -32,10 +32,10 @@ check "$rc" "1" "lsm_bin returns 1 for a set-but-invalid LOGAN_SPINE_BIN"
 check "$out" "" "lsm_bin prints nothing for a set-but-invalid LOGAN_SPINE_BIN"
 
 # With LOGAN_SPINE_BIN unset and a fixture HOME holding the binary, HOME wins over PATH.
-mkdir -p "$tmp/home/.local/bin" "$tmp/empty"; cp "$stub" "$tmp/home/.local/bin/logan-spine-mcp"
-out="$(env -u LOGAN_SPINE_BIN HOME="$tmp/home" PATH=/usr/bin:/bin bash -c ". '$PLUGIN/hooks/lib.sh'; lsm_bin")"; rc=$?
+mkdir -p "$tmp/fakehome/.local/bin" "$tmp/empty"; cp "$stub" "$tmp/fakehome/.local/bin/logan-spine-mcp"
+out="$(env -u LOGAN_SPINE_BIN HOME="$tmp/fakehome" PATH=/usr/bin:/bin bash -c ". '$PLUGIN/hooks/lib.sh'; lsm_bin")"; rc=$?
 check "$rc" "0" "lsm_bin finds the binary under HOME"
-check "$out" "$tmp/home/.local/bin/logan-spine-mcp" "lsm_bin prefers HOME/.local/bin"
+check "$out" "$tmp/fakehome/.local/bin/logan-spine-mcp" "lsm_bin prefers HOME/.local/bin"
 
 # Nothing anywhere: return 1, silent. PATH stays usable — blanking it would stop `env` finding bash at all, and every assertion below would then be measuring env's failure instead of ours.
 if PATH=/usr/bin:/bin command -v logan-spine-mcp >/dev/null 2>&1; then
@@ -61,8 +61,8 @@ check "$rc" "0" "spine-launch execs the resolved binary"
 check "$out" "STUB" "spine-launch passes the binary's stdout through"
 
 # ---------- no machine paths ----------
-# --untracked matters: every task writes files and runs this suite before its `git add`, so a tracked-only search would be blind to exactly the files under test.
-hits="$(git -C "$REPO" grep --untracked -lE '/home/|/Users/|C:\\' -- plugins .claude-plugin | wc -l | tr -d ' ')"
+# --untracked matters: every task writes files and runs this suite before its `git add`, so a tracked-only search would be blind to exactly the files under test. This file is excluded because the line below must contain the pattern text in order to search for it; that is a regex, not a machine path, and every other file under plugins/ and .claude-plugin/ is covered.
+hits="$(git -C "$REPO" grep --untracked -lE '/home/|/Users/|C:\\' -- plugins .claude-plugin ':!plugins/logan-spine/tests/run.sh' | wc -l | tr -d ' ')"
 check "$hits" "0" "no absolute machine path under plugins/ or .claude-plugin/"
 
 # ---------- claude plugin validate ----------
