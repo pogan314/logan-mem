@@ -3,13 +3,14 @@ title: Version 02 — package the spine as a real Claude Code plugin
 type: spec
 status: draft
 created: "2026-08-23 14:42 CDT"
-updated: "2026-08-23 15:34 CDT"
+updated: "2026-08-23 15:25 CDT"
 sources:
   - "Live read of spine/src/cli/cli.c, spine/src/cli/agent_profiles.c and spine/src/cli/hook_augment.c in the worktree at .worktrees/plugin-packaging, 2026-08-23"
   - "Claude Code docs MCP server, pages /en/plugins.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/hooks.mdx, /en/mcp.mdx, /en/settings-reference.mdx, /en/sub-agents.mdx, /en/skills.mdx, read 2026-08-23"
   - "Live shell on this machine: claude plugin list, claude plugin --help, claude plugin validate --help, claude mcp get, jq over ~/.claude/settings.json and ~/.claude/plugins/*.json, Claude Code 2.1.241"
   - "Live read of the installed artifacts under ~/.claude/ on this machine, 2026-08-23"
-  - "Two independent opus spec reviews, 2026-08-23; 22 findings, all resolved in this revision"
+  - "Two independent opus spec reviews, 2026-08-23; 22 findings, all resolved"
+  - "Two independent opus plan reviews, 2026-08-23; 27 findings, of which two disproved spec claims and are corrected here"
 ---
 
 # Version 02 — package the spine as a real Claude Code plugin
@@ -57,12 +58,12 @@ Each row is a fact verified against the live docs, the live machine, or the vend
 | Fact | Source | Consequence |
 |---|---|---|
 | A plugin's MCP tools are named `mcp__plugin_<plugin-name>_<server-key>__<tool-name>`, with any character outside `A-Za-z0-9_-` replaced by `_`; "a hook matcher written against the bare server key never fires for a plugin-bundled server" | `/en/mcp.mdx:454-460` | All 29 `mcp__logan-spine-mcp__*` strings across the three agent files must be rewritten (11 verify, 11 auditor, 7 scout, counted 2026-08-23). Hyphens survive, so the derived name is `mcp__plugin_logan-spine_spine__search_graph`. |
-| MCP scope precedence is local, project, **user**, then **plugin-provided**; "plugins and connectors match by endpoint, so one that points at the same URL or command as a server above is treated as a duplicate" | `/en/mcp.mdx:546-552` | The surviving user-scope `mcpServers.logan-spine-mcp` in `~/.claude.json` points at the same binary the plugin's server does, so it **shadows the plugin server**. Removing it is a hard prerequisite of the plugin working, not a cleanup step. This drives the whole order of operations below. |
+| MCP scope precedence is local, project, **user**, then **plugin-provided**; "plugins and connectors match by endpoint, so one that points at the same URL or command as a server above is treated as a duplicate". Measured on 2026-08-23 with a probe plugin loaded by `--plugin-dir` while the live user-scope entry was still registered: **both servers connected**, listed as `plugin:logan-spine:spine` and `logan-spine-mcp` | `/en/mcp.mdx:546-552`; live `claude --plugin-dir <probe> mcp list` | The old user-scope entry does **not** shadow the plugin's server. Endpoint matching compares the `command` string, and the plugin's command is the launcher path while the user-scope entry's is the binary path, so the two are not duplicates. They coexist, which means the plugin can be proved end to end — graph calls under the new tool names included — before anything is removed. Removal is still required, to stop the hooks firing twice and the same tools appearing under two names, but it is a cleanup step rather than a prerequisite. |
 | For a plugin skill, "the frontmatter `name` replaces the directory name in the last segment of the command" | `/en/skills.mdx:367,369` | Copying the installed `SKILL.md` verbatim into `skills/graph/` would still address as `/logan-spine:logan-spine`. Its `name` field must be changed to `graph`. |
 | A listed subagent skill that is missing "is skipped, and a warning is logged to the debug log" | `/en/sub-agents.mdx:531` | A wrong `skills:` value in an agent fails silently. It must be checked under `claude --debug`, not by grepping the file. |
 | `hooks`, `mcpServers` and `permissionMode` in a plugin agent's frontmatter are ignored, for security. `skills` is supported | `/en/plugins-reference.mdx:62`; `/en/sub-agents.mdx:226,289,292-293` | The agents lose `mcpServers: [logan-spine-mcp]` and `permissionMode: plan`. Their `tools:` allowlists already contain only read-only tools, so the enforced loss is the `plan` permission mode. The removal is complete: the installed files use only `name`, `description`, `tools`, `mcpServers`, `permissionMode`, `skills`. |
 | A plugin agent's `name` cannot contain `:`; agents address as `<plugin>:<agent>` | `/en/sub-agents.mdx:284`; `/en/plugins-reference.mdx:462` | An agent named `logan-spine` inside a plugin named `logan-spine` addresses as `logan-spine:logan-spine`. The agents are renamed `scout`, `verify`, `auditor`. |
-| The engine's `ha_active_tier` selects the evidence tier by exact string comparison of the `SubagentStart` payload's `agent_type` against `"scout"`, `"logan-spine-scout"`, `"auditor"`, `"logan-spine-auditor"`, defaulting to Tier 2 | `spine/src/cli/hook_augment.c:1107-1122` | The rename is safe **only if** `agent_type` carries the bare name. `/en/hooks.mdx:303` gives `SubagentStart` matcher examples as "plugin-scoped names like `^my-plugin:reviewer$`", which suggests it carries `logan-spine:scout` instead — in which case scout and auditor silently degrade to Tier 2. **UNVERIFIED.** See "The tier router" below. |
+| The engine's `ha_active_tier` selects the evidence tier by exact string comparison of the `SubagentStart` payload's `agent_type` against `"scout"`, `"logan-spine-scout"`, `"auditor"`, `"logan-spine-auditor"`, defaulting to Tier 2. Measured on 2026-08-23 with a probe plugin: a plugin agent's `SubagentStart` payload carries `agent_type` as `<plugin>:<agent>` | `spine/src/cli/hook_augment.c:1107-1122`; live probe payload | The scoped form matches neither accepted string, so under the rename both scout and auditor would silently become Tier 2. The prefix strip in `subagent-reminder.sh` is **required**, not conditional. See "The tier router" below. |
 | A hook matcher containing only letters, digits, `_`, `-`, spaces, `,` and the alternation bar is an exact string or a bar-separated list of exact strings, not a regex | `/en/hooks.mdx:288-294` | One `SessionStart` entry listing all five sources is equivalent to five separate entries. No empirical check needed. |
 | `SessionStart` has five sources: `startup`, `resume`, `clear`, `compact`, `fork` | `/en/hooks.mdx:303,1076` | The engine registers only four. A forked session gets no graph reminder today. We add `fork`. |
 | Copied plugins cannot reference files outside their own directory; parent-relative paths fail after install because the external files were never copied. A symlink resolving outside the marketplace is skipped for security | `/en/plugins-reference.mdx:807-809,817,819` | The plugin must be self-contained. Nothing in it may reach into `spine/`, and it cannot symlink to `~/.local/bin`. |
@@ -246,9 +247,9 @@ Prose bodies carry over with two substitutions, not one. Beyond the `tools:` ent
 
 `ha_active_tier` (`spine/src/cli/hook_augment.c:1107-1122`) maps the `SubagentStart` payload's `agent_type` to an evidence tier by exact string match, accepting both bare (`scout`, `auditor`) and prefixed (`logan-spine-scout`, `logan-spine-auditor`) forms, and defaulting to Tier 2.
 
-If Claude Code reports a plugin agent's `agent_type` as `logan-spine:scout`, neither form matches and both the scout and auditor tiers silently become Tier 2. No C change is permitted by the non-goals, so the fix lives in our own hook script: `subagent-reminder.sh` strips a leading `logan-spine:` from `agent_type` before piping the payload to `hook-augment`.
+Claude Code reports a plugin agent's `agent_type` as `<plugin>:<agent>` — measured on 2026-08-23 by capturing a real `SubagentStart` payload from a probe plugin's agent. `logan-spine:scout` matches neither accepted form, so without intervention both the scout and auditor tiers silently become Tier 2.
 
-The plan captures a real `SubagentStart` payload from a plugin-shipped agent, records the exact `agent_type` value, and only then decides whether the strip is needed. If the value is already bare, the strip is omitted rather than written as a no-op.
+No C change is permitted by the non-goals, so the fix lives in our own hook script: `subagent-reminder.sh` strips a leading `logan-spine:` from `agent_type` before piping the payload to `hook-augment`. The engine already accepts the bare forms `scout` and `auditor`, so the strip is sufficient on its own.
 
 ### Skill
 
@@ -293,7 +294,7 @@ The marketplace half means a clone does not need a separate `marketplace add`; t
 
 Two things about this are **UNVERIFIED** and the plan settles both before anything depends on them:
 
-1. Whether an `enabledPlugins` entry alone causes the plugin to load, or whether `claude plugin install logan-spine@logan-mem --scope project` must also run to create a record in `~/.claude/plugins/installed_plugins.json`. On this machine every `enabledPlugins` entry also has an install record; no counter-example was found. The plan tests this in a fixture `HOME`, and the answer determines what `install.sh` prints as next steps.
+1. Whether an `enabledPlugins` entry alone causes the plugin to load, or whether `claude plugin install logan-spine@logan-mem --scope project` must also run to create a record in `~/.claude/plugins/installed_plugins.json`. On this machine every `enabledPlugins` entry also has an install record; no counter-example was found. **This cannot be settled under a fixture `HOME`**: measured on 2026-08-23, `claude plugin list` there enumerates install records rather than what a session would load, and a session under a fixture `HOME` cannot start at all because the credentials live in the real one. The plan settles it in a scratch **project** directory under the real `HOME`, carrying only a `.claude/settings.json`, since project settings are per-directory and give the isolation the question needs. The answer determines what `install.sh` prints as next steps.
 2. The exact JSON shape of a local-directory `extraKnownMarketplaces` entry, and whether a relative `path` resolves against the repository. Live state shows `claude plugin marketplace add` records marketplaces in `~/.claude/plugins/known_marketplaces.json` — three of the five on this machine appear only there and not in `extraKnownMarketplaces` — so the two mechanisms are not interchangeable and the committed form must be confirmed by running it against a fixture `HOME`.
 
 Whichever mechanism wins, the committed file is the per-repo switch and `install.sh` prints the exact commands.
@@ -341,17 +342,17 @@ The script must not enable the plugin anywhere on its own. Enabling is a per-rep
 
 ## Order of operations
 
-The migration has a genuine point of no return, and two circular-looking dependencies. This sequence resolves all three and is the skeleton of the plan.
+The migration has a point of no return and one circular-looking dependency. This sequence resolves both and is the skeleton of the plan.
 
 1. **Build the plugin skeleton only** — `marketplace.json`, `plugin.json`, `.mcp.json`, `bin/spine-launch.sh`, `hooks/lib.sh`. No agents, no hooks, no skill.
-2. **Load it and harvest the unknowns.** Enable the skeleton in a scratch directory, or load it with `--plugin-dir`, and record from live output: the exact MCP tool names from `claude mcp list`; the `agent_type` value a plugin agent reports to `SubagentStart`; whether `skills: [graph]` or `skills: [logan-spine:graph]` loads under `claude --debug`; whether an `enabledPlugins` entry alone loads the plugin in a fixture `HOME`; and the JSON shape `claude plugin marketplace add` actually writes. Every one of these needs a loaded plugin, which is why the skeleton comes first, and every later task depends on the answers.
+2. **Load it and harvest the unknowns.** Load the skeleton with `--plugin-dir` and record from live output: the exact MCP tool names; whether `skills: [graph]` or `skills: [logan-spine:graph]` loads; whether an `enabledPlugins` entry alone loads the plugin; and the JSON shape `claude plugin marketplace add` actually writes. Each needs a loaded plugin, which is why the skeleton comes first, and every later task depends on the answers.
 3. **Write the components** — agents, skill, hooks, scripts, tests — using the harvested values.
-4. **Prove the plugin works while the old footprint is still in place.** The old user-scope MCP server shadows the plugin's by endpoint, so at this stage the graph tools still resolve under their old names; what is proven here is that the plugin loads, its hooks fire, its agents and skill are visible, and `claude plugin list` shows it enabled for this repository.
+4. **Prove the plugin works end to end while the old footprint is still in place.** Because the old user-scope server does not shadow the plugin's, both connect and the new `mcp__plugin_logan-spine_spine__*` tools are callable at this stage. Everything that can fail is therefore proved here: the plugin loads, its hooks fire, its agents dispatch and reach the graph at their own tiers, its skill resolves, the docstring nudge fires, and `claude plugin list` shows it enabled for this repository and not elsewhere. The visible cost of the overlap is that each graph hook fires twice and the same tools appear under two names.
 5. **Run `unregister-global.sh --dry-run`, read the output, then `--yes`.** This is the point of no return, and it is one command from reversible: the script prints the backups and the restore command.
-6. **Restart and confirm** — `/mcp` shows `spine` connected, a graph call succeeds under `mcp__plugin_logan-spine_spine__*`, the hooks fire, the docstring nudge fires.
+6. **Restart and confirm the cleanup was surgical** — the duplicate tools and duplicate hook firings are gone, the unrelated handlers that shared a group survive, and the plugin still does everything step 4 proved.
 7. **Documentation, then merge.**
 
-Step 4 before step 5 is what keeps the broken window short: if the plugin does not load, step 5 never runs and nothing was destroyed.
+Step 4 before step 5 is what makes the removal safe to attempt: everything the plugin must do is already demonstrated, so step 5 is only removing a redundant second copy. If step 4 fails, step 5 never runs and nothing was destroyed.
 
 ## Tests
 
@@ -394,11 +395,12 @@ Test 15 constrains the documentation: `plugins/logan-spine/README.md` writes the
 
 | Risk | Handling |
 |---|---|
-| The old user-scope MCP entry shadows the plugin's server by endpoint match | Sequenced: `unregister-global.sh --yes` runs before the tool names are expected to change. Success criteria check the removal before the connection. |
+| During the overlap in step 4 every graph hook fires twice and the same tools appear under two names | Expected and harmless: `hook-augment` injects context and never blocks, so a doubled injection is noise rather than a failure. Step 5 ends it. |
 | `unregister-global.sh` destroys the owner's tmux `SubagentStart` handler | Handler-level removal with three-level pruning, and a fixture test whose `SubagentStart` group deliberately mixes one of ours with one unrelated handler. |
 | `unregister-global.sh` damages `~/.claude.json`, which holds per-project state for every project | Dry run by default, timestamped backups, `jq` edit of exactly one key, fixture-`HOME` test asserting unrelated keys survive, restore command printed. Never run against the real `HOME` in tests. |
-| The plugin does not load after the global footprint is removed | Step 4 proves the plugin loads before step 5 removes anything. The script prints both backup paths and the one-command restore. |
-| `agent_type` for a plugin agent is scoped, silently demoting scout and auditor to Tier 2 | Harvested live in step 2 before the agents are written; `subagent-reminder.sh` strips the prefix if needed. |
+| A `jq` filter aborts mid-edit and the shell redirect has already truncated the file it was rewriting | Every `jq` rewrite writes to a temporary file and installs it only on success; a failure leaves the original in place, names the backup, and exits non-zero. |
+| The plugin does not load after the global footprint is removed | Step 4 proves everything the plugin must do before step 5 removes anything. The script prints both backup paths and the one-command restore. |
+| `agent_type` for a plugin agent is scoped, silently demoting scout and auditor to Tier 2 | Measured: it is scoped. `subagent-reminder.sh` strips the prefix, and step 4 confirms each agent reports its own tier. |
 | `skills:` takes the wrong form and all three agents silently lose their preloaded skill | Harvested live in step 2 under `claude --debug`, which logs the skip warning. Test 9 pins the value once chosen. |
 | Every test measures a stale cached copy of the plugin | The development loop is specified, every editing task bumps `version`, and success criterion 9 asserts the installed copy's version segment matches the manifest. |
 | The marketplace is pinned to the worktree, which is deleted at merge | `install.sh` resolves and registers the main checkout via `git rev-parse --git-common-dir`. |
