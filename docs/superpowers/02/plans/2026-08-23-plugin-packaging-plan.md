@@ -1232,14 +1232,16 @@ check "$(ls "$F2/.claude.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d 
 check "$?" "0" "a second --yes run is a no-op that still exits 0"
 
 # A malformed group must leave the file intact rather than truncating it. A shell redirect empties its target before jq runs, so a jq that aborts mid-filter destroys the file unless the rewrite goes via a temporary.
+# The malformation has to be one that actually aborts the filter. Measured 2026-08-23 against the filter's own text: deleting a group's `hooks` key does NOT abort, because the filter's `(. // [])` guard absorbs it, so the run succeeds and every assertion below would pass for the wrong reason. Setting `hooks` to a string aborts with "Cannot iterate over string".
 F3="$tmp/fx3"; make_fixture "$F3"
-jq '.hooks.PostToolUse[0] |= del(.hooks)' "$F3/.claude/settings.json" > "$F3/.claude/settings.tmp" && mv "$F3/.claude/settings.tmp" "$F3/.claude/settings.json"
-size_before="$(wc -c < "$F3/.claude/settings.json")"
+jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F3/.claude/settings.json" > "$F3/.claude/settings.tmp" && mv "$F3/.claude/settings.tmp" "$F3/.claude/settings.json"
+before3="$(md5sum < "$F3/.claude/settings.json")"
 "$UG" --home "$F3" --yes >/dev/null 2>&1; rc=$?
-size_after="$(wc -c < "$F3/.claude/settings.json")"
-if [ "$size_after" -eq 0 ]; then echo "FAIL malformed group truncated settings.json"; fail=1; else echo "ok   malformed group leaves settings.json non-empty"; fi
+check "$rc" "1" "a failed rewrite makes the script exit non-zero rather than reporting success"
+check "$(md5sum < "$F3/.claude/settings.json")" "$before3" "a failed rewrite leaves settings.json byte-identical, not merely non-empty"
 jq -e . "$F3/.claude/settings.json" >/dev/null 2>&1
-check "$?" "0" "settings.json is still valid JSON after a malformed group"
+check "$?" "0" "settings.json still parses after a failed rewrite"
+check "$(ls "$F3/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "a failed rewrite still leaves the backup it named"
 
 # It refuses without a HOME.
 ( env -u HOME "$UG" --yes >/dev/null 2>&1 ); check "$?" "1" "refuses when HOME is unset and --home is absent"
