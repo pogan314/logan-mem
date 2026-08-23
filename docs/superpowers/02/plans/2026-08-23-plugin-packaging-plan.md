@@ -1153,7 +1153,7 @@ The highest-risk task. It edits two live files that hold configuration for every
 
 - [ ] **Step 1: Write the failing tests**
 
-The fixture mirrors this machine deliberately: the `SubagentStart` group holds one of our handlers **and** an unrelated tmux counter, and there is an unrelated MCP server, an unrelated agent file and per-project state. A second fixture carries a malformed group, because a `jq` filter that aborts after the shell has already truncated its output file is how this script could destroy `~/.claude/settings.json`.
+The fixture deliberately puts one of our handlers in a matcher group beside an unrelated one, and adds an unrelated MCP server, an unrelated agent file and per-project state. Note the live shape has changed since this was written: as of 2026-08-23 the machine's `SubagentStart` group holds only our handler, and the genuine multi-handler group is `PreToolUse` matcher `Agent`, which contains none of ours. Handler-level pruning is still required — the fixture is what proves it, and it no longer depends on any particular live arrangement. A second fixture carries a malformed group, because a `jq` filter that aborts after the shell has already truncated its output file is how this script could destroy `~/.claude/settings.json`.
 
 ```bash
 # ---------- unregister-global ----------
@@ -1231,7 +1231,6 @@ check "$(ls "$F2/.claude.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d 
 "$UG" --home "$F2" --yes >/dev/null 2>&1
 check "$?" "0" "a second --yes run is a no-op that still exits 0"
 
-# A malformed group must leave the file intact rather than truncating it. A shell redirect empties its target before jq runs, so a jq that aborts mid-filter destroys the file unless the rewrite goes via a temporary.
 # The malformation has to be one that actually aborts the filter. Measured 2026-08-23 against the filter's own text: deleting a group's `hooks` key does NOT abort, because the filter's `(. // [])` guard absorbs it, so the run succeeds and every assertion below would pass for the wrong reason. Setting `hooks` to a string aborts with "Cannot iterate over string".
 F3="$tmp/fx3"; make_fixture "$F3"
 jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F3/.claude/settings.json" > "$F3/.claude/settings.tmp" && mv "$F3/.claude/settings.tmp" "$F3/.claude/settings.json"
