@@ -76,4 +76,81 @@ else
   echo "skip claude plugin validate: claude not on PATH"
 fi
 
+# ---------- hooks.json shape ----------
+H="$PLUGIN/hooks/hooks.json"
+jq -e . "$H" >/dev/null 2>&1; check "$?" "0" "hooks.json is valid JSON"
+check "$(jq -r '[.hooks[][] | .hooks[]] | length' "$H")" "5" "hooks.json declares five handlers"
+check "$(jq -r '.hooks.PreToolUse[0].matcher' "$H")" "Grep|Glob" "PreToolUse matcher"
+check "$(jq -r '.hooks.SessionStart[0].matcher' "$H")" "startup|resume|clear|compact|fork" "SessionStart matcher includes fork"
+check "$(jq -r '.hooks.SubagentStart[0].matcher' "$H")" "*" "SubagentStart matcher"
+check "$(jq -r '[.hooks.PostToolUse[].matcher] | sort | join(",")' "$H")" "Edit|Write,Read" "both PostToolUse matchers"
+for c in $(jq -r '[.hooks[][] | .hooks[].command] | unique[]' "$H"); do
+  case "$c" in *'${CLAUDE_PLUGIN_ROOT}'*) ;; *) echo "FAIL hook command not rooted in CLAUDE_PLUGIN_ROOT: $c"; fail=1 ;; esac
+  s="$PLUGIN/${c##*\}\"/}"
+  [ -x "$s" ]; check "$?" "0" "hook script executable: ${s##*/}"
+done
+
+# ---------- graph hooks are fail-open and pass output through ----------
+marker="$tmp/marker"; printf '#!/bin/sh\necho GRAPHTEXT\n' > "$marker"; chmod +x "$marker"
+for h in code-discovery-gate session-reminder subagent-reminder; do
+  out="$(LOGAN_SPINE_BIN="$tmp/nope" bash -c "printf '{}' | '$PLUGIN/hooks/$h.sh'" 2>"$tmp/err")"; rc=$?
+  check "$rc" "0" "$h exits 0 when the binary is missing"
+  check "$out$(cat "$tmp/err")" "" "$h is silent when the binary is missing"
+  out="$(LOGAN_SPINE_BIN="$marker" bash -c "printf '{\"hook_event_name\":\"SubagentStart\",\"agent_type\":\"logan-spine:scout\"}' | '$PLUGIN/hooks/$h.sh'" 2>/dev/null)"
+  check "$out" "GRAPHTEXT" "$h passes the engine's output through"
+done
+
+# ---------- the scoped agent_type is normalised ----------
+# ha_active_tier matches "scout"/"logan-spine-scout" and "auditor"/"logan-spine-auditor" literally and defaults everything else to Tier 2, and Claude Code reports a plugin agent as "<plugin>:<agent>", so the prefix has to go before the payload reaches the engine.
+echoer="$tmp/echoer"; printf '#!/bin/sh\ncat\n' > "$echoer"; chmod +x "$echoer"
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":\"logan-spine:scout\"}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -r .agent_type)"
+check "$out" "scout" "subagent-reminder strips the logan-spine: prefix"
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{\"agent_type\":\"general-purpose\"}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -r .agent_type)"
+check "$out" "general-purpose" "subagent-reminder leaves other agent types alone"
+out="$(LOGAN_SPINE_BIN="$echoer" bash -c "printf '{}' | '$PLUGIN/hooks/subagent-reminder.sh'" 2>/dev/null | jq -c .)"
+check "$out" "{}" "subagent-reminder is a no-op on a payload with no agent_type"
+
+# ---------- docstring fixtures, shared with task 6 ----------
+printf 'export function f() {}\n' > "$tmp/bad.js"
+printf '/** @file doc */\n/** ok */\nexport function f() {}\n' > "$tmp/good.js"
+printf 'hello\n' > "$tmp/note.txt"
+dstub="$tmp/dstub"
+cat > "$dstub" <<'STUB'
+#!/bin/sh
+# Stands in for `logan-spine-mcp docstrings [--all] <file>...`: one finding per `export function` whose preceding line is not a `/**` comment, across every file given. Exit 1 if any finding, 0 otherwise. It must accept many files because docstring-coverage.sh passes the whole list in one xargs invocation, and it must honour the doc comment because the "clean file" fixture has one.
+shift
+[ "${1:-}" = "--all" ] && shift
+rc=0
+for f in "$@"; do
+  n=$(awk '/^export function/ { if (prev !~ /^\/\*\*/) c++ } { prev=$0 } END { print c+0 }' "$f" 2>/dev/null || echo 0)
+  i=1
+  while [ "$i" -le "$n" ]; do echo "$f: function f$i"; rc=1; i=$((i+1)); done
+done
+exit $rc
+STUB
+chmod +x "$dstub"
+# Prove the stub itself behaves, or every assertion below is measuring the wrong thing.
+"$dstub" docstrings "$tmp/good.js" >/dev/null 2>&1; check "$?" "0" "the stub calls the documented fixture clean"
+"$dstub" docstrings "$tmp/bad.js" >/dev/null 2>&1; check "$?" "1" "the stub calls the undocumented fixture dirty"
+
+# ---------- docstring-check contract ----------
+out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/bad.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err")"; rc=$?
+check "$rc" "2" "docstring-check exits 2 on a finding"
+check "$out" "" "docstring-check prints nothing on stdout"
+check "$(head -1 "$tmp/err")" "logan-spine: add docstrings before moving on:" "docstring-check header line"
+out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/good.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err")"; rc=$?
+check "$rc" "0" "docstring-check exits 0 on a clean file"
+check "$(cat "$tmp/err")" "" "docstring-check is silent on a clean file"
+out="$(LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/note.txt\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err")"; rc=$?
+check "$rc" "0" "docstring-check exits 0 on an unparsed .txt file"
+check "$(cat "$tmp/err")" "" "docstring-check is silent on an unparsed .txt file"
+LOGAN_SPINE_BIN="$tmp/nope" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/bad.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>/dev/null; rc=$?
+check "$rc" "0" "docstring-check exits 0 when the binary is missing"
+
+# ---------- cap at 10 findings plus a remainder line ----------
+{ for i in $(seq 1 15); do printf 'export function f%s() {}\n' "$i"; done; } > "$tmp/many.js"
+LOGAN_SPINE_BIN="$dstub" bash -c "printf '{\"tool_input\":{\"file_path\":\"$tmp/many.js\"}}' | '$PLUGIN/hooks/docstring-check.sh'" 2>"$tmp/err"
+check "$(grep -c 'and 5 more' "$tmp/err")" "1" "docstring-check reports the remainder"
+check "$(grep -c . "$tmp/err")" "12" "docstring-check prints header + 10 findings + remainder"
+
 exit $fail
