@@ -686,12 +686,14 @@ cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 rm -rf /tmp/lsm-agent-diff && mkdir -p /tmp/lsm-agent-diff
 for t in "" -scout -auditor; do cp "$HOME/.claude/agents/logan-spine$t.md" "/tmp/lsm-agent-diff/installed$t.md"; done
 FH=/tmp/lsm-agent-render; rm -rf "$FH" && mkdir -p "$FH/.claude"
-HOME="$FH" "$HOME/.local/bin/logan-spine-mcp" install --clients=claude -y >/dev/null 2>&1
+HOME="$FH" "$HOME/.local/bin/logan-spine-mcp" install --clients=claude --skip-binary -y >/dev/null 2>&1
 for t in "" -scout -auditor; do
   echo "=== logan-spine$t ==="
   diff -u "$FH/.claude/agents/logan-spine$t.md" "/tmp/lsm-agent-diff/installed$t.md" || true
 done
 ```
+
+`--skip-binary` is required, not optional: measured on 2026-08-23, a plain `install` exits 1 with `install_dir_group_or_world_writable` naming the real `~/.local/bin` even under a fixture `HOME`. Why the install directory escapes `HOME` is not established. `--skip-binary` refreshes agent configuration only, which is all this step needs.
 
 Paste the complete diff output into the task report. Do not assume the graph-unavailable paragraph is the only difference — record whatever the diff shows, and carry every difference into the new files.
 
