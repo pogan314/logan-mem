@@ -90,7 +90,10 @@ fi
 
 # --- .claude.json: exactly one key ------------------------------------------
 # This file also holds per-project state for every project on the machine, so nothing else in it is touched.
-if [ -f "$CLAUDEJSON" ]; then
+# Skipped outright once the settings.json edit has failed, the same fail-fast rule the removals below follow: committing this edit while announcing that nothing was removed would be a lie, and the script is idempotent, so a re-run after the operator repairs settings.json finishes this work with nothing lost.
+if [ "$rc" -ne 0 ]; then
+  say ".claude.json: skipped, because the settings.json edit failed"
+elif [ -f "$CLAUDEJSON" ]; then
   has="$(jq 'has("mcpServers") and (.mcpServers | has("logan-spine-mcp"))' "$CLAUDEJSON" 2>/dev/null)"; jqrc=$?
   if [ "$jqrc" -ne 0 ]; then
     say ".claude.json: cannot parse $CLAUDEJSON; refusing to edit it"
@@ -110,7 +113,11 @@ fi
 # A failed configuration edit means the machine is not in the state the removals assume. Stop before touching disk: the configuration still names these files, and deleting them would leave Claude Code invoking commands that no longer exist.
 if [ "$rc" -ne 0 ]; then
   say ""
-  say "A configuration edit failed. Nothing on disk was removed. Restore from the backup named above and re-run."
+  if act; then
+    say "A configuration edit failed. Nothing on disk was removed. Restore from the backup named above and re-run."
+  else
+    say "A configuration edit cannot succeed. Nothing was changed and no backup was made. Fix the file named above and re-run."
+  fi
   exit "$rc"
 fi
 

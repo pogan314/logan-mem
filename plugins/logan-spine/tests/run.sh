@@ -335,8 +335,13 @@ check "$(ls "$F3/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l
 # A failed configuration edit must stop before disk. The configuration still names these hook commands, so deleting the files anyway leaves Claude Code invoking commands that no longer exist — and the run used to print "Done." while doing it.
 F4="$tmp/fx4"; make_fixture "$F4"
 jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F4/.claude/settings.json" > "$F4/.claude/t" && mv "$F4/.claude/t" "$F4/.claude/settings.json"
+before4json="$(md5sum < "$F4/.claude.json")"
 "$UG" --home "$F4" --yes > "$tmp/ug4" 2>&1; rc=$?
 check "$rc" "1" "a failed settings rewrite makes the whole run exit non-zero"
+# The second configuration edit must not run once the first has failed: a run that prints "nothing on disk was removed" while having deleted a key from .claude.json is lying to the operator.
+check "$(jq '.mcpServers | has("logan-spine-mcp")' "$F4/.claude.json")" "true" "a failed settings rewrite leaves the MCP entry in .claude.json"
+check "$(md5sum < "$F4/.claude.json")" "$before4json" ".claude.json is byte-identical after a failed settings rewrite"
+check "$(ls "$F4/.claude.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "0" "a failed settings rewrite never backs up .claude.json, because it never edits it"
 for f in hooks/lsm-code-discovery-gate hooks/lsm-session-reminder hooks/lsm-subagent-reminder agents/logan-spine.md agents/logan-spine-scout.md skills/logan-spine; do
   [ -e "$F4/.claude/$f" ]; check "$?" "0" "a failed settings rewrite leaves $f on disk"
 done
@@ -391,6 +396,9 @@ before9="$(find "$F9" -type f | sort | xargs md5sum | md5sum)"
 check "$rc" "1" "a dry run whose rewrite would fail exits non-zero"
 check "$(grep -ci 'would fail' "$tmp/ug9")" "1" "a dry run reports that the rewrite would fail"
 check "$(find "$F9" -type f | sort | xargs md5sum | md5sum)" "$before9" "a dry run that exercises the filter still changes nothing"
+# A dry run writes nothing, so there is no backup to restore from; telling the operator to restore one sends them looking for a file that does not exist.
+check "$(grep -ci 'restore from the backup' "$tmp/ug9")" "0" "a failed dry run does not tell the operator to restore a backup"
+check "$(grep -ci 'no backup was made' "$tmp/ug9")" "1" "a failed dry run says no backup was made"
 "$UG" --home "$F1" > "$tmp/ug1" 2>&1
 check "$(grep -ci 'already empty' "$tmp/ug1")" "1" "the preview names the already-empty groups it will also drop"
 
