@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "spine": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/spine-launch.sh",
+      "args": []
+    }
+  }
+}
