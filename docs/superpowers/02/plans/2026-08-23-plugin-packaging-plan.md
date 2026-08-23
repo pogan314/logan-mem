@@ -1450,7 +1450,7 @@ ls ~/.claude/plugins/cache/logan-mem/logan-spine/
 jq -r .version plugins/logan-spine/.claude-plugin/plugin.json
 ```
 
-Expected: `logan-spine@logan-mem` enabled; the inventory naming 1 skill, 3 agents, 5 hooks and 1 MCP server; and the cache directory name equal to the manifest version, which is `0.7.0` from task 8. If they differ, run `claude plugin marketplace update logan-mem && claude plugin update logan-spine@logan-mem` and check again. **Every measurement below is of the installed copy, not the repository tree** — do not edit a plugin file during this task without repeating this step.
+Expected: `logan-spine@logan-mem` enabled; the inventory naming 1 skill, 3 agents, 5 hooks and 1 MCP server; and the cache directory name equal to the manifest version. Read that version from the manifest rather than expecting a literal — every fix round in tasks 1-8 bumps it, so any number written here goes stale (it was `0.7.0` when this plan was written and `0.7.2` by the time task 8 closed). If they differ, run `claude plugin marketplace update logan-mem && claude plugin update logan-spine@logan-mem` and check again. **Every measurement below is of the installed copy, not the repository tree** — do not edit a plugin file during this task without repeating this step.
 
 - [ ] **Step 5: Confirm the MCP server, the new tool names, and the coexistence**
 
