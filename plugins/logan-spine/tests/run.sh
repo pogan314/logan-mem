@@ -325,11 +325,73 @@ before3="$(md5sum < "$F3/.claude/settings.json")"
 "$UG" --home "$F3" --yes >/dev/null 2>&1; rc=$?
 check "$rc" "1" "a failed rewrite makes the script exit non-zero rather than reporting success"
 check "$(md5sum < "$F3/.claude/settings.json")" "$before3" "a failed rewrite leaves settings.json byte-identical, not merely non-empty"
-jq -e . "$F3/.claude/settings.json" >/dev/null 2>&1
+[ -s "$F3/.claude/settings.json" ] && jq -e . "$F3/.claude/settings.json" >/dev/null 2>&1
 check "$?" "0" "settings.json still parses after a failed rewrite"
 check "$(ls "$F3/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "a failed rewrite still leaves the backup it named"
 
 # It refuses without a HOME.
 ( env -u HOME "$UG" --yes >/dev/null 2>&1 ); check "$?" "1" "refuses when HOME is unset and --home is absent"
+
+# A failed configuration edit must stop before disk. The configuration still names these hook commands, so deleting the files anyway leaves Claude Code invoking commands that no longer exist — and the run used to print "Done." while doing it.
+F4="$tmp/fx4"; make_fixture "$F4"
+jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F4/.claude/settings.json" > "$F4/.claude/t" && mv "$F4/.claude/t" "$F4/.claude/settings.json"
+"$UG" --home "$F4" --yes > "$tmp/ug4" 2>&1; rc=$?
+check "$rc" "1" "a failed settings rewrite makes the whole run exit non-zero"
+for f in hooks/lsm-code-discovery-gate hooks/lsm-session-reminder hooks/lsm-subagent-reminder agents/logan-spine.md agents/logan-spine-scout.md skills/logan-spine; do
+  [ -e "$F4/.claude/$f" ]; check "$?" "0" "a failed settings rewrite leaves $f on disk"
+done
+check "$(grep -c '^Done\.$' "$tmp/ug4")" "0" "a failed run never prints Done."
+check "$(grep -ci 'nothing on disk was removed' "$tmp/ug4")" "1" "a failed run says nothing on disk was removed"
+
+# The handler match must be anchored to the installed path. Unanchored, each of these three unrelated commands merely contains a handler name and was deleted. The middle one uses /opt rather than a home directory only because this suite's own machine-path check forbids that literal anywhere under plugins/.
+F5="$tmp/fx5"; make_fixture "$F5"
+jq '.hooks.Stop[0].hooks += [
+  {"type":"command","command":"/opt/vendor/lsm-session-reminder-v2 --other","timeout":5},
+  {"type":"command","command":"node /opt/me/tools/not-lsm-subagent-reminder-clone.mjs","timeout":5},
+  {"type":"command","command":"echo lsm-code-discovery-gateway","timeout":5}
+]' "$F5/.claude/settings.json" > "$F5/.claude/t" && mv "$F5/.claude/t" "$F5/.claude/settings.json"
+"$UG" --home "$F5" --yes >/dev/null 2>&1
+check "$(jq '.hooks.Stop[0].hooks | length' "$F5/.claude/settings.json")" "4" "commands that merely contain a handler name are not deleted"
+check "$(jq -r '[.hooks.Stop[0].hooks[].command] | sort | join("|")' "$F5/.claude/settings.json")" "/opt/vendor/lsm-session-reminder-v2 --other|echo lsm-code-discovery-gateway|node /opt/me/tools/not-lsm-subagent-reminder-clone.mjs|unrelated-stop-hook" "each near-miss command survives verbatim"
+check "$(jq '[.hooks[]?[]?.hooks[]? | select((.command // "") | test("/[.]claude/hooks/lsm-"))] | length' "$F5/.claude/settings.json")" "0" "the genuinely installed handlers are still all removed"
+
+# A removal that fails must not report success. A directory the process cannot write is the cheapest way to make rm fail.
+F6="$tmp/fx6"; make_fixture "$F6"
+chmod a-w "$F6/.claude/agents"
+"$UG" --home "$F6" --yes >/dev/null 2>&1; rc6=$?
+chmod u+w "$F6/.claude/agents"
+if [ -e "$F6/.claude/agents/logan-spine.md" ]; then
+  check "$rc6" "1" "a removal that fails makes the run exit non-zero"
+else
+  echo "skip failed-removal test: rm succeeded in an unwritable directory"
+fi
+
+# An unparseable configuration file must be reported as unparseable, never as clean, and must stop the run before anything is deleted.
+F7="$tmp/fx7"; make_fixture "$F7"
+printf 'not json at all\n' > "$F7/.claude/settings.json"
+"$UG" --home "$F7" --yes > "$tmp/ug7" 2>&1; rc=$?
+check "$rc" "1" "an unparseable settings.json makes the run exit non-zero"
+check "$(grep -ci 'cannot parse' "$tmp/ug7")" "1" "an unparseable settings.json is reported as unparseable"
+check "$(grep -c 'no lsm- handlers' "$tmp/ug7")" "0" "an unparseable settings.json is never called clean"
+[ -e "$F7/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "an unparseable settings.json stops the run before any removal"
+
+F8="$tmp/fx8"; make_fixture "$F8"
+printf 'not json at all\n' > "$F8/.claude.json"
+"$UG" --home "$F8" --yes > "$tmp/ug8" 2>&1; rc=$?
+check "$rc" "1" "an unparseable .claude.json makes the run exit non-zero"
+check "$(grep -ci 'cannot parse' "$tmp/ug8")" "1" "an unparseable .claude.json is reported as unparseable"
+check "$(grep -c 'no logan-spine-mcp entry' "$tmp/ug8")" "0" "an unparseable .claude.json is never called clean"
+[ -e "$F8/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "an unparseable .claude.json stops the run before any removal"
+
+# The dry run has to exercise the filter rather than promise an edit that cannot happen, and it has to name the collateral pruning it will do.
+F9="$tmp/fx9"; make_fixture "$F9"
+jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F9/.claude/settings.json" > "$F9/.claude/t" && mv "$F9/.claude/t" "$F9/.claude/settings.json"
+before9="$(find "$F9" -type f | sort | xargs md5sum | md5sum)"
+"$UG" --home "$F9" > "$tmp/ug9" 2>&1; rc=$?
+check "$rc" "1" "a dry run whose rewrite would fail exits non-zero"
+check "$(grep -ci 'would fail' "$tmp/ug9")" "1" "a dry run reports that the rewrite would fail"
+check "$(find "$F9" -type f | sort | xargs md5sum | md5sum)" "$before9" "a dry run that exercises the filter still changes nothing"
+"$UG" --home "$F1" > "$tmp/ug1" 2>&1
+check "$(grep -ci 'already empty' "$tmp/ug1")" "1" "the preview names the already-empty groups it will also drop"
 
 exit $fail
