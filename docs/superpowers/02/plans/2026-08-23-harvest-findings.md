@@ -3,11 +3,12 @@ title: Harvested live facts for version 02 plugin packaging
 type: plan
 status: research-fact
 created: "2026-08-23 16:05 CDT"
-updated: "2026-08-23 16:05 CDT"
+updated: "2026-08-23 18:46 CDT"
 sources:
   - "Live Claude Code runs on the EC2 box, 2026-08-23 21:01-21:06 UTC, against a probe plugin at /tmp/lsm-probe/logan-spine built from plugins/logan-spine (task 1)"
   - "Debug logs /tmp/lsm-skill-probe.log and /tmp/lsm-skill-control.log (deleted at cleanup; verbatim lines quoted below)"
   - "Full working notes: .superpowers/sdd/2026-08-23-plugin-packaging-plan/task-2-report.md"
+  - "Finding 5 added 2026-08-23 18:46 CDT from the live machine state, not a fixture: jq over ~/.claude/settings.json, ~/.claude/plugins/known_marketplaces.json and ~/.claude/plugins/installed_plugins.json"
 ---
 
 Every value below was measured, not predicted. Where a measurement contradicts the spec's prediction the measurement wins, and the contradiction is called out in the section that found it. Claude Code version at measurement time is whatever `claude` resolved to on the EC2 box on 2026-08-23; a future version could change any of these, so re-measure before trusting them across an upgrade.
@@ -167,3 +168,18 @@ and the `./` run stored `"path": "/tmp/lsm-mp"` in both files. The argument may 
 A completing control also ran under the first fixture home: with the marketplace properly registered there, `claude plugin install logan-spine@logan-mem` succeeded (`scope: user`) and the resulting `settings.json` held precisely the two keys used in Finding 3's failing project file — `extraKnownMarketplaces` plus `"enabledPlugins": { "logan-spine@logan-mem": true }`. The same JSON content therefore works at user scope with the marketplace registered and fails at project scope without it, which is what makes the registration step, not the settings content, the thing task 9 must document.
 
 Consequence for task 9: document `claude plugin marketplace add <absolute path to the repo checkout>` as the per-machine step, state that the recorded path is absolute and therefore machine-specific, and do not commit `extraKnownMarketplaces` with a relative path expecting it to resolve.
+
+## Finding 5: the `known_marketplaces.json` record alone is enough to load a plugin — `extraKnownMarketplaces` is not required
+
+Finding 3 could not separate the two files `marketplace add` writes, because it writes both in one action. The live machine already contains the separation, so no experiment was needed.
+
+`~/.claude/plugins/known_marketplaces.json` lists five marketplaces: `claude-plugins-official`, `global-plugins`, `fitlitics-old-admin-wiki-mcp`, `marketingskills`, `web-app-marketing-marketplace`. `~/.claude/settings.json`'s `extraKnownMarketplaces` lists two: `global-plugins` and `marketingskills`. Three marketplaces therefore have a `known_marketplaces.json` record and no settings key.
+
+`claude-plugins-official` is one of the three, and `superpowers@claude-plugins-official` is listed in `enabledPlugins` and is demonstrably loaded — the session writing this line is running its skills. So a plugin resolves and loads from a marketplace that `extraKnownMarketplaces` does not mention.
+
+What this does and does not establish:
+
+- Established: the settings key is not a prerequisite for loading, at least for `claude-plugins-official`.
+- Not established: whether a `directory`-source marketplace such as `logan-mem` behaves the same. `claude-plugins-official` may be special-cased as the built-in. `fitlitics-old-admin-wiki-mcp` is a genuine user-local `directory` marketplace also absent from the settings key, but its plugin's enablement scope was not determined, so it is not proof.
+
+Consequence for task 9, and for resilience. `~/.claude/settings.json` on this machine was observed reverting wholesale to an earlier snapshot on 2026-08-23, losing every edit made in a 21-minute window. If registration depended solely on the settings key, such a revert would silently unregister the marketplace and the plugin would stop loading with nothing in the repository changed. Because `known_marketplaces.json` is a separate file that carries its own record, the registration has a second home. Task 9 should record both files' contents after `install.sh` runs, so a later disappearance can be attributed to the right file.
