@@ -194,4 +194,46 @@ for a in scout verify auditor; do
   check "$(awk '/^skills:/{print; exit}' "$PLUGIN/agents/$a.md")" "skills: [$skillname]" "$a.md names the skill by the name SKILL.md declares"
 done
 
+# ---------- docstring-coverage ----------
+COV="$PLUGIN/scripts/docstring-coverage.sh"
+[ -x "$COV" ]; check "$?" "0" "docstring-coverage.sh is executable"
+# It resolves through lsm_bin now, not PATH, so a missing binary is exit 2 even when PATH would have found one.
+LOGAN_SPINE_BIN="$tmp/nope" "$COV" "$tmp" >/dev/null 2>&1
+check "$?" "2" "coverage exits 2 when the binary is missing"
+
+covdir="$tmp/cov"; mkdir -p "$covdir"
+cp "$tmp/bad.js" "$tmp/good.js" "$tmp/note.txt" "$covdir/"
+( cd "$covdir" && git init -q && git add bad.js good.js note.txt ) >/dev/null 2>&1
+LOGAN_SPINE_BIN="$dstub" "$COV" "$covdir" > "$tmp/covout" 2>&1
+check "$?" "1" "coverage exits 1 when something is missing"
+check "$(grep -c 'bad.js' "$tmp/covout")" "1" "coverage lists bad.js"
+check "$(grep -c 'good.js' "$tmp/covout")" "0" "coverage lists nothing for good.js"
+
+cleandir="$tmp/clean"; mkdir -p "$cleandir"; cp "$tmp/good.js" "$cleandir/"
+( cd "$cleandir" && git init -q && git add good.js ) >/dev/null 2>&1
+out="$(LOGAN_SPINE_BIN="$dstub" "$COV" "$cleandir" 2>&1)"; rc=$?
+check "$rc" "0" "coverage exits 0 on a clean tree"
+check "$out" "" "coverage is silent on a clean tree"
+
+# A non-git directory is a real error, never a false green.
+nogit="$tmp/nogit"; mkdir -p "$nogit"; printf 'export function f() {}\n' > "$nogit/x.js"
+LOGAN_SPINE_BIN="$dstub" "$COV" "$nogit" >/dev/null 2>&1; rc=$?
+if [ "$rc" != "0" ] && [ "$rc" != "1" ]; then echo "ok   coverage errors on a non-git dir"; else echo "FAIL coverage errors on a non-git dir: got rc=$rc"; fail=1; fi
+
+# ---------- the engine's real docstrings contract ----------
+# Everything above uses a stub, so without this block nothing in the repo would test the shape the engine actually emits.
+realbin="$(env -u LOGAN_SPINE_BIN bash -c ". '$PLUGIN/hooks/lib.sh'; lsm_bin" 2>/dev/null)"
+if [ -n "$realbin" ] && [ -x "$realbin" ]; then
+  "$realbin" docstrings "$tmp/good.js" >/dev/null 2>&1
+  check "$?" "0" "the real engine calls the documented fixture clean"
+  out="$("$realbin" docstrings "$tmp/bad.js" 2>/dev/null)"; rc=$?
+  check "$rc" "1" "the real engine calls the undocumented fixture dirty"
+  check "$(printf '%s\n' "$out" | grep -c ' function f$')" "1" "the real engine names the undocumented function"
+else
+  echo "skip real-engine docstrings tests: no logan-spine-mcp resolvable"
+fi
+
+# ---------- logan-spine-tools is gone ----------
+[ ! -e "$REPO/plugins/logan-spine-tools" ]; check "$?" "0" "logan-spine-tools is removed"
+
 exit $fail
