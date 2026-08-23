@@ -61,8 +61,8 @@ check "$rc" "0" "spine-launch execs the resolved binary"
 check "$out" "STUB" "spine-launch passes the binary's stdout through"
 
 # ---------- no machine paths ----------
-# --untracked matters: every task writes files and runs this suite before its `git add`, so a tracked-only search would be blind to exactly the files under test. The pattern is written `/[h]ome/` rather than `/home/` so that this line does not match itself: the bracket expression matches the same text, but the source line no longer contains the literal substring. Excluding this file from the pathspec instead would blind the check to every later append to the suite.
-hits="$(git -C "$REPO" grep --untracked -lE '/[h]ome/|/Users/|C:\\' -- plugins .claude-plugin | wc -l | tr -d ' ')"
+# --untracked matters: every task writes files and runs this suite before its `git add`, so a tracked-only search would be blind to exactly the files under test. All three alternatives are written with a bracket expression so that this block cannot match itself: a bracketed character matches exactly the same text as the bare character, but neither of these lines then contains any of the literal substrings being searched for. Excluding this file from the pathspec instead would blind the check to every later append to the suite, which five tasks make.
+hits="$(git -C "$REPO" grep --untracked -lE '/[h]ome/|/[U]sers/|[C]:\\' -- plugins .claude-plugin | wc -l | tr -d ' ')"
 check "$hits" "0" "no absolute machine path under plugins/ or .claude-plugin/"
 
 # ---------- claude plugin validate ----------
