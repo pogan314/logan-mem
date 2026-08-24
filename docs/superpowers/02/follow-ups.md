@@ -2,7 +2,7 @@
 title: Version 02 follow-ups, deferred at merge
 type: wiki
 status: research-fact
-created: "2026-08-24 09:55 CDT"
+created: "2026-08-24 10:25 CDT"
 updated: "2026-08-24 09:55 CDT"
 sources:
   - "Whole-branch final review of dev/version-02-plugin-packaging, 2026-08-24, findings 2 and 3 and its triage table"
@@ -42,5 +42,17 @@ Raised with the owner rather than fixed, because it is not this repository's cod
 - 2026-08-22: all seven `lsm-*` hook entries went missing. Recorded in `CLAUDE.md`. A controlled replay did not reproduce it.
 - 2026-08-23: the whole file reverted to a snapshot from six hours earlier, losing five tmux status handlers written in a 21-minute window. Established: the current file was byte-identical to the earlier snapshot except for four model and effort lines; the file was replaced with a new inode; no Claude session's Edit or Write tool did it, across 414 transcripts; no cron job, systemd timer, sync agent or script on the machine does it. Four open upstream Claude Code issues describe the same defect class. **The cause is not established.** An `auditctl` watch is armed on the file.
 - ~~Observed 2026-08-24: `enabledPlugins` lists six plugins where a harvest on 2026-08-23 recorded eight.~~ **Not a loss — investigated 2026-08-24 and withdrawn.** Six independent snapshots of the file spanning 2026-08-23 10:55 to 2026-08-24 09:01 (four in `~/.claude/file-history/`, plus the `pre-tmux-restore` and `logan-spine-backup` backups) all hold exactly **six** entries, and the same six names in every one: `claude-code-setup`, `claude-md-management`, `frontend-design`, `typescript-lsp` and `superpowers` from `claude-plugins-official`, and `global-plugin` from `global-plugins`. The figure of eight appears once, in a subagent's prose at `task-2-report.md:62`, and is not supported by any snapshot. It was a miscount, not a disappearance.
+
+### The writer is now identified, by audit trail
+
+An `auditctl` watch was armed on both files on 2026-08-24 (`-w /home/ubuntu/.claude/settings.json -p wa -k claudesettings`, and the same for `~/.claude.json`). Within about one hour it recorded **102 write events**. Read back with `sudo ausearch -k claudesettings -i`:
+
+- **Every single event is `syscall=rename`**, and every one comes from `exe=/home/ubuntu/.local/share/claude/versions/2.1.241` — Claude Code itself. Nothing else on the machine writes these files. No cron job, no systemd timer, no sync agent, no shell script.
+- The write pattern is write-then-rename: a temporary file stamped with the writing process's own pid, `settings.json.tmp.<pid>.<random>`, renamed over `settings.json`. That is a **whole-file replace**, not an in-place patch of the key being changed.
+- **33 distinct Claude Code processes** performed those writes in that hour, both interactive sessions (`tty=pts4`, `tty=pts6`) and headless `claude -p` children (`tty=(none)`), overlapping in time.
+
+What that establishes: the only writer is Claude Code, and it rewrites the entire file from whatever it holds in memory. What it does **not** establish: that a stale in-memory copy caused the specific 2026-08-23 revert. The watch was armed after that event, so it did not capture it. But the mechanism the audit trail shows — many concurrent processes each replacing the whole file — is exactly the shape that produces one: a process that read the file at time T and writes at time T+n discards every change made in between, and no locking is visible in the trace.
+
+The watch stays armed, so the next occurrence will name the process and the time. `sudo ausearch -k claudesettings -i` is the command.
 
 The durable mitigation is the one this version delivers: hooks that live in a plugin's own `hooks/hooks.json` are not part of the user settings object, so a whole-file rewrite of `settings.json` cannot reach them.
