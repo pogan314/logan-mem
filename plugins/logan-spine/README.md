@@ -12,6 +12,7 @@ It is enabled **per repository**. A machine that has it installed gets nothing u
 | Agents | 3 | `logan-spine:scout` (Tier 1, provisional), `logan-spine:verify` (Tier 2, the default), `logan-spine:auditor` (Tier 3, exhaustive). |
 | Skill | 1 | `graph`, addressed as `/logan-spine:graph`. The tool-choice matrix and the query syntax. |
 | Hooks | 5 | Five handler entries across four events — see below. |
+| Scripts | 4 | `install.sh` (per-machine install), `visualizer.sh` (graph visualizer on/off), `unregister-global.sh` (remove the pre-plugin footprint), `docstring-coverage.sh`. |
 
 The five hook handlers, as declared in `hooks/hooks.json`:
 
@@ -27,7 +28,7 @@ The five hook handlers, as declared in `hooks/hooks.json`:
 
 ## The engine binary installs separately, and the plugin is inert without it
 
-The plugin ships no engine. The engine is `logan-spine-mcp`, a 280 MiB native binary that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory — it is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
+The plugin ships no engine. The engine is `logan-spine-mcp`, a native binary of about 280 MiB (281 MiB when built `--with-ui`) that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory. It is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
 
 So plugin and binary are two installs, and an enabled plugin with no binary does nothing:
 
@@ -40,13 +41,14 @@ So plugin and binary are two installs, and an enabled plugin with no binary does
 From the repository root:
 
 ```bash
-plugins/logan-spine/scripts/install.sh
+plugins/logan-spine/scripts/install.sh              # engine only
+plugins/logan-spine/scripts/install.sh --with-ui   # engine + graph visualizer (needs node and npm)
 ```
 
 That script does the per-machine half, and only the per-machine half:
 
-1. Builds the engine with `spine/scripts/build.sh` (cold build ≈10 minutes without ccache).
-2. Places the binary at `~/.local/bin/logan-spine-mcp` (`LSM_BIN_DIR` overrides the directory).
+1. Builds the engine with `spine/scripts/build.sh` (cold build ≈10 minutes without ccache). Pass `--with-ui` to embed the graph visualizer as well — see [The graph visualizer](#the-graph-visualizer).
+2. Places the binary at `~/.local/bin/logan-spine-mcp` (`LSM_BIN_DIR` overrides the directory), staging it through a private `mktemp -d` first. The engine refuses to publish out of, or into, a group- or world-writable directory, and refuses when the file it replaces is group-writable — `(st_mode & 0022) != 0` on the source directory, the install directory and the target entry (`spine/src/cli/activation_transaction.c`). A `002` umask makes every directory `0775`, so this step also removes group and other write from `$BIN_DIR` and from an existing binary there, announcing each change as it makes it.
 3. Makes sure that directory is on `PATH`, appending to `~/.bashrc` under its own comment marker only if nothing already provides it.
 4. Turns on `auto_index`.
 5. Starts a permanent daemon, so the hooks are not silent on a fresh machine. A hook connects to a daemon but never spawns one, and gives up after 250 ms, so without this step the first session on a fresh machine gets quiet hooks until some later session's own MCP server warms one.
@@ -103,6 +105,32 @@ Every script in the plugin resolves the engine through one shared function, `lsm
 **A set-but-invalid `LOGAN_SPINE_BIN` is an error, not a reason to look elsewhere.** If the variable is set and the path is not executable, resolution fails and the caller takes its not-found route — the hooks go silent, `spine-launch.sh` exits 127. It never quietly falls through to a different binary than the one you named, because an override whose failures are invisible cannot be tested or trusted.
 
 Set it to point at a build under `spine/build/c/logan-spine-mcp` when you want a session to exercise a binary you just built without installing it.
+
+## The graph visualizer
+
+The engine ships a browser view of the graph. It is **off by default and not present at all** unless you asked for it at build time, because its assets are compiled into the binary rather than loaded from disk.
+
+Two switches, and they are different things:
+
+| Switch | When | What it decides |
+|---|---|---|
+| `install.sh --with-ui` | build time | whether the visualizer exists in the binary at all. Needs `node` and `npm`; adds an `npm ci` and a `vite build`. |
+| `scripts/visualizer.sh on` / `off` | any time after | whether the listener is running. |
+
+```bash
+plugins/logan-spine/scripts/visualizer.sh status      # exit 0 on, 1 off
+plugins/logan-spine/scripts/visualizer.sh on          # -> http://127.0.0.1:9749
+plugins/logan-spine/scripts/visualizer.sh on --port 9800
+plugins/logan-spine/scripts/visualizer.sh off
+```
+
+**It is a machine-wide listener, not a per-repository one.** The visualizer belongs to the one per-account daemon, so turning it on turns it on for every project that daemon has indexed, on a single port. The script lives in this repository because that is where you run it from — not because the setting is scoped to a repository. `status` reports the machine's state.
+
+It binds `127.0.0.1` only (`spine/src/ui/http_server.c`), so nothing is exposed off the box.
+
+Running `visualizer.sh on` against a binary built without `--with-ui` exits 2 and tells you to re-install with the flag. The engine's own refusal names an upstream `make` target, which is the wrong instruction for a binary that came from this plugin, so the script translates it.
+
+Verified 2026-08-24 on this machine: with a `--with-ui` build, `on` then `curl http://127.0.0.1:9749/` returns HTTP 200 and the app titled "Logan Spine — Graph"; `off` returns connection refused and `status` exits 1; `on` again returns 200. `GET /api/repo-info?project=home-ubuntu-projects-org-logan-mem` returned this repository's real `root_path` and current branch.
 
 ## When the graph updates, and what an autonomous run should expect
 
@@ -177,4 +205,4 @@ To restore the old global footprint at any time:
 plugins/logan-spine/tests/run.sh
 ```
 
-231 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.
+265 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.

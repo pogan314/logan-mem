@@ -499,7 +499,37 @@ check "$(grep -c '^\.claude\.json: skipped, because settings\.json could not be 
 # A plain copy-and-rename leaves a resident daemon of the previous build running from its open inode, and the engine then refuses every NEW process whose build differs (spine/src/daemon/version_cohort.h). Measured 2026-08-23: sixteen hours of refusals and 63 records in daemon-conflicts.ndjson. The engine's own `install` drains sessions and takes the mutation lock first, so the script must call it rather than move the file itself.
 INS="$PLUGIN/scripts/install.sh"
 check "$(grep -c 'logan-spine-mcp" install' "$INS")" "1" "install.sh publishes the binary through the engine's own install subcommand"
-check "$(grep -cE '^(cp|mv) .*logan-spine-mcp' "$INS")" "0" "install.sh no longer swaps the binary with a bare cp or mv"
+# The invariant is about the PUBLISHED path, not about cp existing anywhere in the script: staging the freshly built binary into a private temp dir is itself done with cp, and is required (see below). What must never happen is a cp or mv whose destination is the installed binary.
+check "$(grep -cE '^(cp|mv) .*"\$BIN_DIR' "$INS")" "0" "install.sh never writes the installed binary with a bare cp or mv"
+
+# The engine refuses to publish out of, or into, a group- or world-writable directory, and refuses when the file it replaces is group-writable — `(st_mode & 0022) != 0` on the source dir, the install dir and the target entry (spine/src/cli/activation_transaction.c). A 002 umask makes every directory 0775, so on 2026-08-24 the install failed three times in a row against this machine: first on $BIN_DIR, then on the existing binary, then on the repo's own spine/build/c as the SOURCE. Staging through `mktemp -d`, which is 0700, is what satisfies the source side without chmod-ing the repo's build tree or fighting the machine's umask.
+check "$(grep -c 'STAGE="$(mktemp -d)"' "$INS")" "1" "install.sh stages the binary in a private temp dir before publishing"
+check "$(grep -c 'chmod 700 "$STAGE"' "$INS")" "1" "the staging directory is made owner-private"
+check "$(grep -cE '^"\$STAGE/logan-spine-mcp" install' "$INS")" "1" "the engine install runs from the private stage, not from the repo build tree"
+check "$(grep -c 'rm -rf "$STAGE"' "$INS")" "1" "the staging directory is cleaned up"
+check "$(grep -c 'chmod go-w "$BIN_DIR"' "$INS")" "1" "install.sh tightens a group-writable install directory rather than failing on it"
+
+# stat prints octal digits and bash reads a bare 755 as decimal, so the permission guard must parse base 8. Written as `& 22` it evaluated 755 to 18 and 700 to 20 — both nonzero — so it fired on directories that were already correct, and its output claimed to be fixing something that was not broken. Both guards, not just one.
+check "$(grep -c "8#\$(stat -c '%a'" "$INS")" "2" "both permission guards parse the mode as octal"
+check "$(grep -cE "stat -c '%a'[^)]*\) & 22 " "$INS")" "0" "neither guard compares a decimal-parsed mode"
+# The arithmetic itself, so this is a behavioural check and not only a grep for the text.
+check "$(( 8#755 & 8#22 ))" "0" "an owner-private 0755 directory is not flagged"
+check "$(( 8#700 & 8#22 ))" "0" "an owner-private 0700 directory is not flagged"
+check "$(( 8#2755 & 8#22 ))" "0" "a setgid 02755 directory is not flagged on its mode bits alone"
+[ "$(( 8#775 & 8#22 ))" -ne 0 ]; check "$?" "0" "a group-writable 0775 directory IS flagged"
+[ "$(( 8#757 & 8#22 ))" -ne 0 ]; check "$?" "0" "a world-writable 0757 directory IS flagged"
+check "$(grep -c 'chmod go-w "$BIN_DIR/logan-spine-mcp"' "$INS")" "1" "install.sh tightens a group-writable existing binary for the same reason"
+
+# The visualizer is compiled INTO the binary, so it is a build-time choice, not something a config flag can turn on later. Off by default: embedding it needs node and npm and adds an npm ci plus a vite build.
+check "$(grep -cE '^ +--with-ui\) WITH_UI=1 ;;$' "$INS")" "1" "install.sh accepts --with-ui"
+# Behavioural, not a grep: an unknown flag must stop the script before it spends ten minutes building, and must not be silently absorbed into the build.
+"$INS" --bogus >/dev/null 2>&1; check "$?" "2" "install.sh rejects an unknown option with exit 2 instead of building"
+out="$("$INS" --bogus 2>&1 >/dev/null)"
+case "$out" in (*"unknown option"*) r=0 ;; (*) r=1 ;; esac
+check "$r" "0" "install.sh names the unknown option on stderr"
+check "$(grep -c 'WITH_UI="${LSM_WITH_UI:-}"' "$INS")" "1" "LSM_WITH_UI is honoured as well as the flag"
+check "$(grep -c 'build.sh" --with-ui' "$INS")" "1" "install.sh passes --with-ui through to the engine build"
+check "$(awk '/if \[ -n "\$WITH_UI" \]/{f=1} f&&/--with-ui --version/{print "yes"; exit}' "$INS")" "yes" "the UI build is taken only when --with-ui was asked for"
 
 # --skip-config is what keeps that call compatible with this version. Without it the engine recreates the entire version-01 global footprint that unregister-global.sh exists to remove. Verified 2026-08-24 by diffing two --dry-run runs: without the flag the plan names three agent files, the ~/.claude.json mcp entry and four hook events; with it, none of them.
 # Anchored to the command line itself. Counting mentions across the file would also match the comment above the call that explains why the flag is there, which is prose rather than behaviour.
@@ -513,5 +543,77 @@ check "$(awk '/config set auto_index/{f=1} f&&/marketplace add/{print "after"; e
 check "$(grep -cE '^if ! "\$BIN_DIR/logan-spine-mcp" daemon start; then$' "$INS")" "1" "install.sh starts a permanent daemon so the hooks are not silent on a fresh machine"
 check "$(grep -c 'warning: could not start the daemon' "$INS")" "1" "a failed daemon start warns rather than aborting the install under set -e"
 check "$(awk '/daemon start; then/{f=1} f&&/marketplace add/{print "after"; exit}' "$INS")" "after" "the marketplace registration is still reached after the daemon step"
+
+# ---------- visualizer ----------
+VIS="$PLUGIN/scripts/visualizer.sh"
+[ -x "$VIS" ]; check "$?" "0" "visualizer.sh is executable"
+bash -n "$VIS" >/dev/null 2>&1; check "$?" "0" "visualizer.sh parses"
+
+# Fails the same fail-closed way every other script does when there is no engine.
+LOGAN_SPINE_BIN="$tmp/nope" "$VIS" status >/dev/null 2>&1; check "$?" "2" "visualizer.sh exits 2 when the engine binary is missing"
+out="$(LOGAN_SPINE_BIN="$tmp/nope" "$VIS" status 2>&1 >/dev/null)"
+case "$out" in (*"engine binary not found"*) r=0 ;; (*) r=1 ;; esac
+check "$r" "0" "visualizer.sh names the missing binary on stderr"
+
+# An unknown subcommand is a usage error, not a silent no-op that looks like success.
+LOGAN_SPINE_BIN="$tmp/stub" "$VIS" wat >/dev/null 2>&1; check "$?" "2" "visualizer.sh rejects an unknown action"
+LOGAN_SPINE_BIN="$tmp/stub" "$VIS" on --port abc >/dev/null 2>&1; check "$?" "2" "visualizer.sh rejects a non-numeric --port"
+
+# `status` reads the two persisted values out of `config list` and must not contact the daemon, so it still answers on a machine with none. This stub is what `config list` looks like when the UI is on.
+vstub="$tmp/vstub"
+cat > "$vstub" <<'STUB'
+#!/bin/sh
+if [ "$1" = "config" ] && [ "$2" = "list" ]; then
+  echo "  ui_enabled                = true"
+  echo "  ui_port                   = 9749"
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$vstub"
+out="$(LOGAN_SPINE_BIN="$vstub" "$VIS" status 2>/dev/null)"; rc=$?
+check "$rc" "0" "visualizer.sh status exits 0 when the UI is enabled"
+case "$out" in (*"http://127.0.0.1:9749"*) r=0 ;; (*) r=1 ;; esac
+check "$r" "0" "visualizer.sh status prints the URL when enabled"
+
+voff="$tmp/voff"
+cat > "$voff" <<'STUB'
+#!/bin/sh
+if [ "$1" = "config" ] && [ "$2" = "list" ]; then
+  echo "  ui_enabled                = false"
+  echo "  ui_port                   = 9749"
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$voff"
+LOGAN_SPINE_BIN="$voff" "$VIS" status >/dev/null 2>&1
+check "$?" "1" "visualizer.sh status exits 1 when the UI is disabled"
+
+# A binary with no UI compiled in refuses with an upstream make target in the message, which is the wrong instruction for anyone who installed through this plugin. The script must translate it.
+noui="$tmp/noui"
+cat > "$noui" <<'STUB'
+#!/bin/sh
+if [ "$1" = "config" ] && [ "$2" = "list" ]; then echo "  ui_enabled                = false"; exit 0; fi
+echo "logan-spine-mcp: --ui requested, but this binary was built without UI support; rebuild with \`make -f Makefile.lsm lsm-with-ui\`."
+exit 0
+STUB
+chmod +x "$noui"
+out="$(LOGAN_SPINE_BIN="$noui" "$VIS" on 2>&1 >/dev/null)"; rc=$?
+check "$rc" "2" "visualizer.sh exits 2 when the binary has no visualizer embedded"
+case "$out" in (*"install.sh --with-ui"*) r=0 ;; (*) r=1 ;; esac
+check "$r" "0" "visualizer.sh points at install.sh --with-ui rather than the upstream make target"
+
+# The daemon inherits stdout, so capturing `--ui=true` with $( ) blocks until the daemon exits. It must go through a file instead.
+check "$(grep -c 'log="$(mktemp)"' "$VIS")" "1" "visualizer.sh captures engine output through a file, not a pipe a daemon can hold open"
+
+# ---------- the graph skill's contract with the engine ----------
+SK="$PLUGIN/skills/graph/SKILL.md"
+# `project` is required on every tool but list_projects, and the skill's examples omit it for brevity. Measured 2026-08-24: search_graph and detect_changes without it return {"error":"missing required argument: project"}. If the skill does not say so, an agent copying an example burns a call on the error every time.
+grep -q 'requires a `project` argument' "$SK"; check "$?" "0" "the skill states that project is required on every tool but list_projects"
+
+# These two argument names are the engine's, and a wrong one fails the call outright. Verified against tools/list on 2026-08-24: trace_path requires function_name, get_code_snippet requires qualified_name.
+grep -q 'trace_path(function_name=' "$SK"; check "$?" "0" "the skill uses trace_path's real argument name"
+grep -q 'get_code_snippet(qualified_name=' "$SK"; check "$?" "0" "the skill uses get_code_snippet's real argument name"
 
 exit $fail
