@@ -101,6 +101,18 @@ Every script in the plugin resolves the engine through one shared function, `lsm
 
 Set it to point at a build under `spine/build/c/logan-spine-mcp` when you want a session to exercise a binary you just built without installing it.
 
+## When the graph updates, and what an autonomous run should expect
+
+Measured 2026-08-24 in a repository created fresh for the test.
+
+**A repository is not indexed until something indexes it.** `auto_index` builds an index when a session connects to a project that has none *and* the engine's file-count scan passes, but on a brand-new repository the first session's `SessionStart` context reports `no indexed graph project matched this working directory. Run index_repository before structural exploration` — which is correct and actionable. One `index_repository` call builds it.
+
+**After that, changes are picked up automatically while a session is connected.** The daemon runs one file watcher that polls each *watched* project every 5 s, rising with repository size to a 60 s ceiling, comparing git HEAD and a dirty signature — so it notices uncommitted saves as well as commits, and re-indexes incrementally. Measured: a commit made while a session was connected produced `watcher.changed` then `index.supervisor.reap` in the daemon log, and the new symbol was queryable immediately after.
+
+**A project is only watched while at least one session holds a live connection to it.** The watch is registered after a session's first request and released when the last subscriber disconnects. So a commit made when nothing is connected is not picked up on its own; the next session's activity is what brings the index forward.
+
+**What that means for an autonomous run.** The controlling session stays connected for the whole run, so its project is watched throughout: a change one subagent commits is visible to the next subagent within seconds, with no explicit re-index. Measured directly — a symbol added during a run was found by a query about 6 s later. A subagent working in a **different** repository, or in a git worktree, gets a different index: the project key is the canonicalised absolute path with non-alphanumerics mapped to dashes and never consults git, so a worktree is always its own project with its own database, and parallel worktrees never contend.
+
 ## Development loop
 
 When this repository is registered as a marketplace with a `directory` source — which is what `scripts/install.sh` does — **Claude Code loads the plugin from this tree, not from a cache**, so an edit is live in the next session with no version bump. Measured 2026-08-24 from a session's `--debug-file`:
