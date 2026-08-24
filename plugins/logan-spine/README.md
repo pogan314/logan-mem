@@ -12,6 +12,7 @@ It is enabled **per repository**. A machine that has it installed gets nothing u
 | Agents | 3 | `logan-spine:scout` (Tier 1, provisional), `logan-spine:verify` (Tier 2, the default), `logan-spine:auditor` (Tier 3, exhaustive). |
 | Skill | 1 | `graph`, addressed as `/logan-spine:graph`. The tool-choice matrix and the query syntax. |
 | Hooks | 5 | Five handler entries across four events — see below. |
+| Scripts | 4 | `install.sh` (per-machine install), `visualizer.sh` (graph visualizer on/off), `unregister-global.sh` (remove the pre-plugin footprint), `docstring-coverage.sh`. |
 
 The five hook handlers, as declared in `hooks/hooks.json`:
 
@@ -27,7 +28,7 @@ The five hook handlers, as declared in `hooks/hooks.json`:
 
 ## The engine binary installs separately, and the plugin is inert without it
 
-The plugin ships no engine. The engine is `logan-spine-mcp`, a 280 MiB native binary that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory — it is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
+The plugin ships no engine. The engine is `logan-spine-mcp`, a native binary of about 280 MiB (281 MiB when built `--with-ui`) that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory. It is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
 
 So plugin and binary are two installs, and an enabled plugin with no binary does nothing:
 
@@ -204,4 +205,4 @@ To restore the old global footprint at any time:
 plugins/logan-spine/tests/run.sh
 ```
 
-263 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.
+265 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.

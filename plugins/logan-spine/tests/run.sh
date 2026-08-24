@@ -522,6 +522,11 @@ check "$(grep -c 'chmod go-w "$BIN_DIR/logan-spine-mcp"' "$INS")" "1" "install.s
 
 # The visualizer is compiled INTO the binary, so it is a build-time choice, not something a config flag can turn on later. Off by default: embedding it needs node and npm and adds an npm ci plus a vite build.
 check "$(grep -cE '^ +--with-ui\) WITH_UI=1 ;;$' "$INS")" "1" "install.sh accepts --with-ui"
+# Behavioural, not a grep: an unknown flag must stop the script before it spends ten minutes building, and must not be silently absorbed into the build.
+"$INS" --bogus >/dev/null 2>&1; check "$?" "2" "install.sh rejects an unknown option with exit 2 instead of building"
+out="$("$INS" --bogus 2>&1 >/dev/null)"
+case "$out" in (*"unknown option"*) r=0 ;; (*) r=1 ;; esac
+check "$r" "0" "install.sh names the unknown option on stderr"
 check "$(grep -c 'WITH_UI="${LSM_WITH_UI:-}"' "$INS")" "1" "LSM_WITH_UI is honoured as well as the flag"
 check "$(grep -c 'build.sh" --with-ui' "$INS")" "1" "install.sh passes --with-ui through to the engine build"
 check "$(awk '/if \[ -n "\$WITH_UI" \]/{f=1} f&&/--with-ui --version/{print "yes"; exit}' "$INS")" "yes" "the UI build is taken only when --with-ui was asked for"
