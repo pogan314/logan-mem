@@ -54,11 +54,12 @@ chmod 700 "$STAGE"
 cp "$ROOT/spine/build/c/logan-spine-mcp" "$STAGE/logan-spine-mcp"
 chmod 755 "$STAGE/logan-spine-mcp"
 # The destination side: tighten only what the engine requires, and say so, because silently changing permissions on a directory outside the repo would be worse than the failure it prevents.
-if [ -d "$BIN_DIR" ] && [ "$(( $(stat -c '%a' "$BIN_DIR" 2>/dev/null || echo 0) & 22 ))" -ne 0 ]; then
+# `8#` matters: stat prints octal DIGITS, and bash reads a bare 755 as decimal seven-hundred-fifty-five, so `755 & 22` is 18 rather than 0 and the branch fires on an already-safe directory. Parsed base 8, 0755 and 0700 correctly give 0 and only a group/other-writable mode gives nonzero.
+if [ -d "$BIN_DIR" ] && [ "$(( 8#$(stat -c '%a' "$BIN_DIR" 2>/dev/null || echo 0) & 8#22 ))" -ne 0 ]; then
   echo "  note: removing group/other write from $BIN_DIR (the engine refuses to publish into a shared-writable directory)"
   chmod go-w "$BIN_DIR"
 fi
-if [ -f "$BIN_DIR/logan-spine-mcp" ] && [ "$(( $(stat -c '%a' "$BIN_DIR/logan-spine-mcp" 2>/dev/null || echo 0) & 22 ))" -ne 0 ]; then
+if [ -f "$BIN_DIR/logan-spine-mcp" ] && [ "$(( 8#$(stat -c '%a' "$BIN_DIR/logan-spine-mcp" 2>/dev/null || echo 0) & 8#22 ))" -ne 0 ]; then
   echo "  note: removing group/other write from the existing $BIN_DIR/logan-spine-mcp for the same reason"
   chmod go-w "$BIN_DIR/logan-spine-mcp"
 fi

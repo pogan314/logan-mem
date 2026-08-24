@@ -7,6 +7,8 @@ description: "Use the codebase knowledge graph for structural code queries. Trig
 
 Graph tools return precise structural results in ~500 tokens vs ~80K for grep.
 
+**Every tool except `list_projects` requires a `project` argument.** The examples below omit it for brevity; a real call must carry it, or it fails with `missing required argument: project`. The name is the graph project key, not the folder name — the `SessionStart` context line states it (`graph project="..."`), and `list_projects` returns it alongside each `root_path`. So `search_graph(name_pattern="...")` below is really `search_graph(project="<key>", name_pattern="...")`.
+
 ## Quick Decision Matrix
 
 | Question | Tool call |

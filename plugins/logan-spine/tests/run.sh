@@ -508,6 +508,16 @@ check "$(grep -c 'chmod 700 "$STAGE"' "$INS")" "1" "the staging directory is mad
 check "$(grep -cE '^"\$STAGE/logan-spine-mcp" install' "$INS")" "1" "the engine install runs from the private stage, not from the repo build tree"
 check "$(grep -c 'rm -rf "$STAGE"' "$INS")" "1" "the staging directory is cleaned up"
 check "$(grep -c 'chmod go-w "$BIN_DIR"' "$INS")" "1" "install.sh tightens a group-writable install directory rather than failing on it"
+
+# stat prints octal digits and bash reads a bare 755 as decimal, so the permission guard must parse base 8. Written as `& 22` it evaluated 755 to 18 and 700 to 20 — both nonzero — so it fired on directories that were already correct, and its output claimed to be fixing something that was not broken. Both guards, not just one.
+check "$(grep -c "8#\$(stat -c '%a'" "$INS")" "2" "both permission guards parse the mode as octal"
+check "$(grep -cE "stat -c '%a'[^)]*\) & 22 " "$INS")" "0" "neither guard compares a decimal-parsed mode"
+# The arithmetic itself, so this is a behavioural check and not only a grep for the text.
+check "$(( 8#755 & 8#22 ))" "0" "an owner-private 0755 directory is not flagged"
+check "$(( 8#700 & 8#22 ))" "0" "an owner-private 0700 directory is not flagged"
+check "$(( 8#2755 & 8#22 ))" "0" "a setgid 02755 directory is not flagged on its mode bits alone"
+[ "$(( 8#775 & 8#22 ))" -ne 0 ]; check "$?" "0" "a group-writable 0775 directory IS flagged"
+[ "$(( 8#757 & 8#22 ))" -ne 0 ]; check "$?" "0" "a world-writable 0757 directory IS flagged"
 check "$(grep -c 'chmod go-w "$BIN_DIR/logan-spine-mcp"' "$INS")" "1" "install.sh tightens a group-writable existing binary for the same reason"
 
 # The visualizer is compiled INTO the binary, so it is a build-time choice, not something a config flag can turn on later. Off by default: embedding it needs node and npm and adds an npm ci plus a vite build.
@@ -591,5 +601,14 @@ check "$r" "0" "visualizer.sh points at install.sh --with-ui rather than the ups
 
 # The daemon inherits stdout, so capturing `--ui=true` with $( ) blocks until the daemon exits. It must go through a file instead.
 check "$(grep -c 'log="$(mktemp)"' "$VIS")" "1" "visualizer.sh captures engine output through a file, not a pipe a daemon can hold open"
+
+# ---------- the graph skill's contract with the engine ----------
+SK="$PLUGIN/skills/graph/SKILL.md"
+# `project` is required on every tool but list_projects, and the skill's examples omit it for brevity. Measured 2026-08-24: search_graph and detect_changes without it return {"error":"missing required argument: project"}. If the skill does not say so, an agent copying an example burns a call on the error every time.
+grep -q 'requires a `project` argument' "$SK"; check "$?" "0" "the skill states that project is required on every tool but list_projects"
+
+# These two argument names are the engine's, and a wrong one fails the call outright. Verified against tools/list on 2026-08-24: trace_path requires function_name, get_code_snippet requires qualified_name.
+grep -q 'trace_path(function_name=' "$SK"; check "$?" "0" "the skill uses trace_path's real argument name"
+grep -q 'get_code_snippet(qualified_name=' "$SK"; check "$?" "0" "the skill uses get_code_snippet's real argument name"
 
 exit $fail
