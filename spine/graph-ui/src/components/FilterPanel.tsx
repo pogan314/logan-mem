@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { colorForLabel, STATUS_LEGEND } from "../lib/colors";
 import type { GraphData } from "../lib/types";
 
@@ -102,19 +103,19 @@ export function FilterPanel({
   const deadCount = statusCounts.get("dead") ?? 0;
 
   return (
-    <div className="flex flex-col shrink-0 max-h-[45%] border-b border-border/40">
-      {/* Header row — always visible */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-        <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-widest">
-          Filters
-        </span>
-        <div className="flex items-center gap-2">
-          <button onClick={onEnableAll} className="text-[10px] text-primary/70 hover:text-primary transition-colors">All</button>
-          <span className="text-foreground/15">|</span>
-          <button onClick={onDisableAll} className="text-[10px] text-primary/70 hover:text-primary transition-colors">None</button>
-        </div>
-      </div>
-
+    <>
+      <CollapsibleSection
+        id="filters"
+        title="Filters"
+        defaultHeight={220}
+        right={
+          <>
+            <button onClick={onEnableAll} className="text-[10px] text-primary/70 hover:text-primary transition-colors">All</button>
+            <span className="text-foreground/15">|</span>
+            <button onClick={onDisableAll} className="text-[10px] text-primary/70 hover:text-primary transition-colors">None</button>
+          </>
+        }
+      >
       {/* Scrollable filter groups */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="px-4 pb-3 space-y-3">
@@ -169,21 +170,21 @@ export function FilterPanel({
           )}
         </div>
       </ScrollArea>
+      </CollapsibleSection>
 
-      {/* Missed skeleton (#963): white satellite cluster of files the indexer
-          could not fully cover, shown beside the code galaxy. Click it to
-          focus; click the code galaxy to come back. */}
-      <div className="px-4 pt-2 border-t border-border/30 space-y-2 shrink-0">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-foreground/30 uppercase tracking-widest">
-            Missed files
+      {/* Missed skeleton (#963): white satellite cluster of files the indexer could not fully cover, shown beside the code galaxy. Click it to focus; click the code galaxy to come back. */}
+      <CollapsibleSection
+        id="missed"
+        title="Missed files"
+        defaultHeight={120}
+        right={missedCount > 0 ? (
+          <span className="text-[10px] text-foreground/50 tabular-nums">
+            {missedCount.toLocaleString()} files
           </span>
-          {missedCount > 0 && (
-            <span className="text-[10px] text-foreground/50 tabular-nums">
-              {missedCount.toLocaleString()} files
-            </span>
-          )}
-        </div>
+        ) : undefined}
+      >
+      <ScrollArea className="flex-1 min-h-0">
+      <div className="px-4 pb-2 space-y-2">
         <CheckRow
           checked={missedView}
           onToggle={onToggleMissedView}
@@ -195,18 +196,22 @@ export function FilterPanel({
             : "No known misses (best-effort — not a completeness guarantee)."}
         </p>
       </div>
+      </ScrollArea>
+      </CollapsibleSection>
 
       {/* Dead-code view */}
-      <div className="px-4 pt-2 border-t border-border/30 space-y-2 shrink-0">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-foreground/30 uppercase tracking-widest">
-            Dead code
-          </span>
+      <CollapsibleSection
+        id="deadcode"
+        title="Dead code"
+        defaultHeight={150}
+        right={
           <span className="text-[10px] text-red-400/80 tabular-nums">
             {deadCount.toLocaleString()} dead
           </span>
-        </div>
-
+        }
+      >
+      <ScrollArea className="flex-1 min-h-0">
+      <div className="px-4 pb-2 space-y-2">
         <CheckRow
           checked={deadCodeView}
           onToggle={onToggleDeadCodeView}
@@ -242,8 +247,10 @@ export function FilterPanel({
           </div>
         )}
       </div>
+      </ScrollArea>
+      </CollapsibleSection>
 
-      {/* Display options — pinned footer */}
+      {/* Display options — pinned footer, never collapsible: it is one toggle and hiding it behind a chevron costs more than it saves. */}
       <div className="px-4 py-2.5 border-t border-border/20 shrink-0">
         <button
           onClick={onToggleShowLabels}
@@ -259,6 +266,6 @@ export function FilterPanel({
           Show labels
         </button>
       </div>
-    </div>
+    </>
   );
 }

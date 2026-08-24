@@ -392,7 +392,7 @@ export function GraphTab({ project }: GraphTabProps) {
     <div className="h-full flex">
       {/* Left sidebar — resizable */}
       <div
-        className="border-r border-border/30 flex flex-col h-full bg-[#0b1920]/90 backdrop-blur-md shrink-0"
+        className="border-r border-border/30 flex flex-col h-full min-h-0 overflow-hidden bg-[#0b1920]/90 backdrop-blur-md shrink-0"
         style={{ width: leftWidth }}
       >
         <FilterPanel
