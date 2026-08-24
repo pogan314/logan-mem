@@ -54,20 +54,26 @@ BACKUPS=0
 EDITED=""
 
 # Rewrite FILE through a jq filter, via a temporary, leaving FILE untouched if jq fails. A direct redirect would truncate FILE before jq ran. Any arguments after the filter are passed to jq.
+# The backup and the scratch temp file live next to FILE itself, but the actual write lands on FILE's resolved real target (readlink -f). Plain `mv onto $file` unlinks whatever is AT that path: if FILE is a symlink into a dotfiles tree, that replaces the link with a plain file and never touches the real file the link pointed at, while still reporting the edit as done. Resolving first and writing onto the target means a symlinked FILE keeps being a symlink, and the content that actually changes is the file it points at.
 rewrite() {
   local file="$1" filter="$2"; shift 2
+  local target; target="$(readlink -f "$file")" || return 1
   local backup="$file.logan-spine-backup-$STAMP"
-  cp "$file" "$backup" || return 1
+  cp "$target" "$backup" || return 1
   BACKUPS=$((BACKUPS + 1))
   if jq "$@" "$filter" "$backup" > "$file.logan-spine-new"; then
-    mv "$file.logan-spine-new" "$file"
-    EDITED="$EDITED $file"
-    say "  backup: $backup"
-    say "  note: jq reformats the whole file; the backup is the byte-exact original"
-    return 0
+    if mv "$file.logan-spine-new" "$target"; then
+      EDITED="$EDITED $target"
+      say "  backup: $backup"
+      say "  note: jq reformats the whole file; the backup is the byte-exact original"
+      return 0
+    fi
+    rm -f "$file.logan-spine-new"
+    say "  mv failed; $target left unchanged. Backup: $backup"
+    return 1
   fi
   rm -f "$file.logan-spine-new"
-  say "  jq failed; $file left unchanged. Backup: $backup"
+  say "  jq failed; $target left unchanged. Backup: $backup"
   return 1
 }
 

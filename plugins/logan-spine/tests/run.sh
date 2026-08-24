@@ -457,6 +457,44 @@ F11="$tmp/fx11"; mkdir -p "$F11"
 out="$("$UG" --home "$F11" --yes 2>&1)"; rc=$?
 check "$rc/$(printf '%s\n' "$out" | grep -c '^settings\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^\.claude\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^Done\.$')" "0/1/1/1" "a valid --home with an empty tree names both absent files and still finishes"
 
+# ---------- unregister-global: a symlinked settings.json is not destroyed ----------
+# Reproduces the reviewer's finding: `mv "$file.logan-spine-new" "$file"` unlinks whatever is AT $file. When $file is a symlink into a dotfiles tree, that replaces the link itself with a plain file, and the real file the link pointed at is never touched — while the run still reports the edit and names a backup. The fix must write through the resolved real target instead, so the link survives and the real file's content changes.
+FSA="$tmp/fxsymA"; make_fixture "$FSA"
+mkdir -p "$FSA/dotfiles"
+mv "$FSA/.claude/settings.json" "$FSA/dotfiles/settings.json"
+ln -s "$FSA/dotfiles/settings.json" "$FSA/.claude/settings.json"
+before_symA="$(md5sum < "$FSA/dotfiles/settings.json")"
+"$UG" --home "$FSA" --yes > "$tmp/ugsymA" 2>&1; rc=$?
+check "$rc" "0" "a --yes run against a symlinked settings.json exits 0"
+check "$(jq '[.hooks[]?[]?.hooks[]? | select((.command // "") | test("lsm-"))] | length' "$FSA/dotfiles/settings.json")" "0" "the real file in the dotfiles tree has its handlers removed"
+[ -L "$FSA/.claude/settings.json" ]; check "$?" "0" "the path that was a symlink is still a symlink after the run"
+check "$(readlink "$FSA/.claude/settings.json")" "$FSA/dotfiles/settings.json" "the symlink still points at the same real file"
+check "$(ls "$FSA/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "a backup was written next to the symlink"
+backupA="$(ls "$FSA/.claude/settings.json".logan-spine-backup-* 2>/dev/null | head -1)"
+[ -n "$backupA" ] && [ -f "$backupA" ] && [ ! -L "$backupA" ]; check "$?" "0" "the backup is a plain file, not itself a symlink"
+check "$(md5sum < "$backupA" 2>/dev/null)" "$before_symA" "the backup holds the real target's original content, byte-exact"
+
+# ---------- unregister-global: a failed rewrite of a symlinked file is reported honestly ----------
+# The real target's directory is made read-only after capturing its original content, so cp (writing the backup next to the symlink, in a writable directory) and jq (writing the scratch temp file, also next to the symlink) both succeed, and only the final write onto the real target — now genuinely relocated there by the fix — fails. This is the only construction that can make that specific write fail without cp failing first: cp and the scratch temp file share $file's directory, never the target's, so this exercises the fix's own new code path rather than a pre-existing one.
+FSB="$tmp/fxsymB"; make_fixture "$FSB"
+mkdir -p "$FSB/dotfiles"
+mv "$FSB/.claude/settings.json" "$FSB/dotfiles/settings.json"
+ln -s "$FSB/dotfiles/settings.json" "$FSB/.claude/settings.json"
+before_symB="$(md5sum < "$FSB/dotfiles/settings.json")"
+chmod a-w "$FSB/dotfiles"
+"$UG" --home "$FSB" --yes > "$tmp/ugsymB" 2>&1; rc=$?
+chmod u+w "$FSB/dotfiles"
+check "$rc" "1" "a write blocked by a read-only real-target directory makes the whole run exit non-zero"
+[ -L "$FSB/.claude/settings.json" ]; check "$?" "0" "the symlink survives a failed write onto its target"
+check "$(md5sum < "$FSB/dotfiles/settings.json")" "$before_symB" "a failed write leaves the real target byte-identical"
+check "$(grep -ci 'mv failed' "$tmp/ugsymB")" "1" "the failure is reported by name, not folded into the jq-failed message"
+check "$(grep -c '^No configuration file was changed\.$' "$tmp/ugsymB")" "1" "a failed write is not counted as an edit"
+check "$(grep -c '^Already rewritten' "$tmp/ugsymB")" "0" "a failed write is never listed as already rewritten"
+check "$(grep -ci 'restore from the backup' "$tmp/ugsymB")" "1" "the run still points the operator at the backup cp already wrote before the write failed"
+check "$(ls "$FSB/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')" "1" "the backup written before the failed write is left on disk"
+check "$(grep -c '^\.claude\.json: skipped, because settings\.json could not be edited$' "$tmp/ugsymB")" "1" ".claude.json is skipped after the settings.json write failure"
+[ ! -e "$FSB/.claude/settings.json.logan-spine-new" ]; check "$?" "0" "the failed write's scratch temp file is cleaned up, not left behind"
+
 # ---------- install.sh publishes the binary through the engine, not a bare copy ----------
 # A plain copy-and-rename leaves a resident daemon of the previous build running from its open inode, and the engine then refuses every NEW process whose build differs (spine/src/daemon/version_cohort.h). Measured 2026-08-23: sixteen hours of refusals and 63 records in daemon-conflicts.ndjson. The engine's own `install` drains sessions and takes the mutation lock first, so the script must call it rather than move the file itself.
 INS="$PLUGIN/scripts/install.sh"
