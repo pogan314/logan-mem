@@ -35,12 +35,12 @@ The spec's Verified table row 5 carries this. The server serves a real graph cal
 
 What would settle it: dispatch each of the three agents with a task that forces a graph tool call, and capture the tool-use records.
 
-## 4. Machine state, not branch content: three unexplained losses from `~/.claude/settings.json`
+## 4. Machine state, not branch content: two unexplained losses from `~/.claude/settings.json`
 
 Raised with the owner rather than fixed, because it is not this repository's code.
 
 - 2026-08-22: all seven `lsm-*` hook entries went missing. Recorded in `CLAUDE.md`. A controlled replay did not reproduce it.
 - 2026-08-23: the whole file reverted to a snapshot from six hours earlier, losing five tmux status handlers written in a 21-minute window. Established: the current file was byte-identical to the earlier snapshot except for four model and effort lines; the file was replaced with a new inode; no Claude session's Edit or Write tool did it, across 414 transcripts; no cron job, systemd timer, sync agent or script on the machine does it. Four open upstream Claude Code issues describe the same defect class. **The cause is not established.** An `auditctl` watch is armed on the file.
-- Observed 2026-08-24: `enabledPlugins` lists six plugins where a harvest on 2026-08-23 recorded eight. Uninvestigated.
+- ~~Observed 2026-08-24: `enabledPlugins` lists six plugins where a harvest on 2026-08-23 recorded eight.~~ **Not a loss — investigated 2026-08-24 and withdrawn.** Six independent snapshots of the file spanning 2026-08-23 10:55 to 2026-08-24 09:01 (four in `~/.claude/file-history/`, plus the `pre-tmux-restore` and `logan-spine-backup` backups) all hold exactly **six** entries, and the same six names in every one: `claude-code-setup`, `claude-md-management`, `frontend-design`, `typescript-lsp` and `superpowers` from `claude-plugins-official`, and `global-plugin` from `global-plugins`. The figure of eight appears once, in a subagent's prose at `task-2-report.md:62`, and is not supported by any snapshot. It was a miscount, not a disappearance.
 
 The durable mitigation is the one this version delivers: hooks that live in a plugin's own `hooks/hooks.json` are not part of the user settings object, so a whole-file rewrite of `settings.json` cannot reach them.
