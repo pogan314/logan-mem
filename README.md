@@ -29,9 +29,11 @@ Two halves, at two different scopes.
 
 Cold build is roughly ten minutes without ccache. The script runs six steps: build the engine; publish `logan-spine-mcp` to `~/.local/bin` through the engine's own `install --force --skip-config` (so a resident daemon is drained rather than collided with, and no global Claude Code config gets written); put that directory on `PATH`; turn on `auto_index`; **start a permanent daemon**; and register the marketplace. It enables the plugin nowhere: that is the next step, and it is deliberate.
 
+Add `--with-ui` to embed the graph visualizer as well (needs node and npm). It is off by default because its assets compile into the binary. Once installed, toggle the listener with `plugins/logan-spine/scripts/visualizer.sh on|off|status`; it serves every indexed project on `http://127.0.0.1:9749`, machine-wide rather than per repository.
+
 The permanent daemon is not optional if you want the hooks to speak: a hook connects to a daemon but never spawns one, and gives up after 250 ms, while a session's own MCP server takes about 6.3 s to start — so without a warm daemon the first `SessionStart` of a fresh session loses that race and the hooks look broken.
 
-The binary stays outside the plugin because it is 280 MB, over the 256 MiB ceiling for every plugin source type that could carry it. Plugin and binary are therefore installed and versioned separately, and an enabled plugin with no binary is inert — the hooks go silent and the MCP server reports "engine binary not found".
+The binary stays outside the plugin because it is 280 MiB (281 MiB with the visualizer embedded), over the 256 MiB ceiling for every plugin source type that could carry it. Plugin and binary are therefore installed and versioned separately, and an enabled plugin with no binary is inert — the hooks go silent and the MCP server reports "engine binary not found".
 
 **Per repository** — from the root of the repository you want it in:
 

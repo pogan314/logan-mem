@@ -7,6 +7,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 BIN_DIR="${LSM_BIN_DIR:-$HOME/.local/bin}"
 
+# The graph visualizer ships as assets compiled INTO the binary, so whether it exists at all is decided here at build time, not later by a config flag. Off by default because embedding it needs node and npm and adds an npm ci plus a vite build to a cold build; a binary without it still runs everything else, and `logan-spine-mcp --ui=true` on such a binary refuses with its own message rather than half-working. Turn it on per install, then toggle the listener itself with plugins/logan-spine/scripts/visualizer.sh.
+WITH_UI="${LSM_WITH_UI:-}"
+for arg in "$@"; do
+  case "$arg" in
+    --with-ui) WITH_UI=1 ;;
+    *) echo "install.sh: unknown option '$arg' (only --with-ui is accepted)" >&2; exit 2 ;;
+  esac
+done
+
 # Prefer the main checkout, because a worktree is deleted at merge and a marketplace pinned to a path that no longer exists stops resolving. But only if it actually holds the marketplace file: while this work is on a branch, it does not.
 COMMON_GIT="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
 MAIN_CHECKOUT="$(dirname "$COMMON_GIT")"
@@ -18,7 +27,13 @@ else
 fi
 
 echo "[1/6] build (cold ≈10 min without ccache)"
-"$ROOT/spine/scripts/build.sh" --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"
+if [ -n "$WITH_UI" ]; then
+  echo "  with the graph visualizer embedded (needs node and npm)"
+  "$ROOT/spine/scripts/build.sh" --with-ui --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"
+else
+  echo "  without the graph visualizer; re-run with --with-ui to embed it"
+  "$ROOT/spine/scripts/build.sh" --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"
+fi
 
 echo "[2/6] binary -> $BIN_DIR/logan-spine-mcp"
 mkdir -p "$BIN_DIR"
@@ -29,8 +44,27 @@ mkdir -p "$BIN_DIR"
 # `install` coordinates instead of colliding: it asks the resident daemon to drain its sessions, takes the version-cohort mutation lock so no new admission races the swap, stages the candidate out of line, verifies it by running --version on it, and publishes atomically.
 #
 # --skip-config is what makes this safe for version 02. Without it the engine recreates the whole version-01 global footprint that unregister-global.sh exists to remove: three agent files under ~/.claude/agents/, the mcpServers entry in ~/.claude.json, and the PreToolUse, PostToolUse, SessionStart and SubagentStart hooks. Verified by diffing two --dry-run runs 2026-08-24: those eleven lines are present without the flag and absent with it, leaving "Would install binary" as the only action. --clients needs a value even so, because the parser rejects both an empty list and a "none" token.
-"$ROOT/spine/build/c/logan-spine-mcp" install \
+#
+# Two things this has to work around, both hit on 2026-08-24 with a 002 umask.
+#
+# 1. The engine refuses to publish OUT OF a directory that is group- or world-writable, and refuses to publish INTO one, and refuses when the file it is replacing is group-writable (activation_transaction.c: `(st_mode & 0022) != 0` on the install dir, the source dir, and the target entry). A 002 umask makes every directory 0775, so the repo's own build/c is refused as a source and `~/.local/bin` as a destination. The check is right — anything group-writable lets another account swap the executable between validation and exec — so this satisfies it rather than bypassing it.
+# 2. Staging through a private `mktemp -d` (0700 by default) is what fixes the source side without fighting the machine's umask or chmod-ing the repo's build tree.
+STAGE="$(mktemp -d)"
+chmod 700 "$STAGE"
+cp "$ROOT/spine/build/c/logan-spine-mcp" "$STAGE/logan-spine-mcp"
+chmod 755 "$STAGE/logan-spine-mcp"
+# The destination side: tighten only what the engine requires, and say so, because silently changing permissions on a directory outside the repo would be worse than the failure it prevents.
+if [ -d "$BIN_DIR" ] && [ "$(( $(stat -c '%a' "$BIN_DIR" 2>/dev/null || echo 0) & 22 ))" -ne 0 ]; then
+  echo "  note: removing group/other write from $BIN_DIR (the engine refuses to publish into a shared-writable directory)"
+  chmod go-w "$BIN_DIR"
+fi
+if [ -f "$BIN_DIR/logan-spine-mcp" ] && [ "$(( $(stat -c '%a' "$BIN_DIR/logan-spine-mcp" 2>/dev/null || echo 0) & 22 ))" -ne 0 ]; then
+  echo "  note: removing group/other write from the existing $BIN_DIR/logan-spine-mcp for the same reason"
+  chmod go-w "$BIN_DIR/logan-spine-mcp"
+fi
+"$STAGE/logan-spine-mcp" install \
   --force --skip-config --clients=claude --dir="$BIN_DIR" -y
+rm -rf "$STAGE"
 
 echo "[3/6] PATH"
 # The engine's installer used to write this line; we stop calling it, so we own it. Idempotent, and it names whatever BIN_DIR actually is rather than assuming the default.
