@@ -616,4 +616,20 @@ grep -q 'requires a `project` argument' "$SK"; check "$?" "0" "the skill states 
 grep -q 'trace_path(function_name=' "$SK"; check "$?" "0" "the skill uses trace_path's real argument name"
 grep -q 'get_code_snippet(qualified_name=' "$SK"; check "$?" "0" "the skill uses get_code_snippet's real argument name"
 
+# ---------- nothing a stranger reads may name this machine ----------
+# The top-level README once told every reader to run the installer by an absolute path under one developer's home directory, which works for nobody else. The repo is public, so these four files ARE the install instructions for strangers. Written with bracket expressions, like the earlier machine-path check, so these lines cannot match themselves.
+for f in "$REPO/README.md" "$PLUGIN/README.md" "$REPO/.claude-plugin/marketplace.json" "$PLUGIN/.claude-plugin/plugin.json"; do
+  n_abs="$(grep -cE '/[h]ome/[a-z]+/|/[U]sers/|[A-Z]:\\\\[U]sers' "$f" 2>/dev/null || true)"
+  check "$n_abs" "0" "no machine-specific path in ${f#$REPO/}"
+done
+
+# Installing the plugin without the engine succeeds and then does nothing, which is the worst failure mode there is. Every surface a stranger meets before that point must say so: the marketplace listing, the plugin manifest shown in /plugin, and both READMEs.
+check "$(grep -c 'REQUIRES a separate engine install' "$REPO/.claude-plugin/marketplace.json")" "1" "the marketplace listing warns that the engine installs separately"
+check "$(grep -c 'REQUIRES a separate engine install' "$PLUGIN/.claude-plugin/plugin.json")" "1" "the plugin manifest warns that the engine installs separately"
+grep -q 'on its own does nothing' "$REPO/README.md"; check "$?" "0" "the top-level README warns that a bare plugin install is inert"
+grep -q 'on its own does nothing' "$PLUGIN/README.md"; check "$?" "0" "the plugin README warns that a bare plugin install is inert"
+# And it must tell them what to run instead.
+grep -q 'git clone https://github.com/pogan314/logan-mem' "$REPO/README.md"; check "$?" "0" "the top-level README gives a clone command a stranger can run"
+grep -q 'git clone https://github.com/pogan314/logan-mem' "$PLUGIN/README.md"; check "$?" "0" "the plugin README gives a clone command a stranger can run"
+
 exit $fail

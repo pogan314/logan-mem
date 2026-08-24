@@ -19,17 +19,26 @@ This repo replaces the abandoned `pogan-mem` / `pogan-toolkit` build, which stay
 
 ## Install
 
+> **Installing the plugin on its own does nothing.** `claude plugin install logan-spine@logan-mem` succeeds, reports the plugin enabled, and then stays silent: the hooks print nothing and the MCP server reports `engine binary not found`. The engine is a 282 MiB native binary that cannot ship inside a plugin — Claude Code caps every plugin source at 256 MiB — so it is a separate install. **Clone this repository and run the installer below first.** Verified 2026-08-24 against a clean `HOME`: the marketplace add and the plugin install both succeed and the plugin is still inert without the engine.
+
+Requirements: Linux or macOS, `git`, a C/C++ toolchain (`gcc`/`g++`), `jq`, and the `claude` CLI. Add `node` and `npm` if you want the graph visualizer. There is no Windows path — the installer is bash and the engine is built from C. Budget about 5 GB of disk: the clone is roughly 1.4 GB (the vendored tree-sitter grammars are large), the build adds a couple of gigabytes, and the published binary is another 282 MiB.
+
 Two halves, at two different scopes.
 
-**Per machine** — build the engine, publish the binary, warm a daemon, and register this repository as a marketplace:
+**Per machine** — clone the repository, then build the engine, publish the binary, warm a daemon, and register this clone as a marketplace:
 
 ```bash
-/home/ubuntu/projects/org/logan-mem/plugins/logan-spine/scripts/install.sh
+git clone https://github.com/pogan314/logan-mem
+cd logan-mem
+plugins/logan-spine/scripts/install.sh              # engine only
+plugins/logan-spine/scripts/install.sh --with-ui    # engine + graph visualizer
 ```
+
+Run it from the clone: it locates the engine source relative to itself, so it needs the whole repository, not just the plugin directory. Keep the clone — the marketplace is registered against that path, and deleting it stops the plugin resolving.
 
 Cold build is roughly ten minutes without ccache. The script runs six steps: build the engine; publish `logan-spine-mcp` to `~/.local/bin` through the engine's own `install --force --skip-config` (so a resident daemon is drained rather than collided with, and no global Claude Code config gets written); put that directory on `PATH`; turn on `auto_index`; **start a permanent daemon**; and register the marketplace. It enables the plugin nowhere: that is the next step, and it is deliberate.
 
-Add `--with-ui` to embed the graph visualizer as well (needs node and npm). It is off by default because its assets compile into the binary. Once installed, toggle the listener with `plugins/logan-spine/scripts/visualizer.sh on|off|status`; it serves every indexed project on `http://127.0.0.1:9749`, machine-wide rather than per repository.
+The visualizer is off by default because its assets compile into the binary, so `--with-ui` is a build-time choice. Once installed, toggle the listener with `plugins/logan-spine/scripts/visualizer.sh on|off|status`; it serves every indexed project on `http://127.0.0.1:9749`, machine-wide rather than per repository.
 
 The permanent daemon is not optional if you want the hooks to speak: a hook connects to a daemon but never spawns one, and gives up after 250 ms, while a session's own MCP server takes about 6.3 s to start — so without a warm daemon the first `SessionStart` of a fresh session loses that race and the hooks look broken.
 
