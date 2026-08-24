@@ -346,9 +346,12 @@ for f in hooks/lsm-code-discovery-gate hooks/lsm-session-reminder hooks/lsm-suba
   [ -e "$F4/.claude/$f" ]; check "$?" "0" "a failed settings rewrite leaves $f on disk"
 done
 check "$(grep -c '^Done\.$' "$tmp/ug4")" "0" "a failed run never prints Done."
-check "$(grep -ci 'nothing on disk was removed' "$tmp/ug4")" "1" "a failed run says nothing on disk was removed"
+# The closing block names what it actually did to each thing it touched. On this route the rewrite aborted mid-filter, so no configuration file changed; the sentence about the hook, agent and skill files is the one that used to be a blanket "nothing on disk was removed".
+check "$(grep -c '^No configuration file was changed\.$' "$tmp/ug4")/$(grep -ci 'no hook, agent or skill file was removed' "$tmp/ug4")" "1/1" "a mid-filter abort says no configuration file was changed and no hook, agent or skill file was removed"
 # rewrite() copied the file before jq aborted, so a backup really is on disk and really was named. Making the no-backup case honest must not silence the pointer in the case where it is true.
 check "$(ls "$F4/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug4")" "1/1" "a mid-filter abort that did write a backup still points the operator at it"
+# The skip line is printed in act mode and in dry run alike, so its reason has to be true in both. "the settings.json edit failed" is false in a dry run, where no edit was attempted.
+check "$(grep -c '^\.claude\.json: skipped, because settings\.json could not be edited$' "$tmp/ug4")" "1" "an act run that skips .claude.json gives a reason that is true in act mode"
 
 # The handler match must be anchored to the installed path. Unanchored, each of these three unrelated commands merely contains a handler name and was deleted. The middle one uses /opt rather than a home directory only because this suite's own machine-path check forbids that literal anywhere under plugins/.
 F5="$tmp/fx5"; make_fixture "$F5"
@@ -394,6 +397,12 @@ check "$(grep -c 'no logan-spine-mcp entry' "$tmp/ug8")" "0" "an unparseable .cl
 [ -e "$F8/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "an unparseable .claude.json stops the run before any removal"
 # This route reaches .claude.json only after the settings.json rewrite succeeded, so a backup of settings.json is on disk and was named: here the pointer is true and must survive.
 check "$(ls "$F8/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug8")" "1/1" "an unparseable .claude.json after a successful settings rewrite still points at that backup"
+# The state that makes the wording below load-bearing, asserted on disk rather than on the output: a backup exists because rewrite() ran, and the handlers this fixture started with are gone from settings.json. Without this pin a fixture that never reached the rewrite would satisfy the message assertions vacuously.
+check "$(ls "$F8/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')/$(jq '[.hooks[]?[]?.hooks[]? | select((.command // "") | test("/[.]claude/hooks/lsm-"))] | length' "$F8/.claude/settings.json")" "1/0" "on this route settings.json really was rewritten: a backup exists and no lsm- handler survives in it"
+# settings.json is a file on disk and its handlers are gone, so a blanket "nothing on disk was removed" is false here. The closing block must name settings.json as changed instead of denying it.
+check "$(grep -ci 'nothing on disk was removed' "$tmp/ug8")/$(grep -ci 'no configuration file was changed' "$tmp/ug8")" "0/0" "a run that rewrote settings.json never claims nothing on disk was removed or that no configuration file changed"
+check "$(grep -c "^Already rewritten before the failure, and left that way: $F8/.claude/settings.json\$" "$tmp/ug8")" "1" "a run that rewrote settings.json names it, with its path, as left rewritten"
+check "$(grep -ci 'no hook, agent or skill file was removed' "$tmp/ug8")" "1" "that run still says the hook, agent and skill files were not removed"
 
 # The other cannot-parse route: settings.json parses and holds no lsm- handlers, so nothing is ever rewritten, and then .claude.json cannot be parsed. No backup exists anywhere.
 F10="$tmp/fx10"; make_fixture "$F10"
@@ -418,7 +427,17 @@ check "$(find "$F9" -type f | sort | xargs md5sum | md5sum)" "$before9" "a dry r
 # A dry run writes nothing, so there is no backup to restore from; telling the operator to restore one sends them looking for a file that does not exist.
 check "$(grep -ci 'restore from the backup' "$tmp/ug9")" "0" "a failed dry run does not tell the operator to restore a backup"
 check "$(grep -ci 'no backup was made' "$tmp/ug9")" "1" "a failed dry run says no backup was made"
+# A dry run attempts no edit at all, so it cannot report one as having failed — the run's own next line says "Nothing was changed". The reason given for skipping .claude.json has to hold in both modes.
+check "$(grep -c '^\.claude\.json: skipped, because settings\.json could not be edited$' "$tmp/ug9")/$(grep -ci 'the settings.json edit failed' "$tmp/ug9")" "1/0" "a dry run that skips .claude.json does not say an edit failed, because none was attempted"
 "$UG" --home "$F1" > "$tmp/ug1" 2>&1
 check "$(grep -ci 'already empty' "$tmp/ug1")" "1" "the preview names the already-empty groups it will also drop"
+
+# --home with no usable value is a usage error, and saying "HOME is not set and --home was not given" gets both halves wrong: HOME is set in this suite's own environment, and --home was given.
+out="$("$UG" --home "" --yes 2>&1)"; rc=$?
+check "$rc" "1" "--home with an empty value exits non-zero"
+check "$(printf '%s' "$out" | grep -ci 'home is not set')/$(printf '%s' "$out" | grep -c 'requires a directory')" "0/1" "--home with an empty value is reported as a bad --home, not as an unset HOME"
+out="$("$UG" --home 2>&1)"; rc=$?
+check "$rc" "1" "a trailing bare --home exits non-zero"
+check "$(printf '%s' "$out" | grep -ci 'home is not set')/$(printf '%s' "$out" | grep -c 'requires a directory')" "0/1" "a trailing bare --home is reported as a bad --home, not as an unset HOME"
 
 exit $fail

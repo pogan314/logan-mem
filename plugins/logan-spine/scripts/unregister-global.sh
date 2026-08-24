@@ -13,12 +13,15 @@ H="${HOME:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --yes) YES=1 ;;
-    --home) shift; H="${1:-}" ;;
+    # Checked before the shift, so that a bare trailing `--home` and `--home ""` are reported as what they are. Falling through to the HOME check below made both print "HOME is not set and --home was not given" while HOME was set and --home had been given.
+    --home)
+      [ $# -ge 2 ] && [ -n "$2" ] || { echo "--home requires a directory" >&2; exit 1; }
+      H="$2"; shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
   shift
 done
-[ -n "$H" ] || { echo "HOME is not set and --home was not given; refusing" >&2; exit 1; }
+[ -n "$H" ] || { echo "HOME is empty or unset and --home was not given; refusing" >&2; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
 
 SETTINGS="$H/.claude/settings.json"
@@ -43,6 +46,8 @@ act() { [ "$YES" -eq 1 ]; }
 
 # Counts backups actually written. The "cannot parse" branches below return before rewrite() is ever called, so on those routes there is no backup on disk and none was named, and the closing message must not point at one.
 BACKUPS=0
+# Every file this run has actually rewritten, so the closing message can name them instead of asserting that nothing changed. A rewrite that aborts mid-filter leaves the file byte-identical and so does not appear here.
+EDITED=""
 
 # Rewrite FILE through a jq filter, via a temporary, leaving FILE untouched if jq fails. A direct redirect would truncate FILE before jq ran. Any arguments after the filter are passed to jq.
 rewrite() {
@@ -52,6 +57,7 @@ rewrite() {
   BACKUPS=$((BACKUPS + 1))
   if jq "$@" "$filter" "$backup" > "$file.logan-spine-new"; then
     mv "$file.logan-spine-new" "$file"
+    EDITED="$EDITED $file"
     say "  backup: $backup"
     say "  note: jq reformats the whole file; the backup is the byte-exact original"
     return 0
@@ -95,8 +101,9 @@ fi
 # --- .claude.json: exactly one key ------------------------------------------
 # This file also holds per-project state for every project on the machine, so nothing else in it is touched.
 # Skipped outright once the settings.json edit has failed, the same fail-fast rule the removals below follow: committing this edit while announcing that nothing was removed would be a lie, and the script is idempotent, so a re-run after the operator repairs settings.json finishes this work with nothing lost.
+# The reason has to hold in both modes. In a dry run no edit is attempted, so "the settings.json edit failed" was false there; every route that sets rc before this point — cannot parse, a rewrite that aborted, a preview that aborted — is a route on which settings.json could not be edited.
 if [ "$rc" -ne 0 ]; then
-  say ".claude.json: skipped, because the settings.json edit failed"
+  say ".claude.json: skipped, because settings.json could not be edited"
 elif [ -f "$CLAUDEJSON" ]; then
   has="$(jq 'has("mcpServers") and (.mcpServers | has("logan-spine-mcp"))' "$CLAUDEJSON" 2>/dev/null)"; jqrc=$?
   if [ "$jqrc" -ne 0 ]; then
@@ -115,14 +122,20 @@ else
 fi
 
 # A failed configuration edit means the machine is not in the state the removals assume. Stop before touching disk: the configuration still names these files, and deleting them would leave Claude Code invoking commands that no longer exist.
+# One line per thing this run touched, rather than one global claim. A blanket "Nothing on disk was removed" is false on the route where settings.json is rewritten first and .claude.json then cannot be parsed: the handlers really are gone from a file on disk. The only sentence true on every route is the narrow one about the removal loop, which is below this block and never runs.
 if [ "$rc" -ne 0 ]; then
   say ""
-  if act && [ "$BACKUPS" -gt 0 ]; then
-    say "A configuration edit failed. Nothing on disk was removed. Restore from the backup named above and re-run."
-  elif act; then
-    say "A configuration edit failed. Nothing was changed and no backup was made. Fix the file named above and re-run."
-  else
+  if ! act; then
     say "A configuration edit cannot succeed. Nothing was changed and no backup was made. Fix the file named above and re-run."
+  else
+    say "A configuration edit failed."
+    if [ -n "$EDITED" ]; then say "Already rewritten before the failure, and left that way:$EDITED"; else say "No configuration file was changed."; fi
+    if [ "$BACKUPS" -gt 0 ]; then
+      b=backup; [ "$BACKUPS" -gt 1 ] && b=backups
+      say "No hook, agent or skill file was removed. Restore from the $b named above and re-run."
+    else
+      say "No hook, agent or skill file was removed, and no backup was made. Fix the file named above and re-run."
+    fi
   fi
   exit "$rc"
 fi
