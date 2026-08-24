@@ -103,16 +103,28 @@ Set it to point at a build under `spine/build/c/logan-spine-mcp` when you want a
 
 ## Development loop
 
-The running plugin is a **copy** under `~/.claude/plugins/cache/logan-mem/logan-spine/<version>/`, keyed by the resolved version. Editing a file in this tree changes nothing in a running session. After every edit:
+When this repository is registered as a marketplace with a `directory` source — which is what `scripts/install.sh` does — **Claude Code loads the plugin from this tree, not from a cache**, so an edit is live in the next session with no version bump. Measured 2026-08-24 from a session's `--debug-file`:
+
+```
+Read hooks.json for plugin logan-spine (enabled=true):
+  …/plugins/logan-spine/hooks/hooks.json
+Attempting to load skills from plugin logan-spine default skillsPath:
+  …/plugins/logan-spine/skills
+```
+
+The only mention of `~/.claude/plugins/cache/logan-mem/logan-spine/` in an entire session is a sweeper declining to delete the directory. So the loop is: edit, then `/reload-plugins` or start a new session.
+
+An earlier version of this section said the opposite — that the running plugin was the cached copy and every edit needed a version bump plus a three-command update. That was wrong, and following it cost a bump per iteration.
+
+Bumping `version` and running the update is still worth doing when you want the recorded install to match the manifest, since `~/.claude/plugins/installed_plugins.json` is what other tooling reads:
 
 1. Bump `version` in `.claude-plugin/plugin.json`.
 2. `claude plugin marketplace update logan-mem`
 3. `claude plugin update logan-spine@logan-mem --scope project`
-4. `/reload-plugins` in the session, or start a new one.
 
 **Step 3 needs the scope you installed at.** `claude plugin update` defaults to `--scope user`; run it bare against a project-scope install and it exits 1 with `Plugin "logan-spine" is not installed at scope user`. Measured 2026-08-24.
 
-Skipping the version bump means step 3 has nothing new to resolve to and you go on testing the stale copy. Note also that the update does not rename the cache directory — it creates a new one for the new version and leaves the old one beside it, so `ls ~/.claude/plugins/cache/logan-mem/logan-spine/` accumulates directories. `~/.claude/plugins/installed_plugins.json` is what names the one actually in use.
+The update creates a new cache directory rather than renaming the old one, so `~/.claude/plugins/cache/logan-mem/logan-spine/` accumulates copies that nothing reads. Do not diff against them to decide whether a change is live; read the session's `--debug-file`.
 
 The faster loop, for iterating on hooks and agents, is to load the tree in place for a single session:
 
