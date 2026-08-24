@@ -41,11 +41,15 @@ PRUNE='
 say() { printf '%s\n' "$1"; }
 act() { [ "$YES" -eq 1 ]; }
 
+# Counts backups actually written. The "cannot parse" branches below return before rewrite() is ever called, so on those routes there is no backup on disk and none was named, and the closing message must not point at one.
+BACKUPS=0
+
 # Rewrite FILE through a jq filter, via a temporary, leaving FILE untouched if jq fails. A direct redirect would truncate FILE before jq ran. Any arguments after the filter are passed to jq.
 rewrite() {
   local file="$1" filter="$2"; shift 2
   local backup="$file.logan-spine-backup-$STAMP"
   cp "$file" "$backup" || return 1
+  BACKUPS=$((BACKUPS + 1))
   if jq "$@" "$filter" "$backup" > "$file.logan-spine-new"; then
     mv "$file.logan-spine-new" "$file"
     say "  backup: $backup"
@@ -113,8 +117,10 @@ fi
 # A failed configuration edit means the machine is not in the state the removals assume. Stop before touching disk: the configuration still names these files, and deleting them would leave Claude Code invoking commands that no longer exist.
 if [ "$rc" -ne 0 ]; then
   say ""
-  if act; then
+  if act && [ "$BACKUPS" -gt 0 ]; then
     say "A configuration edit failed. Nothing on disk was removed. Restore from the backup named above and re-run."
+  elif act; then
+    say "A configuration edit failed. Nothing was changed and no backup was made. Fix the file named above and re-run."
   else
     say "A configuration edit cannot succeed. Nothing was changed and no backup was made. Fix the file named above and re-run."
   fi

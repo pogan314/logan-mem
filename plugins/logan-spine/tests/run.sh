@@ -347,6 +347,8 @@ for f in hooks/lsm-code-discovery-gate hooks/lsm-session-reminder hooks/lsm-suba
 done
 check "$(grep -c '^Done\.$' "$tmp/ug4")" "0" "a failed run never prints Done."
 check "$(grep -ci 'nothing on disk was removed' "$tmp/ug4")" "1" "a failed run says nothing on disk was removed"
+# rewrite() copied the file before jq aborted, so a backup really is on disk and really was named. Making the no-backup case honest must not silence the pointer in the case where it is true.
+check "$(ls "$F4/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug4")" "1/1" "a mid-filter abort that did write a backup still points the operator at it"
 
 # The handler match must be anchored to the installed path. Unanchored, each of these three unrelated commands merely contains a handler name and was deleted. The middle one uses /opt rather than a home directory only because this suite's own machine-path check forbids that literal anywhere under plugins/.
 F5="$tmp/fx5"; make_fixture "$F5"
@@ -379,6 +381,9 @@ check "$rc" "1" "an unparseable settings.json makes the run exit non-zero"
 check "$(grep -ci 'cannot parse' "$tmp/ug7")" "1" "an unparseable settings.json is reported as unparseable"
 check "$(grep -c 'no lsm- handlers' "$tmp/ug7")" "0" "an unparseable settings.json is never called clean"
 [ -e "$F7/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "an unparseable settings.json stops the run before any removal"
+# A cannot-parse route returns before rewrite() is ever called, so no backup was written and none was named. Telling the operator to restore "the backup named above" sends them after a file that does not exist.
+check "$(find "$F7" -name '*logan-spine-backup*' | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug7")" "0/0" "an unparseable settings.json writes no backup and never tells the operator to restore one"
+check "$(grep -ci 'no backup was made' "$tmp/ug7")" "1" "an act run that reached no rewrite says no backup was made"
 
 F8="$tmp/fx8"; make_fixture "$F8"
 printf 'not json at all\n' > "$F8/.claude.json"
@@ -387,6 +392,19 @@ check "$rc" "1" "an unparseable .claude.json makes the run exit non-zero"
 check "$(grep -ci 'cannot parse' "$tmp/ug8")" "1" "an unparseable .claude.json is reported as unparseable"
 check "$(grep -c 'no logan-spine-mcp entry' "$tmp/ug8")" "0" "an unparseable .claude.json is never called clean"
 [ -e "$F8/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "an unparseable .claude.json stops the run before any removal"
+# This route reaches .claude.json only after the settings.json rewrite succeeded, so a backup of settings.json is on disk and was named: here the pointer is true and must survive.
+check "$(ls "$F8/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug8")" "1/1" "an unparseable .claude.json after a successful settings rewrite still points at that backup"
+
+# The other cannot-parse route: settings.json parses and holds no lsm- handlers, so nothing is ever rewritten, and then .claude.json cannot be parsed. No backup exists anywhere.
+F10="$tmp/fx10"; make_fixture "$F10"
+jq '.hooks = {"Stop": .hooks.Stop}' "$F10/.claude/settings.json" > "$F10/.claude/t" && mv "$F10/.claude/t" "$F10/.claude/settings.json"
+printf 'not json at all\n' > "$F10/.claude.json"
+"$UG" --home "$F10" --yes > "$tmp/ug10" 2>&1; rc=$?
+check "$rc" "1" "a clean settings.json with an unparseable .claude.json makes the run exit non-zero"
+# The route pin travels inside the assertion: if the fixture ever stopped taking the clean-settings route, the backup claim below would be measuring the wrong path and would still pass on its own.
+check "$(grep -c 'no lsm- handlers' "$tmp/ug10")/$(find "$F10" -name '*logan-spine-backup*' | wc -l | tr -d ' ')/$(grep -ci 'restore from the backup' "$tmp/ug10")" "1/0/0" "an unparseable .claude.json with nothing to rewrite writes no backup and never tells the operator to restore one"
+check "$(grep -ci 'no backup was made' "$tmp/ug10")" "1" "that run says no backup was made"
+[ -e "$F10/.claude/hooks/lsm-session-reminder" ]; check "$?" "0" "that run stops before any removal"
 
 # The dry run has to exercise the filter rather than promise an edit that cannot happen, and it has to name the collateral pruning it will do.
 F9="$tmp/fx9"; make_fixture "$F9"
@@ -394,7 +412,8 @@ jq '.hooks.PostToolUse[0].hooks = "malformed"' "$F9/.claude/settings.json" > "$F
 before9="$(find "$F9" -type f | sort | xargs md5sum | md5sum)"
 "$UG" --home "$F9" > "$tmp/ug9" 2>&1; rc=$?
 check "$rc" "1" "a dry run whose rewrite would fail exits non-zero"
-check "$(grep -ci 'would fail' "$tmp/ug9")" "1" "a dry run reports that the rewrite would fail"
+# Anchored on the preview line's own text rather than counting the phrase anywhere in the output: an unanchored count makes this assertion a veto over the wording of every other line the script prints.
+check "$(grep -c 'the filter aborts on this file: the rewrite would FAIL' "$tmp/ug9")" "1" "a dry run's preview line names the rewrite that would fail"
 check "$(find "$F9" -type f | sort | xargs md5sum | md5sum)" "$before9" "a dry run that exercises the filter still changes nothing"
 # A dry run writes nothing, so there is no backup to restore from; telling the operator to restore one sends them looking for a file that does not exist.
 check "$(grep -ci 'restore from the backup' "$tmp/ug9")" "0" "a failed dry run does not tell the operator to restore a backup"
