@@ -2,7 +2,7 @@
 title: Version 02 follow-ups, deferred at merge
 type: wiki
 status: research-fact
-created: "2026-08-24 10:25 CDT"
+created: "2026-08-24 10:39 CDT"
 updated: "2026-08-24 10:25 CDT"
 sources:
   - "Whole-branch final review of dev/version-02-plugin-packaging, 2026-08-24, findings 2 and 3 and its triage table"
@@ -16,6 +16,10 @@ Everything here was found by review, reproduced, and deliberately not fixed befo
 `plugins/logan-spine/scripts/install.sh` sets `set -euo pipefail`, then runs `config set auto_index true` at step 4 and `claude plugin marketplace add` at step 5. If step 4 exits non-zero the script dies having placed the binary but never registered the marketplace, and a repository whose `.claude/settings.json` commits `enabledPlugins` is then inert with nothing explaining why.
 
 This is not hypothetical. Step 4 was refused for about sixteen hours on 2026-08-23 because an unrelated long-running session held the engine's per-account daemon with a different build, and `install.sh` aborted there every time. It first completed at 09:36 CDT on 2026-08-24, once that daemon had ended.
+
+**Raised in severity on 2026-08-24, once the cause of the stranding was established.** `install.sh` rebuilds the engine and replaces `~/.local/bin/logan-spine-mcp`. The engine refuses to start a process whose build differs from a resident daemon's — `spine/src/daemon/version_cohort.h:1`, "crash-safe exact-build admission" — so running `install.sh` while any other session still holds a live connection to the old build strands **every** new session's MCP server until the last of those clients disconnects. That is not a corner case: it is what happens whenever the owner installs an update without closing their other Claude sessions first, and on 2026-08-23 it lasted about sixteen hours and produced 63 logged conflicts.
+
+The installer says nothing about this. At minimum it should check for a resident daemon before replacing the binary and tell the operator what will happen; better, it should offer to wait or to name the sessions holding it. Diagnosis, when it does happen, is `~/.cache/logan-spine-mcp/logs/daemon-conflicts.ndjson`.
 
 Fix: swap steps 4 and 5, or make step 4 tolerate failure with a warning. What is verified: the `set -e`, the ordering, and that `lsm_cmd_config` at `spine/src/cli/cli.c:6836` can return non-zero. What is not: that a daemon-refused `config set` specifically returns non-zero, because the state could not be reproduced afterwards.
 
