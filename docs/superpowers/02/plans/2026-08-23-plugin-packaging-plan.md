@@ -1,9 +1,9 @@
 ---
 title: Version 02 implementation plan — package the spine as a real Claude Code plugin
 type: plan
-status: draft
+status: decided
 created: "2026-08-23 16:02 CDT"
-updated: "2026-08-23 15:25 CDT"
+updated: "2026-08-24 09:47 CDT"
 sources:
   - "docs/superpowers/02/specs/2026-08-23-plugin-packaging-design.md"
   - "Two independent opus plan reviews, 2026-08-23; 27 findings, all resolved in this revision. Both reviewers executed the plan's shell and jq snippets rather than reading them."
