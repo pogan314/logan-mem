@@ -1,0 +1,18 @@
+{
+  "description": "logan-spine: graph context on code discovery, session and subagent reminders, and a docstring nudge after edits.",
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Grep|Glob", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/code-discovery-gate.sh", "timeout": 5 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Read", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/code-discovery-gate.sh", "timeout": 5 } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/docstring-check.sh", "timeout": 10 } ] }
+    ],
+    "SessionStart": [
+      { "matcher": "startup|resume|clear|compact|fork", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/session-reminder.sh", "timeout": 5 } ] }
+    ],
+    "SubagentStart": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/subagent-reminder.sh", "timeout": 5 } ] }
+    ]
+  }
+}

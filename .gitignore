@@ -4,3 +4,4 @@ dist/
 *.log
 .worktrees/
 .superpowers/
+.claude/settings.local.json
