@@ -38,12 +38,18 @@ So plugin and binary are two installs, and an enabled plugin with no binary does
 
 ## Install both
 
-From the repository root:
+> **Installing this plugin from the marketplace on its own does nothing.** The install succeeds and reports the plugin enabled, then nothing happens: the hooks exit silently and the MCP server reports `engine binary not found`. Clone the repository and run the installer below first — the plugin is half of a two-part install and this is the other half.
+
+Clone the repository, then from its root:
 
 ```bash
+git clone https://github.com/pogan314/logan-mem
+cd logan-mem
 plugins/logan-spine/scripts/install.sh              # engine only
-plugins/logan-spine/scripts/install.sh --with-ui   # engine + graph visualizer (needs node and npm)
+plugins/logan-spine/scripts/install.sh --with-ui    # engine + graph visualizer (needs node and npm)
 ```
+
+The installer resolves the engine source relative to its own location, so it needs the whole repository. Run it from a clone, not from a copy of `plugins/logan-spine/` on its own — outside the repository it exits 128 with `fatal: not a git repository`. Requirements: Linux or macOS, `git`, `gcc`/`g++`, `jq`, and the `claude` CLI.
 
 That script does the per-machine half, and only the per-machine half:
 

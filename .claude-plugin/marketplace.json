@@ -1,11 +1,13 @@
 {
   "name": "logan-mem",
-  "owner": { "name": "Logan G" },
+  "owner": {
+    "name": "Logan G"
+  },
   "plugins": [
     {
       "name": "logan-spine",
       "source": "./plugins/logan-spine",
-      "description": "Codebase knowledge graph for Claude Code: MCP server, tiered graph agents, discovery hooks, and a docstring nudge."
+      "description": "Codebase knowledge graph for Claude Code: MCP server, tiered graph agents, discovery hooks, and a docstring nudge. REQUIRES a separate engine install — installing this plugin alone does nothing; clone github.com/pogan314/logan-mem and run plugins/logan-spine/scripts/install.sh first."
     }
   ]
 }
