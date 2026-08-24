@@ -509,4 +509,9 @@ check "$(grep -cE '^ *--force --skip-config --clients=claude --dir="\$BIN_DIR" -
 check "$(grep -c 'if ! "$BIN_DIR/logan-spine-mcp" config set auto_index true; then' "$INS")" "1" "a failed auto_index setting is tolerated rather than aborting under set -e"
 check "$(awk '/config set auto_index/{f=1} f&&/marketplace add/{print "after"; exit}' "$INS")" "after" "the marketplace registration is reached after the auto_index step, not gated on it"
 
+# A hook connects to a daemon but never spawns one, giving up after 250ms, while the session's own MCP server takes about 6.3s to come up. So on a machine with no warm daemon every fresh session's SessionStart hook loses that race and the graph context never arrives, which reads as the hooks being broken. `daemon start` creates a permanent daemon that outlives sessions, so the installer does it once. Measured 2026-08-24 both ways: silent with no daemon, immediate context with one.
+check "$(grep -cE '^if ! "\$BIN_DIR/logan-spine-mcp" daemon start; then$' "$INS")" "1" "install.sh starts a permanent daemon so the hooks are not silent on a fresh machine"
+check "$(grep -c 'warning: could not start the daemon' "$INS")" "1" "a failed daemon start warns rather than aborting the install under set -e"
+check "$(awk '/daemon start; then/{f=1} f&&/marketplace add/{print "after"; exit}' "$INS")" "after" "the marketplace registration is still reached after the daemon step"
+
 exit $fail

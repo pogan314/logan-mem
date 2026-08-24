@@ -17,10 +17,10 @@ else
   echo "note: $MAIN_CHECKOUT has no .claude-plugin/marketplace.json, registering $ROOT instead. Re-run this script from the main checkout once this branch is merged." >&2
 fi
 
-echo "[1/5] build (cold ≈10 min without ccache)"
+echo "[1/6] build (cold ≈10 min without ccache)"
 "$ROOT/spine/scripts/build.sh" --version "$(git -C "$ROOT" describe --tags --always 2>/dev/null || echo dev)"
 
-echo "[2/5] binary -> $BIN_DIR/logan-spine-mcp"
+echo "[2/6] binary -> $BIN_DIR/logan-spine-mcp"
 mkdir -p "$BIN_DIR"
 # Publish through the engine's own install path rather than a bare copy-and-rename.
 #
@@ -32,7 +32,7 @@ mkdir -p "$BIN_DIR"
 "$ROOT/spine/build/c/logan-spine-mcp" install \
   --force --skip-config --clients=claude --dir="$BIN_DIR" -y
 
-echo "[3/5] PATH"
+echo "[3/6] PATH"
 # The engine's installer used to write this line; we stop calling it, so we own it. Idempotent, and it names whatever BIN_DIR actually is rather than assuming the default.
 case ":$PATH:" in
   *":$BIN_DIR:"*) echo "  already on PATH" ;;
@@ -47,13 +47,23 @@ case ":$PATH:" in
     ;;
 esac
 
-echo "[4/5] auto-index on"
+echo "[4/6] auto-index on"
 # Non-fatal on purpose. Under `set -e` a failure here would abort the script before step 5, leaving the binary installed but the marketplace unregistered — and a repository whose .claude/settings.json already commits enabledPlugins is then silently inert, with nothing on screen explaining why. auto_index is read fresh by the daemon at the start of each session (spine/src/daemon/application.c), not cached at install time, so setting it later costs nothing.
 if ! "$BIN_DIR/logan-spine-mcp" config set auto_index true; then
   echo "  warning: could not set auto_index; set it later with: logan-spine-mcp config set auto_index true" >&2
 fi
 
-echo "[5/5] marketplace -> $MARKET"
+echo "[5/6] warm daemon"
+# Without this the plugin's hooks are silent on a fresh machine, which looks like the hooks being broken.
+#
+# A hook is contractually fail-open and time-bounded: it CONNECTS to a daemon but never spawns one, giving up after 250 ms (MAIN_HOOK_CONNECT_TIMEOUT_MS, spine/src/main.c). The session's own MCP server does start a daemon, but measured 2026-08-24 it takes about 6.3 s to come up — 25x the hook's budget — so the SessionStart hook of a fresh session fires and gives up long before its own MCP server is ready. Measured both ways: with no daemon the hook prints nothing, and with one warm the same script on the same payload returns the graph context immediately.
+#
+# `daemon start` creates a PERMANENT daemon that survives idle periods and session ends, so this is a once-per-machine step rather than something a session has to win a race against. Non-fatal: a machine without one still works, its hooks are just quiet until an MCP session warms it.
+if ! "$BIN_DIR/logan-spine-mcp" daemon start; then
+  echo "  warning: could not start the daemon; hooks stay quiet until an MCP session warms one. Retry with: logan-spine-mcp daemon start" >&2
+fi
+
+echo "[6/6] marketplace -> $MARKET"
 # `add` is idempotent and self-healing on claude 2.1.241, measured against fixture homes: it exits 0 whether registering fresh, confirming an unchanged registration, or re-pointing an existing name at a new path — which is exactly what a post-merge re-run needs. `update` fails when the name is not registered yet. The elif is defensive only, for a claude version where `add` does fail on a duplicate name.
 if claude plugin marketplace add "$MARKET" 2>&1; then
   echo "  registered"
