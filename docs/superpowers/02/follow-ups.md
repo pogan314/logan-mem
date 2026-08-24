@@ -3,7 +3,7 @@ title: Version 02 follow-ups, deferred at merge
 type: wiki
 status: research-fact
 created: "2026-08-24 10:39 CDT"
-updated: "2026-08-24 11:03 CDT"
+updated: "2026-08-24 11:26 CDT"
 sources:
   - "Whole-branch final review of dev/version-02-plugin-packaging, 2026-08-24, findings 2 and 3 and its triage table"
   - "Run ledger: .superpowers/sdd/2026-08-23-plugin-packaging-plan/progress.md"
@@ -31,11 +31,15 @@ Separately, `mv`'s exit status is never checked, and the `EDITED` list that driv
 
 Fix: resolve `$file` through `readlink -f` before the `mv`, and check the `mv`.
 
-## 3. No agent has been observed reaching the graph on the shared runtime
+## 3. ~~No agent has been observed reaching the graph on the shared runtime~~ — CLOSED 2026-08-24
 
-The spec's Verified table row 5 carries this. The server serves a real graph call on the shared runtime — row 4 records `tools/call` for `list_projects` returning ten projects from the real index — and the three agents receive their correct tiers there. The two facts have not been joined by a measurement of an *agent* making a graph call outside the isolated runtime, and `logan-spine:verify` has not been observed reaching the graph anywhere at all.
+Measured, not deferred. Each agent was dispatched through a `claude -p` session on the normal runtime, with no `LSM_RUNTIME_DIR` and no `LSM_CACHE_DIR`, against the real populated index, and told to call `mcp__plugin_logan-spine_spine__search_graph` for `lsm_bin`:
 
-What would settle it: dispatch each of the three agents with a task that forces a graph tool call, and capture the tool-use records.
+- `logan-spine:scout` — `graph: OK 1 results`, Tier 1.
+- `logan-spine:verify` — called `search_graph`, `get_code_snippet` and `check_index_coverage`; coverage returned `no_recorded_issue` / `metadata_match`. Tier 2.
+- `logan-spine:auditor` — `graph: OK 1 results`, Tier 3.
+
+All three used the prefixed tool names. Criterion 5 in the spec is met outright.
 
 ## 4. Machine state, not branch content: one historical `~/.claude/settings.json` anomaly, and a hypothesis that is now disproved
 
