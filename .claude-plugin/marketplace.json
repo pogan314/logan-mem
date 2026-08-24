@@ -1,0 +1,11 @@
+{
+  "name": "logan-mem",
+  "owner": { "name": "Logan G" },
+  "plugins": [
+    {
+      "name": "logan-spine",
+      "source": "./plugins/logan-spine",
+      "description": "Codebase knowledge graph for Claude Code: MCP server, tiered graph agents, discovery hooks, and a docstring nudge."
+    }
+  ]
+}
