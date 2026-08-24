@@ -3,7 +3,7 @@ title: Version 02 follow-ups, deferred at merge
 type: wiki
 status: research-fact
 created: "2026-08-24 10:39 CDT"
-updated: "2026-08-24 11:26 CDT"
+updated: "2026-08-24 12:29 CDT"
 sources:
   - "Whole-branch final review of dev/version-02-plugin-packaging, 2026-08-24, findings 2 and 3 and its triage table"
   - "Run ledger: .superpowers/sdd/2026-08-23-plugin-packaging-plan/progress.md"
@@ -21,7 +21,9 @@ The installer swapped `~/.local/bin/logan-spine-mcp` with a copy-and-rename, whi
 
 **A causal claim this document previously made is withdrawn.** It said the daemon build conflict was what made `config set` fail during that window. It cannot have been: `config set` opens the config database directly and never reaches the daemon or the cohort protocol. Why it failed is **not established**, and the one plausible mechanism found — SQLite contention on `_config.db`, which the daemon also holds open, with no `busy_timeout` visible — was not reproduced.
 
-## 2. `rewrite()` destroys a symlinked config file, and never checks `mv`
+## 2. ~~`rewrite()` destroys a symlinked config file, and never checks `mv`~~ — FIXED 2026-08-24
+
+Both defects are fixed in commit `de2700d`; this entry is kept for the record. `plugins/logan-spine/tests/run.sh` now carries the fixture suite for this — a symlinked `settings.json` pointed into a fixture "dotfiles" directory, a read-only real-target directory to force a write failure, and checks that the symlink survives, the real target is what changes, the backup is a plain file with the byte-exact original content, and a failed write is reported by name rather than folded into the generic "jq failed" message. Re-run 2026-08-24 12:29 CDT on the main checkout: `plugins/logan-spine/tests/run.sh` passes all of it (`ok   a --yes run against a symlinked settings.json exits 0`, `ok   the real file in the dotfiles tree has its handlers removed`, `ok   the path that was a symlink is still a symlink after the run`, `ok   the symlink still points at the same real file`, `ok   a write blocked by a read-only real-target directory makes the whole run exit non-zero`, `ok   the symlink survives a failed write onto its target`, among others). Commit `467e6fc` separately added the `--home` validity guards (empty value, a swallowed flag, a non-directory) described below.
 
 Both live on the same line of `plugins/logan-spine/scripts/unregister-global.sh`, so fix them together.
 

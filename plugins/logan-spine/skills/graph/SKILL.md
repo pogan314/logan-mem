@@ -46,8 +46,7 @@ Graph tools return precise structural results in ~500 tokens vs ~80K for grep.
 
 ## Quality Analysis
 - Dead code: `search_graph(max_degree=0, exclude_entry_points=true)`
-- High fan-out: `search_graph(min_degree=10, relationship="CALLS", direction="outbound")`
-- High fan-in: `search_graph(min_degree=10, relationship="CALLS", direction="inbound")`
+- High fan-out/fan-in: `search_graph(min_degree=10, relationship="CALLS")` — `search_graph` has no `direction` parameter; `min_degree`/`max_degree` filter the combined in+out degree, so read the per-row `in`/`out` columns to tell fan-out from fan-in
 
 ## 15 MCP Tools
 `index_repository`, `index_status`, `list_projects`, `delete_project`,
@@ -56,10 +55,17 @@ Graph tools return precise structural results in ~500 tokens vs ~80K for grep.
 `check_index_coverage`, `manage_adr`, `ingest_traces`
 
 ## Edge Types
-CALLS, HTTP_CALLS, ASYNC_CALLS, DATA_FLOWS, IMPORTS, DEFINES, DEFINES_METHOD,
-HANDLES, IMPLEMENTS, OVERRIDE, USAGE, CALL_REFERENCE, CONFIGURES, FILE_CHANGES_WITH,
-SIMILAR_TO, SEMANTICALLY_RELATED, CONTAINS_FILE, CONTAINS_FOLDER,
-CONTAINS_PACKAGE
+`get_graph_schema(project=...)` returns the edge types actually present in *that* project with live counts — treat it as the authority and this list as orientation. A type below is absent from a graph whenever the codebase has nothing to emit it.
+
+Structure: `CONTAINS_FOLDER`, `CONTAINS_FILE`, `DEFINES`, `DEFINES_METHOD`, `IMPORTS`, `HAS_BRANCH`
+Calls and references: `CALLS`, `CALL_REFERENCE`, `USAGE`, `DATA_FLOWS`
+Types: `INHERITS`, `IMPLEMENTS`, `OVERRIDE`, `DECORATES`
+Data and effects: `READS`, `WRITES`, `RAISES`, `THROWS`
+Service boundaries: `HTTP_CALLS`, `ASYNC_CALLS`, `GRPC_CALLS`, `GRAPHQL_CALLS`, `TRPC_CALLS`, `HANDLES`, `CONFIGURES`, `DEPENDS_ON`, `INFRA_MAPS`
+Cross-project (only after multi-repo linking): `CROSS_HTTP_CALLS`, `CROSS_ASYNC_CALLS`, `CROSS_CHANNEL`, `CROSS_GRPC_CALLS`, `CROSS_GRAPHQL_CALLS`, `CROSS_TRPC_CALLS`
+Tests, docs, similarity: `TESTS`, `TESTS_FILE`, `DOCUMENTS`, `SIMILAR_TO`, `SEMANTICALLY_RELATED`, `FILE_CHANGES_WITH`
+
+`RAISES` vs `THROWS` and `READS` vs `WRITES` are each one pass choosing between two names, so query both sides of a pair. There is no `CONTAINS_PACKAGE` edge — upstream's help text lists one, but nothing in the engine ever creates it.
 
 ## Cypher Examples (for query_graph)
 ```
@@ -72,5 +78,5 @@ MATCH (a)-[r:CALLS]->(b) WHERE a.name = 'main' RETURN b.name
 1. `search_graph(relationship="HTTP_CALLS")` filters nodes by degree — use `query_graph` with Cypher to see actual edges.
 2. `query_graph` has a 100k row ceiling — add a Cypher `LIMIT` for broad queries or use `search_graph` pagination.
 3. `trace_path` needs exact names — use `search_graph(name_pattern=...)` first.
-4. `direction="outbound"` misses cross-service callers — use `direction="both"`.
+4. `trace_path(direction="outbound")` misses cross-service callers — use `direction="both"`. Only `trace_path` takes `direction`; `search_graph` has no such parameter.
 5. `search_graph` results default to 50 per page — check `has_more` and use `offset`.
