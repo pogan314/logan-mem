@@ -440,4 +440,21 @@ out="$("$UG" --home 2>&1)"; rc=$?
 check "$rc" "1" "a trailing bare --home exits non-zero"
 check "$(printf '%s' "$out" | grep -ci 'home is not set')/$(printf '%s' "$out" | grep -c 'requires a directory')" "0/1" "a trailing bare --home is reported as a bad --home, not as an unset HOME"
 
+# A --home that names nothing usable must be rejected before anything is examined. Measured 2026-08-24 against the pre-fix script: each of the three forms below printed ".claude.json: not present" and exited 0, so an operator who mistyped the flag was told their footprint was gone from a tree the run never looked at.
+out="$("$UG" --home "$tmp/does-not-exist-xyz" --yes 2>&1)"; rc=$?
+check "$rc" "1" "--home naming a missing directory exits non-zero"
+check "$(printf '%s\n' "$out" | grep -cxF -e "--home is not a directory: $tmp/does-not-exist-xyz")/$(printf '%s\n' "$out" | grep -c '^Done\.$')" "1/0" "--home naming a missing directory names the offending value and never reaches Done."
+printf 'x\n' > "$tmp/regfile"
+out="$("$UG" --home "$tmp/regfile" --yes 2>&1)"; rc=$?
+check "$rc" "1" "--home naming a regular file exits non-zero"
+check "$(printf '%s\n' "$out" | grep -cxF -e "--home is not a directory: $tmp/regfile")/$(printf '%s\n' "$out" | grep -c '^Done\.$')" "1/0" "--home naming a regular file names the offending value and never reaches Done."
+# The value check alone would accept this one on any machine that happens to hold a directory named --yes, and its message would name a directory rather than the mistake the operator made. Note the closing line asserted here: `--yes` is consumed as the value, so YES stays 0 and the pre-fix run ended in the dry-run sentence, not in Done.
+out="$("$UG" --home --yes 2>&1)"; rc=$?
+check "$rc" "1" "--home immediately followed by another flag exits non-zero"
+check "$(printf '%s\n' "$out" | grep -cxF -e "--home requires a directory, not the option: --yes")/$(printf '%s\n' "$out" | grep -ci 'nothing was changed')" "1/0" "--home swallowing the next flag is reported as that, and the run stops at the argument"
+# The guard must not be over-tight: a directory that exists is still accepted even with nothing in it, and the run reports each absent file rather than passing over it in silence. The silence on settings.json is what made a --home that examined nothing look like an ordinary clean run, since the .claude.json block already named its absence.
+F11="$tmp/fx11"; mkdir -p "$F11"
+out="$("$UG" --home "$F11" --yes 2>&1)"; rc=$?
+check "$rc/$(printf '%s\n' "$out" | grep -c '^settings\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^\.claude\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^Done\.$')" "0/1/1/1" "a valid --home with an empty tree names both absent files and still finishes"
+
 exit $fail

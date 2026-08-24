@@ -16,6 +16,10 @@ while [ $# -gt 0 ]; do
     # Checked before the shift, so that a bare trailing `--home` and `--home ""` are reported as what they are. Falling through to the HOME check below made both print "HOME is not set and --home was not given" while HOME was set and --home had been given.
     --home)
       [ $# -ge 2 ] && [ -n "$2" ] || { echo "--home requires a directory" >&2; exit 1; }
+      # A value that is itself an option is a swallowed flag, not a target: `--home --yes` set H to --yes and left YES at 0. The directory test below would reject that too, but only on a machine holding no directory of that name, and it would name a directory rather than the mistake.
+      case "$2" in -*) echo "--home requires a directory, not the option: $2" >&2; exit 1 ;; esac
+      # Every block below is guarded by a -f test, so a --home that names nothing examines nothing and then reports each file as absent. Refusing here is the difference between "we looked and found nothing" and "we never looked": a mistyped flag used to reach Done. and exit 0.
+      [ -d "$2" ] || { echo "--home is not a directory: $2" >&2; exit 1; }
       H="$2"; shift ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
@@ -96,6 +100,9 @@ if [ -f "$SETTINGS" ]; then
   else
     say "settings.json: no lsm- handlers"
   fi
+else
+  # The .claude.json block below already names its file's absence. Without the matching line here a run against a tree that has no settings.json said nothing whatsoever about it, and the silence is what let a run that examined nothing read as an ordinary clean one.
+  say "settings.json: not present"
 fi
 
 # --- .claude.json: exactly one key ------------------------------------------
