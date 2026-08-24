@@ -3,7 +3,7 @@ title: Version 02 follow-ups, deferred at merge
 type: wiki
 status: research-fact
 created: "2026-08-24 10:25 CDT"
-updated: "2026-08-24 09:55 CDT"
+updated: "2026-08-24 10:25 CDT"
 sources:
   - "Whole-branch final review of dev/version-02-plugin-packaging, 2026-08-24, findings 2 and 3 and its triage table"
   - "Run ledger: .superpowers/sdd/2026-08-23-plugin-packaging-plan/progress.md"
@@ -41,7 +41,21 @@ Raised with the owner rather than fixed, because it is not this repository's cod
 
 - 2026-08-22: all seven `lsm-*` hook entries went missing. Recorded in `CLAUDE.md`. A controlled replay did not reproduce it.
 - 2026-08-23: the whole file reverted to a snapshot from six hours earlier, losing five tmux status handlers written in a 21-minute window. Established: the current file was byte-identical to the earlier snapshot except for four model and effort lines; the file was replaced with a new inode; no Claude session's Edit or Write tool did it, across 414 transcripts; no cron job, systemd timer, sync agent or script on the machine does it. Four open upstream Claude Code issues describe the same defect class. **The cause is not established.** An `auditctl` watch is armed on the file.
-- ~~Observed 2026-08-24: `enabledPlugins` lists six plugins where a harvest on 2026-08-23 recorded eight.~~ **Not a loss — investigated 2026-08-24 and withdrawn.** Six independent snapshots of the file spanning 2026-08-23 10:55 to 2026-08-24 09:01 (four in `~/.claude/file-history/`, plus the `pre-tmux-restore` and `logan-spine-backup` backups) all hold exactly **six** entries, and the same six names in every one: `claude-code-setup`, `claude-md-management`, `frontend-design`, `typescript-lsp` and `superpowers` from `claude-plugins-official`, and `global-plugin` from `global-plugins`. The figure of eight appears once, in a subagent's prose at `task-2-report.md:62`, and is not supported by any snapshot. It was a miscount, not a disappearance.
+- ~~Observed 2026-08-24: `enabledPlugins` lists six plugins where a harvest on 2026-08-23 recorded eight.~~ **Not a loss. Disproved twice, independently, and withdrawn.** The count has only ever grown, and never reached eight:
+
+| Snapshot | Date | `enabledPlugins` |
+|---|---|---|
+| `settings.json.bak-pre-growthbook-fix` | 2026-07-22 16:57 | 3 |
+| `settings.json.bak-20260802-205622` | 2026-08-02 15:56 | 5 |
+| `file-history …@v1` | 2026-08-23 10:55 | 6 |
+| `file-history …@v4` | 2026-08-23 11:16 | 6 |
+| `settings.json.bak-pre-tmux-restore` | 2026-08-24 08:40 | 6 |
+| `settings.json.logan-spine-backup` | 2026-08-24 09:05 | 6 |
+| live `settings.json` | 2026-08-24 | 6 |
+
+The same six names appear in every snapshot from 2026-08-23 onward: `claude-code-setup`, `claude-md-management`, `frontend-design`, `typescript-lsp` and `superpowers` from `claude-plugins-official`, and `global-plugin` from `global-plugins`. `enabledPlugins` is also absent from `settings.local.json` and `~/.claude.json`, so there is no second source the figure could have come from. The number eight appears exactly once, in a subagent's prose at `task-2-report.md:62`, and no artefact supports it. Two plugins were never enabled and therefore never lost.
+
+So **the real tally is two events, not three.**
 
 ### The writer is now identified, by audit trail
 
@@ -52,6 +66,10 @@ An `auditctl` watch was armed on both files on 2026-08-24 (`-w /home/ubuntu/.cla
 - **33 distinct Claude Code processes** performed those writes in that hour, both interactive sessions (`tty=pts4`, `tty=pts6`) and headless `claude -p` children (`tty=(none)`), overlapping in time.
 
 What that establishes: the only writer is Claude Code, and it rewrites the entire file from whatever it holds in memory. What it does **not** establish: that a stale in-memory copy caused the specific 2026-08-23 revert. The watch was armed after that event, so it did not capture it. But the mechanism the audit trail shows — many concurrent processes each replacing the whole file — is exactly the shape that produces one: a process that read the file at time T and writes at time T+n discards every change made in between, and no locking is visible in the trace.
+
+**One counter-observation worth keeping.** On 2026-08-24 the cutover script wrote `settings.json` at 09:05:12 via its own `mv`, and a Claude Code process wrote the same file at 09:07:30, two minutes eighteen seconds later. The cutover's change survived that write — the seven `lsm-` handlers stayed removed and all five tmux handlers stayed present. So in the one instance anybody has observed directly, Claude Code's writer did **not** clobber a concurrent external edit. That is a single data point, not a property.
+
+**The current file reconciles completely.** Diffed against the cutover's own backup, the only differences are the seven `lsm-` handlers the cutover removed and one `effortLevel` value the owner changed. Top-level keys, permissions, `enabledPlugins` and all five tmux handlers are byte-identical.
 
 The watch stays armed, so the next occurrence will name the process and the time. `sudo ausearch -k claudesettings -i` is the command.
 
