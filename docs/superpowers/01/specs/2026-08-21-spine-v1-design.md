@@ -3,15 +3,16 @@ title: Spine v1 — design for the first logan-spine-mcp tweaks and the Claude C
 type: spec
 status: decided
 created: "2026-08-21 16:36 CDT"
-updated: "2026-08-22 12:48 CDT"
+updated: "2026-08-24 12:26 CDT"
 version: "01"
-sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21]
+sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and spine/internal/lsm cited inline as file:line (two mapping passes and three adversarial review passes, 2026-08-21); Claude Code docs via claude-code-docs MCP (/en/hooks.mdx, /en/plugins-reference.mdx, /en/plugin-marketplaces.mdx, /en/mcp.mdx) read 2026-08-21; 2026-08-24 audit: git log/tag/LOGAN-CHANGES.md cross-check against every task's prescribed commit, live check of ~/.claude for the removed v01 footprint, a clean extraction+pipeline suite run (542 passed, 0 failed)]
 ---
 
 # Spine v1 design
 
 > **Path note (2026-08-22 12:48 CDT).** Everything this document calls `plugin/` now lives at `plugins/logan-spine-tools/`. The directory was moved after this document was written, to make room for the memory system's own plugin beside it; paths in the body are left as they were when the work was done, so this file stays an accurate record of what was actually run. `spine/` did not move — its location is pinned by the git subtree metadata.
 
+> **Installation superseded (2026-08-24 12:26 CDT).** Everything below about installation — the skills-directory plugin, `logan-spine-mcp install --clients=claude -y`, and the global writes into `~/.claude/skills/`, `~/.claude/agents/`, and `~/.claude.json` — is version 01's approach and is no longer how this repo installs anything. `plugins/logan-spine-tools/` (the path note above) was itself retired on 2026-08-23 and absorbed into `plugins/logan-spine/`, which version 02 ships as a real marketplace plugin enabled per repository through a committed `.claude/settings.json`. Verified directly on this machine: `~/.claude/skills/logan-spine-tools`, `~/.claude/skills/logan-spine`, and `~/.claude/agents/logan-spine*` no longer exist, and `logan-spine-mcp` is no longer registered in `~/.claude.json` — all removed 2026-08-24 per `spine/LOGAN-CHANGES.md` change 14. See `plugins/logan-spine/README.md` for how installation and enablement work now. This document is left as the historical record of what version 01 actually built and ran; it is not current install instructions.
 
 ## What this is
 
@@ -189,6 +190,8 @@ sources: [spine/LOGAN-CHANGES.md decisions table; code reads of spine/src and sp
 
 
 ## Verified (end-to-end on this machine, 2026-08-22)
+
+> **Status of this table (2026-08-24 12:26 CDT).** Rows 3–6 test engine behavior (extraction, storage, semantic search, graph edges) and still hold: the engine code these rows exercise has not changed since this table was written (`spine/LOGAN-CHANGES.md` changes 11–13 are a help-text wording fix, a discover.c symlink-handling fix, and a test-script safety guard, none of which touch this behavior), and a fresh run of the `extraction` and `pipeline` suites on 2026-08-24 reported 0 failed (542 passed combined). Rows 1, 2, and 7, and the two paragraphs below the table, describe installation state that no longer exists on this machine: the skills-directory plugin at `~/.claude/skills/logan-spine-tools/`, upstream's skill and agents at `~/.claude/skills/logan-spine/` and `~/.claude/agents/logan-spine*`, and the `~/.claude.json` MCP entry were all removed on 2026-08-24 (`spine/LOGAN-CHANGES.md` change 14; verified directly — none of those paths exist and `logan-spine-mcp` is absent from `~/.claude.json`). The plugin now installs as `plugins/logan-spine/`, enabled per repository; see `plugins/logan-spine/README.md`.
 
 Installed with `plugin/scripts/install.sh` (default `LSM_BIN_DIR=~/.local/bin`) at tag `v0.10.8-logan.2`; this repo indexed with `logan-spine-mcp cli index_repository --repo-path . --mode full` → 24,371 nodes, 134,569 edges, vendored trees auto-excluded.
 

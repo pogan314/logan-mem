@@ -2,7 +2,7 @@
 
 A memory system for AI coding agents. Clean rebuild, started 2026-08-21.
 
-- **Stage: version 02 = the spine repackaged as a real Claude Code plugin**, on branch `dev/version-02-plugin-packaging`. Version 01 built the engine (merged to `main` via PRs #1-6, engine tagged `v0.10.8-logan.4`) and installed it globally; version 02 ships the same engine as `plugins/logan-spine`, enabled per repository. No C code changed.
+- **Stage: version 02 = the spine repackaged as a real Claude Code plugin, merged to `main` via PR #8.** Version 01 built the engine (merged to `main` via PRs #1-7, engine tagged `v0.10.8-logan.4`) and installed it globally; version 02 ships the same engine as `plugins/logan-spine`, enabled per repository. No C code changed.
 - `docs/superpowers/02/specs/2026-08-23-plugin-packaging-design.md` — the version 02 design, with the Verified table at the end.
 - `docs/superpowers/01/specs/2026-08-21-spine-v1-design.md` — the version 01 design (the engine itself).
 - `docs/wiki/` — research facts about things outside our control (other memory systems, Claude Code's features).
@@ -21,15 +21,17 @@ This repo replaces the abandoned `pogan-mem` / `pogan-toolkit` build, which stay
 
 Two halves, at two different scopes.
 
-**Per machine** — build the engine, place the binary, and register this repository as a marketplace:
+**Per machine** — build the engine, publish the binary, warm a daemon, and register this repository as a marketplace:
 
 ```bash
 /home/ubuntu/projects/org/logan-mem/plugins/logan-spine/scripts/install.sh
 ```
 
-Cold build is roughly ten minutes without ccache. The script places `logan-spine-mcp` in `~/.local/bin`, puts that directory on `PATH`, turns on `auto_index`, and registers the marketplace. It enables the plugin nowhere: that is the next step, and it is deliberate.
+Cold build is roughly ten minutes without ccache. The script runs six steps: build the engine; publish `logan-spine-mcp` to `~/.local/bin` through the engine's own `install --force --skip-config` (so a resident daemon is drained rather than collided with, and no global Claude Code config gets written); put that directory on `PATH`; turn on `auto_index`; **start a permanent daemon**; and register the marketplace. It enables the plugin nowhere: that is the next step, and it is deliberate.
 
-The binary stays outside the plugin because it is 281 MB, over the 256 MiB ceiling for every plugin source type that could carry it. Plugin and binary are therefore installed and versioned separately, and an enabled plugin with no binary is inert — the hooks go silent and the MCP server reports "engine binary not found".
+The permanent daemon is not optional if you want the hooks to speak: a hook connects to a daemon but never spawns one, and gives up after 250 ms, while a session's own MCP server takes about 6.3 s to start — so without a warm daemon the first `SessionStart` of a fresh session loses that race and the hooks look broken.
+
+The binary stays outside the plugin because it is 280 MB, over the 256 MiB ceiling for every plugin source type that could carry it. Plugin and binary are therefore installed and versioned separately, and an enabled plugin with no binary is inert — the hooks go silent and the MCP server reports "engine binary not found".
 
 **Per repository** — from the root of the repository you want it in:
 

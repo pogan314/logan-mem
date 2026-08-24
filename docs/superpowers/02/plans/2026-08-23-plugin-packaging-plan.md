@@ -3,7 +3,7 @@ title: Version 02 implementation plan — package the spine as a real Claude Cod
 type: plan
 status: decided
 created: "2026-08-23 16:02 CDT"
-updated: "2026-08-24 09:47 CDT"
+updated: "2026-08-24 12:29 CDT"
 sources:
   - "docs/superpowers/02/specs/2026-08-23-plugin-packaging-design.md"
   - "Two independent opus plan reviews, 2026-08-23; 27 findings, all resolved in this revision. Both reviewers executed the plan's shell and jq snippets rather than reading them."
@@ -86,7 +86,7 @@ Throughout, `WT` means the worktree root, `/home/ubuntu/projects/org/logan-mem/.
 - Consumes: nothing.
 - Produces: the shell function `lsm_bin()` in `plugins/logan-spine/hooks/lib.sh`. No arguments; prints one absolute path on stdout and returns 0, or prints nothing and returns 1. Sourced as `. "$(dirname "$0")/../hooks/lib.sh"` from `bin/` and `. "$(dirname "$0")/lib.sh"` from `hooks/`. Also produces the test harness in `plugins/logan-spine/tests/run.sh`: a `check "$actual" "$expected" "description"` function, a `fail` variable, a `tmp` scratch directory, and `PLUGIN`/`REPO` path variables. Later tasks append to this file and reuse all of them.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `plugins/logan-spine/tests/run.sh`:
 
@@ -172,7 +172,7 @@ fi
 exit $fail
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -182,7 +182,7 @@ plugins/logan-spine/tests/run.sh
 
 Expected: FAIL on every check — the files do not exist and `lsm_bin` is undefined.
 
-- [ ] **Step 3: Write `.claude-plugin/marketplace.json`**
+- [x] **Step 3: Write `.claude-plugin/marketplace.json`**
 
 ```json
 {
@@ -198,7 +198,7 @@ Expected: FAIL on every check — the files do not exist and `lsm_bin` is undefi
 }
 ```
 
-- [ ] **Step 4: Write `plugins/logan-spine/.claude-plugin/plugin.json`**
+- [x] **Step 4: Write `plugins/logan-spine/.claude-plugin/plugin.json`**
 
 ```json
 {
@@ -209,7 +209,7 @@ Expected: FAIL on every check — the files do not exist and `lsm_bin` is undefi
 }
 ```
 
-- [ ] **Step 5: Write `plugins/logan-spine/.mcp.json`**
+- [x] **Step 5: Write `plugins/logan-spine/.mcp.json`**
 
 ```json
 {
@@ -222,7 +222,7 @@ Expected: FAIL on every check — the files do not exist and `lsm_bin` is undefi
 }
 ```
 
-- [ ] **Step 6: Write `plugins/logan-spine/hooks/lib.sh`**
+- [x] **Step 6: Write `plugins/logan-spine/hooks/lib.sh`**
 
 `HOME` is referenced as `${HOME:-}` because every hook runs under `set -u`, where a bare `$HOME` with `HOME` unset writes a bash diagnostic to stderr — and the graph hooks promise silence.
 
@@ -247,7 +247,7 @@ lsm_bin() {
 }
 ```
 
-- [ ] **Step 7: Write `plugins/logan-spine/bin/spine-launch.sh`**
+- [x] **Step 7: Write `plugins/logan-spine/bin/spine-launch.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -258,7 +258,7 @@ bin="$(lsm_bin)" || { echo "logan-spine: engine binary not found; see the plugin
 exec "$bin"
 ```
 
-- [ ] **Step 8: Run the tests and make sure they pass**
+- [x] **Step 8: Run the tests and make sure they pass**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -268,7 +268,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: every line `ok` or `skip`, `exit=0`. If `claude plugin validate --strict` fails, read its message and fix the manifest rather than loosening the test.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -296,7 +296,7 @@ Two constraints govern every step. **Shell state does not persist between steps*
 - Consumes: `plugins/logan-spine/` from task 1.
 - Produces: `docs/superpowers/02/plans/2026-08-23-harvest-findings.md`, with one `## Finding N` heading per fact below. Tasks 4, 5, 7 and 9 read that file by that path.
 
-- [ ] **Step 1: Build the probe plugin**
+- [x] **Step 1: Build the probe plugin**
 
 ```bash
 WT=/home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -336,7 +336,7 @@ EOF
 ls -R /tmp/lsm-probe
 ```
 
-- [ ] **Step 2: Harvest finding 1 — the exact MCP tool names**
+- [x] **Step 2: Harvest finding 1 — the exact MCP tool names**
 
 ```bash
 P=/tmp/lsm-probe/logan-spine
@@ -352,7 +352,7 @@ cd /tmp && claude --plugin-dir "$P" mcp list 2>&1 | grep -i spine
 
 `mcp list` names the **server** (`plugin:logan-spine:spine`), not its tools, so it confirms the plugin-and-server key pair and nothing more. The `-p` listing is the only source for the tool prefix. The spec predicts `mcp__plugin_logan-spine_spine__`; if the live value differs in any character, the live value wins and every later task uses it.
 
-- [ ] **Step 3: Harvest finding 2 — which `skills:` form loads**
+- [x] **Step 3: Harvest finding 2 — which `skills:` form loads**
 
 A skip warning fires on dispatch, not on load, and `-p` mode writes nothing useful to stdout — `--debug-file` is required. The control agent exists so that a "no warning" result means something:
 
@@ -369,7 +369,7 @@ grep -iE "graph|skip|skill" /tmp/lsm-skill-probe.log | head -20
 
 If the control run shows no warning either, the method cannot detect failure: record that, and record that the `skills:` form is undetermined rather than concluding the bare form works. If the control warns and the probe does not, `skills: [graph]` is correct. If both warn, edit the probe agent to `skills: [logan-spine:graph]`, rerun, and record which form is clean.
 
-- [ ] **Step 4: Harvest finding 3 — does an `enabledPlugins` entry alone load the plugin**
+- [x] **Step 4: Harvest finding 3 — does an `enabledPlugins` entry alone load the plugin**
 
 This needs a real session, so it uses a scratch project directory under the real `HOME` rather than a fixture `HOME`. Project settings are per-directory, which gives the isolation the question needs.
 
@@ -391,7 +391,7 @@ cd /tmp/lsm-proj && claude -p "List the subagent types available to you. Output 
 
 `claude plugin list` enumerates install records, so on its own it does not answer the question. The second command is the decisive one: if the plugin's components are visible in a session started from that directory, the committed settings alone are enough. If they are not, run `claude plugin install logan-spine@logan-mem --scope project` in that directory, record what it added to which file, and re-run the session check.
 
-- [ ] **Step 5: Harvest finding 4 — the JSON shape a marketplace add actually writes**
+- [x] **Step 5: Harvest finding 4 — the JSON shape a marketplace add actually writes**
 
 This one touches no session, so a fixture `HOME` is both safe and correct:
 
@@ -405,17 +405,17 @@ echo "--- settings.json extraKnownMarketplaces ---"; jq .extraKnownMarketplaces 
 
 Record which file receives the entry and its exact shape. The spec's proposed `{ "source": { "source": "directory", "path": "." } }` is a guess that task 9 replaces with whatever this records. Also record whether a relative `path` is accepted, by repeating the add from inside `/tmp/lsm-mp` with `.` as the argument.
 
-- [ ] **Step 6: Write the findings document**
+- [x] **Step 6: Write the findings document**
 
 Create `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` with the repo frontmatter block (`type: plan`, `status: research-fact`, timestamps from `date '+%Y-%m-%d %H:%M %Z'`), then one `## Finding N` section per fact, numbered as above. Each section states the exact command run, the verbatim output, and the one-line consequence for later tasks. Where a harvested value contradicts the spec's prediction, say so explicitly — the harvested value wins. Where a step yielded no answer, say that plainly and name what a later attempt would have to do differently.
 
-- [ ] **Step 7: Clean up**
+- [x] **Step 7: Clean up**
 
 ```bash
 rm -rf /tmp/lsm-probe /tmp/lsm-mp /tmp/lsm-proj /tmp/lsm-fixture-home2 /tmp/lsm-skill-probe.log /tmp/lsm-skill-control.log
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -442,7 +442,7 @@ Tool names, the skills: form that actually loads, whether enabledPlugins alone i
 - Consumes: `lsm_bin()` and the test harness from task 1.
 - Produces: `hooks/hooks.json` plus four executable hook scripts, each sourcing `lib.sh` as `. "$(dirname "$0")/lib.sh"`. Also produces test fixtures that task 6 reuses from the same `tests/run.sh` file: `$dstub` (a stand-in for the engine's `docstrings` subcommand), `$tmp/bad.js`, `$tmp/good.js` and `$tmp/note.txt`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `plugins/logan-spine/tests/run.sh`, before the final `exit $fail`. Note the stub: it must honour a preceding `/** … */` line and accept many files, because `docstring-coverage.sh` passes the whole file list in one invocation. A stub that just counts `^export function` reports a finding on the fixture the tests call clean, and five assertions then become unsatisfiable.
 
@@ -538,7 +538,7 @@ check "$(grep -c ' function f' "$tmp/err")" "10" "docstring-check lists ten name
 check "$(grep -c . "$tmp/err")" "12" "docstring-check prints header + 10 findings + remainder"
 ```
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -547,7 +547,7 @@ plugins/logan-spine/tests/run.sh 2>&1 | grep -c '^FAIL'
 
 Expected: a non-zero count. Task-1 checks still pass; every task-3 check fails.
 
-- [ ] **Step 3: Write `plugins/logan-spine/hooks/hooks.json`**
+- [x] **Step 3: Write `plugins/logan-spine/hooks/hooks.json`**
 
 ```json
 {
@@ -570,7 +570,7 @@ Expected: a non-zero count. Task-1 checks still pass; every task-3 check fails.
 }
 ```
 
-- [ ] **Step 4: Write `plugins/logan-spine/hooks/code-discovery-gate.sh`**
+- [x] **Step 4: Write `plugins/logan-spine/hooks/code-discovery-gate.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -584,7 +584,7 @@ bin="$(lsm_bin)" || exit 0
 exit 0
 ```
 
-- [ ] **Step 5: Write `plugins/logan-spine/hooks/session-reminder.sh`**
+- [x] **Step 5: Write `plugins/logan-spine/hooks/session-reminder.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -598,7 +598,7 @@ bin="$(lsm_bin)" || exit 0
 exit 0
 ```
 
-- [ ] **Step 6: Write `plugins/logan-spine/hooks/subagent-reminder.sh`**
+- [x] **Step 6: Write `plugins/logan-spine/hooks/subagent-reminder.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -618,7 +618,7 @@ printf '%s' "$payload" | "$bin" hook-augment 2>/dev/null
 exit 0
 ```
 
-- [ ] **Step 7: Write `plugins/logan-spine/hooks/docstring-check.sh`**
+- [x] **Step 7: Write `plugins/logan-spine/hooks/docstring-check.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -642,7 +642,7 @@ total=$(printf '%s\n' "$out" | grep -c .)
 exit 2
 ```
 
-- [ ] **Step 8: Bump the version and run the tests**
+- [x] **Step 8: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -653,7 +653,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: every line `ok` or `skip`, `exit=0`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -678,7 +678,7 @@ All four graph hooks run the same hook-augment command and stay separate files s
 - Consumes: the test harness from task 1. Also consumes harvest findings 1 and 2 from `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` — **read that file before starting**. Finding 1 gives the MCP tool prefix and finding 2 gives the `skills:` form. The literals below assume the spec's predictions held; if the findings document records different strings, those win and are substituted everywhere in this task, including in the test assertions.
 - Produces: three agents addressable as `logan-spine:scout`, `logan-spine:verify`, `logan-spine:auditor`.
 
-- [ ] **Step 1: Record what the installed files actually contain**
+- [x] **Step 1: Record what the installed files actually contain**
 
 The three installed agent files are the source of truth, not the C renderer, because at least one paragraph exists only on disk. Capture every difference before writing anything.
 
@@ -700,7 +700,7 @@ done
 
 Paste the complete diff output into the task report. Do not assume the graph-unavailable paragraph is the only difference — record whatever the diff shows, and carry every difference into the new files.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Append to `plugins/logan-spine/tests/run.sh`, before the final `exit $fail`:
 
@@ -727,14 +727,14 @@ for a in scout verify auditor; do
 done
 ```
 
-- [ ] **Step 3: Run them to make sure they fail**
+- [x] **Step 3: Run them to make sure they fail**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 plugins/logan-spine/tests/run.sh 2>&1 | grep '^FAIL' | head
 ```
 
-- [ ] **Step 4: Write the three agent files**
+- [x] **Step 4: Write the three agent files**
 
 For each, start from the corresponding installed file captured in step 1 and apply exactly these transformations, changing nothing else:
 
@@ -777,7 +777,7 @@ Use spine in the exact graph project. Use only read-only graph and source tools.
 
 `agents/scout.md` keeps the scout description and its 7-tool list (`search_graph`, `trace_path`, `get_code_snippet`, `get_architecture`, `list_projects`, `index_status`, `check_index_coverage`) and its Tier 1 opening paragraph. `agents/auditor.md` keeps the auditor description, the same 11-tool list as verify, and its Tier 3 opening paragraph. Every other line, the graph-unavailable paragraph included, is identical across the three — plus whatever else step 1's diff revealed.
 
-- [ ] **Step 5: Bump the version and run the tests**
+- [x] **Step 5: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -788,7 +788,7 @@ rm -rf /tmp/lsm-agent-diff /tmp/lsm-agent-render
 
 Expected: every line `ok` or `skip`, `exit=0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -811,7 +811,7 @@ Sourced from the installed files rather than the C renderer, because the graph-u
 - Consumes: the test harness from task 1, the agents from task 4, and harvest finding 2 from `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` — **read that file first** for the `skills:` form the agents use.
 - Produces: a skill addressed as `/logan-spine:graph`, named in every agent's `skills:` list.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `plugins/logan-spine/tests/run.sh`, before the final `exit $fail`:
 
@@ -829,14 +829,14 @@ for a in scout verify auditor; do
 done
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 plugins/logan-spine/tests/run.sh 2>&1 | grep '^FAIL' | head
 ```
 
-- [ ] **Step 3: Copy the installed skill and change exactly one field**
+- [x] **Step 3: Copy the installed skill and change exactly one field**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -846,7 +846,7 @@ sed -e '2s/^name: logan-spine$/name: graph/' "$HOME/.claude/skills/logan-spine/S
 
 Change nothing else. The `description` field carries the trigger list that makes the skill fire, and the body's bare tool names (`trace_path`, `search_graph`) are prose, not tool references.
 
-- [ ] **Step 4: Confirm exactly one line changed**
+- [x] **Step 4: Confirm exactly one line changed**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -855,7 +855,7 @@ diff "$HOME/.claude/skills/logan-spine/SKILL.md" plugins/logan-spine/skills/grap
 
 Expected: one `2c2` hunk, `name: logan-spine` to `name: graph`, and nothing else. If the diff is empty the `sed` did not match — stop and check which line `name:` is on.
 
-- [ ] **Step 5: Bump the version and run the tests**
+- [x] **Step 5: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -865,7 +865,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: every line `ok` or `skip`, `exit=0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -889,7 +889,7 @@ A plugin skill's frontmatter name replaces its directory name in the command, so
 - Consumes: `lsm_bin()` from task 1, and the fixtures task 3 defined earlier in the same `tests/run.sh` file — `$dstub`, `$tmp/bad.js`, `$tmp/good.js`. Append below task 3's block so they are in scope.
 - Produces: `plugins/logan-spine/scripts/docstring-coverage.sh`, taking an optional `--all` flag and an optional directory (default `.`), exiting 0 clean, 1 findings, 2 could not run.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 These are the assertions the old `plugins/logan-spine-tools/tests/run.sh` carried, plus one for the new binary resolution and one that keeps the engine's real `docstrings` contract under test somewhere. Append before the final `exit $fail`:
 
@@ -939,14 +939,14 @@ fi
 [ ! -e "$REPO/plugins/logan-spine-tools" ]; check "$?" "0" "logan-spine-tools is removed"
 ```
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 plugins/logan-spine/tests/run.sh 2>&1 | grep '^FAIL' | head
 ```
 
-- [ ] **Step 3: Write `plugins/logan-spine/scripts/docstring-coverage.sh`**
+- [x] **Step 3: Write `plugins/logan-spine/scripts/docstring-coverage.sh`**
 
 The old script resolved the binary by bare name through `PATH`, which the engine's installer used to guarantee via a `~/.bashrc` line we stop writing. It resolves through `lsm_bin` instead. Everything else — the null-delimited `git ls-files` listing, the exit-code mapping, the GNU and BSD `xargs` portability — is carried over unchanged.
 
@@ -975,7 +975,7 @@ esac
 exit "$rc"
 ```
 
-- [ ] **Step 4: Delete the old plugin**
+- [x] **Step 4: Delete the old plugin**
 
 Everything it carried now lives under `plugins/logan-spine/`: `hooks/hooks.json` and `scripts/docstring-check.sh` were absorbed in task 3, `scripts/docstring-coverage.sh` in this task, `scripts/install.sh` is rewritten in task 7, `tests/run.sh` is superseded by this suite, and `README.md` is rewritten in task 11. The installed copy at `~/.claude/skills/logan-spine-tools/` is removed by task 8's script, not here.
 
@@ -984,7 +984,7 @@ cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 git rm -r --quiet plugins/logan-spine-tools
 ```
 
-- [ ] **Step 5: Bump the version and run the tests**
+- [x] **Step 5: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -995,7 +995,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: every line `ok` or `skip`, `exit=0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1017,7 +1017,7 @@ Coverage resolves the binary through lsm_bin rather than PATH, so it no longer d
 - Consumes: harvest findings 3 and 4 from `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` — **read that file first**. Finding 3 decides which enable instruction the script prints; finding 4 gives the marketplace entry's real shape.
 - Produces: a single command that builds the engine, places the binary, guarantees `PATH`, and registers the marketplace. It never enables the plugin anywhere.
 
-- [ ] **Step 1: Write `plugins/logan-spine/scripts/install.sh`**
+- [x] **Step 1: Write `plugins/logan-spine/scripts/install.sh`**
 
 One subtlety drives the marketplace step. During this build the plugin exists only on `dev/version-02-plugin-packaging`, checked out in a worktree; the main checkout is on the version 01 branch and has no `.claude-plugin/` at all. Registering the main checkout blindly fails with `Marketplace file not found`, and under `set -e` that aborts the whole install after the ten-minute build. So the script prefers the main checkout, falls back to the tree it was run from, and says which it chose.
 
@@ -1095,7 +1095,7 @@ EOF
 
 Harvest finding 3 settled which instruction is correct: the marketplace registration this script performs is a prerequisite, and once it has run a committed `enabledPlugins` entry is sufficient. Keep the `claude plugin install` line as the interactive route, and add one line pointing at the committed-settings route for a repository that already carries the entry. Do not print a `extraKnownMarketplaces` fragment: finding 4 shows Claude Code always stores an absolute path there, so it cannot be committed.
 
-- [ ] **Step 2: Verify it is syntactically sound without running the build**
+- [x] **Step 2: Verify it is syntactically sound without running the build**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1105,7 +1105,7 @@ chmod +x plugins/logan-spine/scripts/install.sh
 
 Expected: `syntax=0`.
 
-- [ ] **Step 3: Verify the marketplace path resolution picks the right tree today**
+- [x] **Step 3: Verify the marketplace path resolution picks the right tree today**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1116,7 +1116,7 @@ echo "main checkout: $MAIN"
 
 Expected: the main checkout is named correctly, and — while this branch is unmerged — it does not hold the marketplace, so the fallback branch is the one that fires. Task 11 records that the marketplace must be re-registered against the main checkout after merge.
 
-- [ ] **Step 4: Bump the version and run the tests**
+- [x] **Step 4: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1126,7 +1126,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: `exit=0`. The machine-path check searches untracked files too, so it does cover the new script: `install.sh` writes `$HOME/.local/bin` as a literal single-quoted string, never an expanded path.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1151,7 +1151,7 @@ The highest-risk task. It edits two live files that hold configuration for every
 - Consumes: the test harness from task 1.
 - Produces: `unregister-global.sh`, taking `--yes` to act (dry run otherwise) and `--home <dir>` to target a fixture. Exit 0 on success, 1 on refusal or on a failed edit.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 The fixture deliberately puts one of our handlers in a matcher group beside an unrelated one, and adds an unrelated MCP server, an unrelated agent file and per-project state. Note the live shape has changed since this was written: as of 2026-08-23 the machine's `SubagentStart` group holds only our handler, and the genuine multi-handler group is `PreToolUse` matcher `Agent`, which contains none of ours. Handler-level pruning is still required — the fixture is what proves it, and it no longer depends on any particular live arrangement. A second fixture carries a malformed group, because a `jq` filter that aborts after the shell has already truncated its output file is how this script could destroy `~/.claude/settings.json`.
 
@@ -1248,14 +1248,14 @@ check "$(ls "$F3/.claude/settings.json".logan-spine-backup-* 2>/dev/null | wc -l
 
 This listing is the set this task starts from, not the set it ends with. The review rounds added fixtures F4 through F9 and a `[ -s … ] &&` guard on the "still parses" assertion, because `jq -e .` exits 0 on a zero-byte file. `plugins/logan-spine/tests/run.sh` is the authority on what actually runs; read it rather than this block when the two disagree.
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
 plugins/logan-spine/tests/run.sh 2>&1 | grep '^FAIL' | head
 ```
 
-- [ ] **Step 3: Write `plugins/logan-spine/scripts/unregister-global.sh`**
+- [x] **Step 3: Write `plugins/logan-spine/scripts/unregister-global.sh`**
 
 Both `jq` rewrites write to a temporary file and install it only on success. A shell redirect truncates its target before the command runs, so `jq … > "$FILE"` destroys `$FILE` whenever the filter aborts — and with no `set -e` the script would then print "Done." and exit 0.
 
@@ -1368,7 +1368,9 @@ say "  ~/.local/bin/logan-spine-mcp install --clients=claude -y"
 exit "$rc"
 ```
 
-- [ ] **Step 4: Bump the version and run the tests**
+**This is the script as task 8 wrote it, not the script as merged.** After task 11, a whole-branch review found two live defects in this `rewrite()` function — reported in `docs/superpowers/02/follow-ups.md` item 2 — and fixed them in commit `de2700d`: a `mv` onto a symlinked `$file` (e.g. `~/.claude/settings.json` synced from a dotfiles tree) replaced the link with a plain file instead of writing through it, and `mv`'s exit status was never checked, so a failed write could still be reported as edited. The merged script resolves `$file` through `readlink -f` before writing and checks `mv`'s result. A separate commit, `467e6fc`, also added the `--home` validity guards (empty value, a swallowed flag, a non-directory) that this listing does not have. `plugins/logan-spine/tests/run.sh` is the authority on the current behavior; read it rather than this block when the two disagree.
+
+- [x] **Step 4: Bump the version and run the tests**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1379,7 +1381,7 @@ plugins/logan-spine/tests/run.sh; echo "exit=$?"
 
 Expected: every line `ok` or `skip`, `exit=0`. A failure on "the unrelated tmux handler survives in place", "per-project state in .claude.json survives", or either malformed-group check is a stop-and-report condition, not something to work around.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1403,7 +1405,7 @@ This is step 4 of the spec's order of operations, and it is where every function
 - Consumes: harvest findings 3 and 4 from `docs/superpowers/02/plans/2026-08-23-harvest-findings.md` — **read that file first** for whether `enabledPlugins` alone suffices and for the marketplace entry's real shape.
 - Produces: a working, enabled plugin, and the recorded command output that task 11 turns into the spec's Verified table.
 
-- [ ] **Step 1: Keep local settings out of git**
+- [x] **Step 1: Keep local settings out of git**
 
 `.claude/` becomes a tracked directory for the first time in this task. `.claude/settings.local.json` is machine-local and must never be committed; on this machine it happens to be excluded by a global ignore file, which will not be true elsewhere.
 
@@ -1413,7 +1415,7 @@ printf '.claude/settings.local.json\n' >> .gitignore
 tail -3 .gitignore
 ```
 
-- [ ] **Step 2: Install the binary and register the marketplace**
+- [x] **Step 2: Install the binary and register the marketplace**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1422,7 +1424,9 @@ plugins/logan-spine/scripts/install.sh
 
 Expected: five steps complete. Step 5 will report that the main checkout has no marketplace file and that it registered the worktree instead — that is correct while this branch is unmerged. This is a cold C build and takes roughly ten minutes without `ccache`.
 
-- [ ] **Step 3: Write `.claude/settings.json`**
+**Stale as a description of the current script.** This is what `install.sh` did at the time this task ran. It has since gained a sixth step: after task 11, follow-up fixes (`0fae388`, `bed3cf7`) changed the binary-placement step to publish through the engine's own `install --force --skip-config` instead of a copy-and-rename, made the `auto_index` step non-fatal, and added a `daemon start` step before the marketplace registration — see `docs/superpowers/02/follow-ups.md` item 1. Re-running this step today prints `[1/6]` through `[6/6]`, not five steps.
+
+- [x] **Step 3: Write `.claude/settings.json`**
 
 Harvest findings 3 and 4 settled this. The file carries one key, and **not** `extraKnownMarketplaces`: `marketplace add` always stores an absolute path there, which would be a machine path in a tracked file. Step 2's `install.sh` run already registered the marketplace under `$HOME`, which finding 3 shows is a prerequisite for a project-scope enable to do anything.
 
@@ -1440,7 +1444,7 @@ claude plugin install logan-spine@logan-mem --scope project
 cat .claude/settings.json
 ```
 
-- [ ] **Step 4: Load the plugin and confirm the installed copy is current**
+- [x] **Step 4: Load the plugin and confirm the installed copy is current**
 
 Restart Claude Code, or run `/reload-plugins`, then:
 
@@ -1454,7 +1458,9 @@ jq -r .version plugins/logan-spine/.claude-plugin/plugin.json
 
 Expected: `logan-spine@logan-mem` enabled; the inventory naming 1 skill, 3 agents, 5 hooks and 1 MCP server; and the cache directory name equal to the manifest version. Read that version from the manifest rather than expecting a literal — every fix round in tasks 1-8 bumps it, so any number written here goes stale (it was `0.7.0` when this plan was written and `0.7.2` by the time task 8 closed). If they differ, run `claude plugin marketplace update logan-mem && claude plugin update logan-spine@logan-mem` and check again. **Every measurement below is of the installed copy, not the repository tree** — do not edit a plugin file during this task without repeating this step.
 
-- [ ] **Step 5: Confirm the MCP server, the new tool names, and the coexistence**
+**The `ls ~/.claude/plugins/cache/logan-mem/logan-spine/` check does not prove what it was written to prove.** It was measured later, once the version cohort conflict was untangled (see the spec's risk table, "Every test measures a stale cached copy of the plugin"), that this repository's marketplace has a `directory` source, and a `directory`-source marketplace loads the plugin from the repository tree, not from the cache directory at all — confirmed from a live `--debug-file`: `Read hooks.json for plugin logan-spine (enabled=true): …/plugins/logan-spine/hooks/hooks.json`. So a matching cache directory name was never evidence that the running session had picked up an edit; it happened to exist and to be harmless to check, but the actual confirmation that the installed copy was current had to come from behavior (the tool count, the hook text), not from this `ls`.
+
+- [x] **Step 5: Confirm the MCP server, the new tool names, and the coexistence**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1465,7 +1471,7 @@ claude -p "Using the mcp__plugin_logan-spine_spine__list_projects tool, list the
 
 Expected: both `plugin:logan-spine:spine` and the old `logan-spine-mcp` connected; the 15 plugin-scoped tool names listed; and the graph call succeeding. Two live servers exposing the same tools under different names is the expected overlap, not a fault — task 10 ends it.
 
-- [ ] **Step 6: Confirm each agent dispatches, reaches the graph, and gets its own tier**
+- [x] **Step 6: Confirm each agent dispatches, reaches the graph, and gets its own tier**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1476,7 +1482,7 @@ claude -p "Dispatch the logan-spine:verify subagent to confirm hooks.json declar
 
 Expected: all three reach the graph; scout reports Tier 1, auditor Tier 3, verify Tier 2. If all three report Tier 2, `subagent-reminder.sh`'s prefix strip is not firing — stop and report rather than proceeding to task 10.
 
-- [ ] **Step 7: Confirm the skill loads**
+- [x] **Step 7: Confirm the skill loads**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1487,11 +1493,11 @@ grep -iE "graph|skill" /tmp/lsm-skill-check.log | head -20
 
 Expected: no skip warning naming `graph`. Compare against the control result recorded in harvest finding 2 — a method that showed no warning for a deliberately broken skill would prove nothing here either.
 
-- [ ] **Step 8: Confirm the docstring nudge fires here and only here**
+- [x] **Step 8: Confirm the docstring nudge fires here and only here**
 
 Edit a source file in this repository so a function loses its docstring, and confirm the nudge appears. Then do the same in a repository that has not enabled the plugin, and confirm nothing appears.
 
-- [ ] **Step 9: Confirm the plugin does NOT load elsewhere**
+- [x] **Step 9: Confirm the plugin does NOT load elsewhere**
 
 Both halves of the criterion, in a directory with no `.claude/settings.json` naming the plugin:
 
@@ -1502,7 +1508,7 @@ cd /tmp && claude mcp list 2>&1 | grep -i 'plugin:logan-spine' || echo "plugin s
 
 Expected: not enabled, and its server not listed. The old `logan-spine-mcp` user-scope server **will** still be listed there — it is global and task 10 is what removes it. A failure here is a stop-and-report condition: per-repo scoping is the whole point of the version.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 No version bump. This task edits no file under `plugins/logan-spine/`, and bumping the manifest without reinstalling would leave the installed copy behind the manifest and falsify the version check in step 4.
 
@@ -1522,7 +1528,7 @@ Steps 5 and 6 of the spec's order of operations. Everything functional was prove
 
 **Files:** none. This task changes the machine, not the repository, and therefore has no commit. Its output feeds task 11.
 
-- [ ] **Step 1: Dry run and read every line**
+- [x] **Step 1: Dry run and read every line**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1531,7 +1537,7 @@ plugins/logan-spine/scripts/unregister-global.sh
 
 Expected: 7 hook handlers, 3 hook scripts, 3 agent files, 2 skill directories, 1 MCP entry. Confirm the tmux `SubagentStart` handler is **not** in the removal list. If anything unexpected appears, stop and report rather than proceeding.
 
-- [ ] **Step 2: Act**
+- [x] **Step 2: Act**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1540,7 +1546,7 @@ plugins/logan-spine/scripts/unregister-global.sh --yes
 
 Record both backup paths from the output into the task report.
 
-- [ ] **Step 3: Confirm the removal was surgical**
+- [x] **Step 3: Confirm the removal was surgical**
 
 ```bash
 jq '[.hooks[]?[]?.hooks[]? | select((.command // "") | test("lsm-"))] | length' ~/.claude/settings.json
@@ -1551,7 +1557,7 @@ ls ~/.claude/hooks/ ~/.claude/agents/ ~/.claude/skills/ | grep -i logan || echo 
 
 Expected: `0`; the tmux counter command still present; `false`; no logan artifacts.
 
-- [ ] **Step 4: Restart and confirm the overlap is gone and nothing regressed**
+- [x] **Step 4: Restart and confirm the overlap is gone and nothing regressed**
 
 Restart Claude Code, then:
 
@@ -1564,7 +1570,7 @@ claude -p "Dispatch the logan-spine:scout subagent to find where lsm_bin is defi
 
 Expected: only `plugin:logan-spine:spine` is listed now; the old `logan-spine-mcp` is gone; the graph call still succeeds; scout still reports Tier 1. Each graph hook now fires once rather than twice.
 
-- [ ] **Step 5: Confirm the other half of the per-repo criterion after cutover**
+- [x] **Step 5: Confirm the other half of the per-repo criterion after cutover**
 
 ```bash
 cd /tmp && claude mcp list 2>&1 | grep -i spine || echo "no spine server outside the enabled repo"
@@ -1572,7 +1578,7 @@ cd /tmp && claude mcp list 2>&1 | grep -i spine || echo "no spine server outside
 
 Expected: nothing. Before this task the global user-scope server was listed here; now neither server is.
 
-- [ ] **Step 6: Record the outcome**
+- [x] **Step 6: Record the outcome**
 
 Append every recorded command output to the task report. Task 11 turns it into the spec's Verified table. Do not write a cause for anything you did not measure.
 
@@ -1588,32 +1594,34 @@ Append every recorded command output to the task report. Task 11 turns it into t
 - Modify: `docs/superpowers/02/specs/2026-08-23-plugin-packaging-design.md` (status to `decided`, add a Verified table)
 - Modify: `plugins/logan-spine/.claude-plugin/plugin.json` (bump `version` to `1.0.0`)
 
-- [ ] **Step 1: Write `plugins/logan-spine/README.md`**
+- [x] **Step 1: Write `plugins/logan-spine/README.md`**
 
-Cover, in this order: what the plugin contains (1 MCP server, 3 agents, 1 skill, 5 hooks); that the engine binary installs separately and the plugin is inert without it; how to install both (`plugins/logan-spine/scripts/install.sh`); how to enable per repository and how to disable again; that `LOGAN_SPINE_BIN` overrides the binary's location and that a set-but-invalid value is an error rather than a fallback; the development loop (bump `version`, `claude plugin marketplace update logan-mem`, `claude plugin update logan-spine@logan-mem`, `/reload-plugins`), and that `claude --plugin-dir plugins/logan-spine` is the faster loop; and `unregister-global.sh` with its dry-run default and its restore command.
+Cover, in this order: what the plugin contains (1 MCP server, 3 agents, 1 skill, 5 hooks); that the engine binary installs separately and the plugin is inert without it; how to install both (`plugins/logan-spine/scripts/install.sh`); how to enable per repository and how to disable again; that `LOGAN_SPINE_BIN` overrides the binary's location and that a set-but-invalid value is an error rather than a fallback; the development loop (bump `version`, `claude plugin marketplace update logan-mem`, `claude plugin update logan-spine@logan-mem` — needs `--scope project` for a project-scope install, see the note on Task 11 Step 6 below, `/reload-plugins`), and that `claude --plugin-dir plugins/logan-spine` is the faster loop; and `unregister-global.sh` with its dry-run default and its restore command.
 
 Write the local marketplace route with a placeholder path — `claude plugin marketplace add /path/to/logan-mem` — never this machine's path. The suite's machine-path check searches untracked files under `plugins/` and will fail on `/home/`.
 
-- [ ] **Step 2: Update `CLAUDE.md`**
+- [x] **Step 2: Update `CLAUDE.md`**
 
 - Status line: version 02, what shipped, where the spec and plan live.
 - Folder map: add rows for `.claude/`, `.claude-plugin/` and `plugins/logan-spine/`; delete the `plugins/logan-spine-tools/` row; correct the `plugins/` row, which currently describes skills-directory plugins installed under `~/.claude/skills/`.
 - Replace the "installs once per machine, never per repo" bullet with the current model: the binary and the marketplace registration are per machine, the enable is per repository, the index is per repository under `~/.cache/logan-spine-mcp/`.
 - Add three gotchas: plugin MCP tool names are `mcp__plugin_logan-spine_spine__*` and a matcher written against the bare server key never fires; editing a file under `plugins/logan-spine/` changes nothing in a running session until `version` is bumped and the plugin updated, because the running plugin is a cached copy; and the marketplace is currently registered against whichever checkout held `.claude-plugin/marketplace.json` when `install.sh` ran, so after merging this branch, re-run `claude plugin marketplace add` from the main checkout.
 
-- [ ] **Step 3: Update `README.md`**
+**The middle gotcha, as instructed here, turned out to be wrong and was corrected in `CLAUDE.md` after this step ran.** A `directory`-source marketplace — this repository's kind — loads the plugin from the repository tree, not from the cache directory at all; measured from a live `--debug-file`, `Read hooks.json for plugin logan-spine (enabled=true): …/plugins/logan-spine/hooks/hooks.json`. Following the instruction as written would have meant bumping `version` and refreshing the install on every plugin-file edit for no reason. `CLAUDE.md`'s current gotcha names this correction directly and records that following the old text "wasted a version bump per iteration."
+
+- [x] **Step 3: Update `README.md`**
 
 Rewrite the install and enable instructions in the new shape. This file may name absolute paths; the machine-path test does not cover it.
 
-- [ ] **Step 4: Update `spine/LOGAN-CHANGES.md`**
+- [x] **Step 4: Update `spine/LOGAN-CHANGES.md`**
 
 Add one row recording that we no longer call the engine's Claude Code installer, with the date and the reason. State explicitly that the engine version is unchanged and no C code was modified.
 
-- [ ] **Step 5: Mark the spec decided and add the Verified table**
+- [x] **Step 5: Mark the spec decided and add the Verified table**
 
 Set `status: decided`, bump `updated` from `date '+%Y-%m-%d %H:%M %Z'`, and append a Verified table with one row per success criterion, each carrying the command run and its recorded output from tasks 9 and 10.
 
-- [ ] **Step 6: Bump to 1.0.0, refresh the install, and confirm the whole surface**
+- [x] **Step 6: Bump to 1.0.0, refresh the install, and confirm the whole surface**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging
@@ -1626,7 +1634,9 @@ HOME="$(mktemp -d)" spine/scripts/test.sh --suites cli 2>&1 | tail -3
 
 Expected: `exit=0`; the cache directory now named `1.0.0`, matching the manifest; and the cli suite reporting the version 01 baseline of 273 passed, 10 failed. A different suite figure means something under `spine/` changed and the non-goal was violated.
 
-- [ ] **Step 7: Commit**
+**Two things about this step happened differently than written, both recorded in the spec's Verified row 9.** First, `claude plugin update logan-spine@logan-mem` as written here fails outright: it defaults to `--scope user`, and this plugin is installed at `--scope project`, so it exits 1 with `Plugin "logan-spine" is not installed at scope user`. `--scope project` has to be added, and the spec's development-loop section was corrected to say so. Second, `claude plugin update` does not rename the cache directory — it creates a new `1.0.0` directory and leaves the prior version's directory beside it, so "the cache directory now named `1.0.0`" held only in the sense that such a directory appeared, not that it was the sole one present; `~/.claude/plugins/installed_plugins.json` is what actually says which copy is in use. The manifest has continued to bump past `1.0.0` since this step ran — further fix-round commits (`467e6fc`, `0fae388`, `de2700d`, `bed3cf7`) each bumped it per the version-bump constraint, reaching `1.2.0` by the time of the version-02 merge.
+
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/ubuntu/projects/org/logan-mem/.worktrees/plugin-packaging

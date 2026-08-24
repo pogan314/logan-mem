@@ -3,8 +3,8 @@ title: codebase-memory-mcp (DeusData/codebase-memory-mcp)
 type: wiki
 status: research-fact
 created: "2026-08-21 13:08 CDT"
-updated: "2026-08-22 11:53 CDT"
-sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/DeusData/codebase-memory-mcp` calls on 2026-08-21 and 2026-08-22]
+updated: "2026-08-24 12:29 CDT"
+sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extracts/repos-toplevel-docs.md, live `gh api repos/DeusData/codebase-memory-mcp` calls on 2026-08-21 and 2026-08-22, direct reads of the vendored source at `spine/` and of the pristine pre-rename squash commit `787ab8c` on 2026-08-24]
 ---
 
 **This is no longer just a candidate we're evaluating.** As of logan-mem version 01, this repo is vendored wholesale into `spine/` via `git subtree` (upstream tag `v0.10.8`) and renamed `logan-spine-mcp`. This file stays a research-fact page about the **upstream** project — what it does on its own, independent of our fork — because that's still a fact about a repo we don't control. For what we changed and why, see `spine/LOGAN-CHANGES.md` in this repo (not wiki content — it's a running changelog of our modifications, owned outside `docs/wiki/`).
@@ -51,7 +51,7 @@ sources: [docs/wiki/research-extracts/repos-round-1.md, docs/wiki/research-extra
 - Its own academic paper (arXiv 2603.27277, written by the same person who built the tool) reports the tool's answer quality is worse than a plain file-exploring agent (83% vs 92%) even though it's roughly 10x cheaper in tokens — a tradeoff its own README doesn't mention.
 - The index drifts from the working tree between re-indexes — "the graph said X" isn't always today's truth.
 - The installer downloads a prebuilt native binary and writes global agent config across many tools — a supply-chain surface, not scoped to one project.
-- An internal hook self-aborts silently past a 2000ms deadline (`CBM_HOOK_DEADLINE_MS`), returning empty with no error.
+- ~~An internal hook self-aborts silently past a 2000ms deadline (`CBM_HOOK_DEADLINE_MS`), returning empty with no error.~~ **Checked directly against the vendored source at the tag we imported (`git show 787ab8c:src/cli/hook_augment.c`), 2026-08-24: the 2000ms default and the `CBM_HOOK_DEADLINE_MS` env var name are both correct, but "with no error" is not — the handler already writes a breadcrumb line to `~/.cache/codebase-memory-mcp/logs/hook-augment-timeouts.log` before exiting, per its own comment citing issue #858 ("a fired deadline is otherwise indistinguishable from 'no matches'"). That fix predates the version we vendored, so it isn't silent to disk, only to the calling agent (the tool result is still empty, with no error surfaced to the session). `spine/src/cli/hook_augment.c` carries the identical mechanism today, renamed to `LSM_HOOK_DEADLINE_MS` / `~/.cache/logan-spine-mcp/logs/…`, and our fork raised the default to 3000ms (`spine/LOGAN-CHANGES.md` change #4).
 
 ## Worth stealing
 

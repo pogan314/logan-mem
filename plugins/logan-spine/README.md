@@ -27,13 +27,13 @@ The five hook handlers, as declared in `hooks/hooks.json`:
 
 ## The engine binary installs separately, and the plugin is inert without it
 
-The plugin ships no engine. The engine is `logan-spine-mcp`, a 281 MB native binary that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory — it is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
+The plugin ships no engine. The engine is `logan-spine-mcp`, a 280 MiB native binary that lives at `~/.local/bin/logan-spine-mcp`, outside the plugin directory — it is above the 256 MiB ceiling for every plugin source type that could carry it, and a copied plugin may not reference anything outside its own tree or symlink out of the marketplace.
 
 So plugin and binary are two installs, and an enabled plugin with no binary does nothing:
 
-- All four graph hooks exit 0 and print nothing. They fail open by design; a session simply gets no graph context.
+- All four graph hook entries — three scripts, `code-discovery-gate.sh` being wired to two events — exit 0 and print nothing. They fail open by design; a session simply gets no graph context.
 - The docstring nudge exits 0 and prints nothing.
-- The MCP server is the one component that says so out loud: `bin/spine-launch.sh` exits 127 with `logan-spine: engine binary not found; see the plugin README` on stderr. Both of those — silent exit 0 from all five hook scripts, exit 127 plus one stderr line from the launcher — are asserted by `tests/run.sh` against a deliberately invalid `LOGAN_SPINE_BIN`.
+- The MCP server is the one component that says so out loud: `bin/spine-launch.sh` exits 127 with `logan-spine: engine binary not found; see the plugin README` on stderr. Both of those — exit 0 from each of the four hook scripts, exit 127 plus one stderr line from the launcher — are asserted by `tests/run.sh` against a deliberately invalid `LOGAN_SPINE_BIN`.
 
 ## Install both
 
@@ -49,7 +49,8 @@ That script does the per-machine half, and only the per-machine half:
 2. Places the binary at `~/.local/bin/logan-spine-mcp` (`LSM_BIN_DIR` overrides the directory).
 3. Makes sure that directory is on `PATH`, appending to `~/.bashrc` under its own comment marker only if nothing already provides it.
 4. Turns on `auto_index`.
-5. Registers this repository as a plugin marketplace named `logan-mem`.
+5. Starts a permanent daemon, so the hooks are not silent on a fresh machine. A hook connects to a daemon but never spawns one, and gives up after 250 ms, so without this step the first session on a fresh machine gets quiet hooks until some later session's own MCP server warms one.
+6. Registers this repository as a plugin marketplace named `logan-mem`.
 
 It deliberately does **not** enable the plugin anywhere. Enabling is a per-repository decision and it is the whole point of this packaging.
 
@@ -88,6 +89,8 @@ claude plugin disable logan-spine@logan-mem --scope project
 ```
 
 Or set the value to `false`, or delete the key. There is no `disabledPlugins`, and no way to disable one hook while keeping it in the configuration — the plugin is the unit of control.
+
+**To opt out on one machine without changing the repository**, set it to `false` in `.claude/settings.local.json` rather than in the tracked `.claude/settings.json`. Project settings take precedence over user settings, so setting it to `false` in `~/.claude/settings.json` does **not** disable a plugin the project enables; local settings are what override a project entry. That file is gitignored here. Documented at code.claude.com/docs/en/settings-reference#enabledplugins.
 
 ## `LOGAN_SPINE_BIN`
 

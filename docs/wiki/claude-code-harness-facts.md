@@ -3,11 +3,11 @@ title: Claude Code harness facts
 type: wiki
 status: research-fact
 created: "2026-08-21 12:59 CDT"
-updated: "2026-08-21 12:59 CDT"
-sources: [live docs via mcp__claude-code-docs__query_docs_filesystem_claude_code_docs, pages cited inline as /en/*.mdx]
+updated: "2026-08-24 12:29 CDT"
+sources: [live docs via mcp__claude-code-docs__query_docs_filesystem_claude_code_docs, pages cited inline as /en/*.mdx; items marked "measured in this repo" come from this repo's own probes on 2026-08-23/24, not the docs]
 ---
 
-# What Claude Code itself provides — facts checked against live docs, 2026-08-21
+# What Claude Code itself provides — facts checked against live docs, 2026-08-21, re-verified 2026-08-24
 
 ## 1. Hook events
 
@@ -59,6 +59,7 @@ Five handler types, set via `type` on a hook entry (/en/hooks.mdx, "Hook handler
 - Agent hooks run for **up to 50 turns** before returning their decision (/en/hooks.mdx, "How agent hooks work").
 - Verbatim experimental warning on agent hooks (/en/hooks.mdx): "Agent hooks are experimental. Behavior and configuration may change in future releases. For production workflows, prefer command hooks."
 - Not every event supports every type: `SessionStart` and `Setup` support only `command` and `mcp_tool` (no `http`, `prompt`, or `agent`). Most tool/turn-lifecycle events support all five types.
+- **Matcher syntax, re-verified 2026-08-24 (/en/hooks.mdx, "Matcher patterns"):** a matcher made up only of letters, digits, `_`, `-`, spaces, `,`, and `|` is an exact string or list of exact strings (`|` or `,` both separate alternatives); a matcher containing any other character is an unanchored JavaScript regular expression instead. `FileChanged` and `StopFailure` use a narrower exact-match set (letters, digits, `_`, `|` only — no `-`, space, or `,`), so a hyphenated matcher on those two events falls onto the regex path. Comma separators require Claude Code v2.1.191+; hyphens in the exact-match set require v2.1.195+. This confirms this repo's own hook matchers (plain tool/agent names, `|`-joined) are evaluated as exact strings, not regex.
 
 ## 3. SessionStart, SessionEnd, Stop
 
@@ -86,13 +87,17 @@ A plugin is a self-contained directory; the manifest is optional (/en/plugins-re
 - `.claude-plugin/plugin.json` — the manifest: `name`, `description`, `version`, `author`, etc. If omitted, Claude Code auto-discovers components by default directory names and derives the plugin name from the folder name.
 - `hooks/hooks.json` (or inline `hooks` in plugin.json) — same event/matcher/handler schema as settings-file hooks, all five hook types supported.
 - `.mcp.json` (or inline `mcpServers` in plugin.json) — bundled MCP servers; they connect automatically when the plugin is enabled, using standard MCP server config with `${CLAUDE_PLUGIN_ROOT}` path substitution.
-- `skills/<name>/SKILL.md` (or `commands/` for flat markdown, or a bare root `SKILL.md` for a single-skill plugin) — namespaced as `/plugin-name:skill-name`.
-- `agents/` — custom subagent definitions, appear in @-mention typeahead as `plugin-name:agent-name`. Plugin-shipped agents do NOT support `hooks`, `mcpServers`, or `permissionMode` frontmatter fields (blocked for security).
+- `skills/<name>/SKILL.md` (or `commands/` for flat markdown, or a bare root `SKILL.md` for a single-skill plugin) — namespaced as `/plugin-name:skill-name`. **Re-verified 2026-08-24 (/en/skills.mdx, "How a skill gets its command name"):** for a plugin skill, the frontmatter `name` field (not the directory name) supplies the last segment of the invocation command — `my-plugin/skills/review/SKILL.md` with `name: fancy` becomes `/my-plugin:fancy`. Without a `name` field, Claude Code falls back to the directory name (or, for a plugin-root `SKILL.md` with no `skills/` directory, the plugin's own directory name — which for a marketplace-installed plugin is a version string that changes on every update, per /en/plugins-reference.mdx).
+- `agents/` — custom subagent definitions, appear in @-mention typeahead as `plugin-name:agent-name`, and hooks receive that same value as `agent_type` (/en/sub-agents.mdx: plugin-scoped agent names take the form `my-plugin:reviewer`, and hooks receive a subagent's `name` field as `agent_type`). **Re-verified 2026-08-24 (/en/plugins-reference.mdx):** plugin agents support `name`, `description`, `model`, `effort`, `maxTurns`, `tools`, `disallowedTools`, `skills`, `memory`, `background`, and `isolation` (worktree only) frontmatter fields; `hooks`, `mcpServers`, and `permissionMode` are the ones NOT supported (blocked for security) — `skills` in particular IS honoured for a plugin agent, which the original 2026-08-21 pass of this file didn't call out.
 - Also possible: `.lsp.json` (LSP servers), `monitors/monitors.json` (background monitors), `bin/` (executables added to Bash's PATH), `settings.json` (default settings, currently only `agent` and `subagentStatusLine` keys).
 - **Marketplaces**: a `.claude-plugin/marketplace.json` at a repo root lists plugins and their sources (git repo, local path, URL). Users register a marketplace with `claude plugin marketplace add <owner/repo | url | path>` then install with `claude plugin install <plugin>[@marketplace]`.
 - **Install scopes** (/en/plugins-reference.mdx): `user` (`~/.claude/settings.json`, default, all projects), `project` (`.claude/settings.json`, shared via version control), `local` (`.claude/settings.local.json`, gitignored), `managed` (read-only, org-controlled).
 - Once a plugin is **enabled**, its hooks merge automatically with user/project hooks, and its MCP servers connect automatically at session startup — no separate activation step needed beyond install/enable.
 - A separate mechanism exists outside marketplaces: any skills-directory folder (`~/.claude/skills/<name>/` or `<project>/.claude/skills/<name>/`) containing its own `.claude-plugin/plugin.json` auto-loads as a plugin named `<name>@skills-dir` on the next session, no install step.
+- **Copy vs. in-place, per docs (/en/plugin-marketplaces.mdx):** an installed plugin is normally copied into `~/.claude/plugins/cache`, one versioned directory per install, except a `command`-source plugin in link mode, which is used in place through symlinks. The docs don't call out an exception for a `directory`-source marketplace.
+- **Measured in this repo, 2026-08-24, and this specific case is not what the docs above describe:** with a `directory`-source marketplace (this repo's own `.claude-plugin/marketplace.json`), a session's `--debug-file` showed the plugin's hooks and skills loading straight from the repository tree (`…/plugins/logan-spine/hooks/hooks.json`, `…/plugins/logan-spine/skills`), not from `~/.claude/plugins/cache/`; the only mention of the cache path in a whole session was a sweeper declining to delete it. So an edit to a directory-source plugin's files is live on the next session with no version bump or reinstall — see `CLAUDE.md`'s repo gotchas for the full record.
+- **Measured in this repo, 2026-08-24:** running `claude plugin marketplace add <path>` (via `plugins/logan-spine/scripts/install.sh`) wrote the marketplace into BOTH `~/.claude/settings.json`'s `extraKnownMarketplaces` AND `~/.claude/plugins/known_marketplaces.json`; the latter alone was sufficient for the plugin to load. The live docs (/en/plugin-marketplaces.mdx) describe `known_marketplaces.json` as the one-per-user store and `extraKnownMarketplaces` as a separate settings key for pre-registering a marketplace (e.g. for an org or a repo) — the docs don't document `marketplace add` writing both files itself, but that's what this repo observed.
+- **Measured in this repo, 2026-08-24:** `claude plugin update <plugin>@<marketplace>` defaults to `--scope user`; run bare against a project-scope install it exits 1 with `Plugin "<name>" is not installed at scope user`. Pass `--scope project` explicitly to match how the plugin was installed.
 
 ## 5. MCP servers
 
@@ -106,6 +111,8 @@ Three installation scopes (/en/mcp.mdx, "MCP installation scopes"):
 
 - A project-scoped `.mcp.json` server prompts for approval in interactive sessions before first use (reset with `claude mcp reset-project-choices`); `claude -p`, Agent SDK, and cloud sessions load it without asking.
 - MCP servers can ship inside a plugin (`.mcp.json` at plugin root or inline `mcpServers` in `plugin.json`). Plugin-provided servers behave like manually configured ones but are added/removed by installing/uninstalling the plugin, not via `/mcp`. Their tool names take the form `mcp__plugin_<plugin-name>_<server-name>__<tool-name>`, and the server itself registers as `plugin:<plugin-name>:<server-name>`.
+- **Re-verified 2026-08-24 (/en/cli-reference.mdx, `--mcp-config` and `--permission-prompt-tool` entries):** MCP server startup timeout is 30 seconds (30000 ms) by default, set via the `MCP_TIMEOUT` environment variable (e.g. `MCP_TIMEOUT=10000 claude` for 10s). This is separate from the per-server `timeout` field in `.mcp.json` (per-tool-call wall-clock limit, default ~28 hours via `MCP_TOOL_TIMEOUT`) and the idle timeout (5 min for HTTP/SSE/WebSocket, 30 min for stdio, via `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`).
+- **Re-verified 2026-08-24 (/en/mcp.mdx, "Automatic reconnection"):** if an HTTP or SSE server disconnects mid-session, Claude Code reconnects automatically with exponential backoff (up to 5 attempts, 1s doubling). **Stdio servers are local processes and are NOT reconnected automatically** — a stdio server that dies (e.g. its process exits) stays down for the rest of the session.
 
 ## 6. Native memory features (no plugin needed)
 
