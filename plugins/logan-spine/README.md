@@ -150,4 +150,4 @@ To restore the old global footprint at any time:
 plugins/logan-spine/tests/run.sh
 ```
 
-206 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.
+211 checks as of 2026-08-24, all passing. It never touches the real `$HOME`: every `unregister-global.sh` case runs against a fixture directory passed with `--home`, and the binary-resolution cases run against stubs under a fixture home. The engine-backed docstring cases use the real binary when `lsm_bin` resolves one and print a skip notice when it does not.

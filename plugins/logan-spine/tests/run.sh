@@ -457,4 +457,18 @@ F11="$tmp/fx11"; mkdir -p "$F11"
 out="$("$UG" --home "$F11" --yes 2>&1)"; rc=$?
 check "$rc/$(printf '%s\n' "$out" | grep -c '^settings\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^\.claude\.json: not present$')/$(printf '%s\n' "$out" | grep -c '^Done\.$')" "0/1/1/1" "a valid --home with an empty tree names both absent files and still finishes"
 
+# ---------- install.sh publishes the binary through the engine, not a bare copy ----------
+# A plain copy-and-rename leaves a resident daemon of the previous build running from its open inode, and the engine then refuses every NEW process whose build differs (spine/src/daemon/version_cohort.h). Measured 2026-08-23: sixteen hours of refusals and 63 records in daemon-conflicts.ndjson. The engine's own `install` drains sessions and takes the mutation lock first, so the script must call it rather than move the file itself.
+INS="$PLUGIN/scripts/install.sh"
+check "$(grep -c 'logan-spine-mcp" install' "$INS")" "1" "install.sh publishes the binary through the engine's own install subcommand"
+check "$(grep -cE '^(cp|mv) .*logan-spine-mcp' "$INS")" "0" "install.sh no longer swaps the binary with a bare cp or mv"
+
+# --skip-config is what keeps that call compatible with this version. Without it the engine recreates the entire version-01 global footprint that unregister-global.sh exists to remove. Verified 2026-08-24 by diffing two --dry-run runs: without the flag the plan names three agent files, the ~/.claude.json mcp entry and four hook events; with it, none of them.
+# Anchored to the command line itself. Counting mentions across the file would also match the comment above the call that explains why the flag is there, which is prose rather than behaviour.
+check "$(grep -cE '^ *--force --skip-config --clients=claude --dir="\$BIN_DIR" -y$' "$INS")" "1" "the install call passes --force and --skip-config, so a resident daemon is drained and no agent configuration is written"
+
+# A failure setting auto_index must not abort the script before the marketplace is registered: the binary would be installed, the marketplace absent, and a repository whose committed enabledPlugins entry then resolves to nothing would look broken for no visible reason.
+check "$(grep -c 'if ! "$BIN_DIR/logan-spine-mcp" config set auto_index true; then' "$INS")" "1" "a failed auto_index setting is tolerated rather than aborting under set -e"
+check "$(awk '/config set auto_index/{f=1} f&&/marketplace add/{print "after"; exit}' "$INS")" "after" "the marketplace registration is reached after the auto_index step, not gated on it"
+
 exit $fail
