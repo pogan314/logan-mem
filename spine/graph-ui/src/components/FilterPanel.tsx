@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CollapsibleSection } from "./CollapsibleSection";
-import { colorForLabel, STATUS_LEGEND } from "../lib/colors";
+import { colorForLabel, describeLabel, STATUS_LEGEND } from "../lib/colors";
 import type { GraphData } from "../lib/types";
 
 interface FilterPanelProps {
@@ -122,7 +122,7 @@ export function FilterPanel({
           {/* Node types */}
           {labelCounts.length > 0 && (
             <div>
-              <p className="text-[10px] font-medium text-foreground/40 mb-1.5 uppercase tracking-wider">Node types</p>
+              <p className="text-[10px] font-medium text-foreground/40 mb-1.5 uppercase tracking-wider" title="Hover a type to see what the indexer means by it.">Node types</p>
               <div className="flex flex-wrap gap-1">
                 {labelCounts.map(([label, count]) => {
                   const on = enabledLabels.has(label);
@@ -130,6 +130,7 @@ export function FilterPanel({
                   return (
                     <button
                       key={label}
+                      title={describeLabel(label) ?? label}
                       onClick={() => onToggleLabel(label)}
                       className={`inline-flex items-center gap-1 px-1.5 py-[3px] rounded-md text-[10px] font-medium transition-all border ${
                         on ? "border-white/[0.08] bg-white/[0.04]" : "border-transparent opacity-25"
