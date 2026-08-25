@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CollapsibleSection } from "./CollapsibleSection";
 import type { GraphNode } from "../lib/types";
 import { useUiMessages } from "../lib/i18n";
 
@@ -119,12 +120,8 @@ export function Sidebar({ nodes, onSelectPath, selectedPath }: SidebarProps) {
   const topLevel = useMemo(() => [...tree.children.values()].sort((a, b) => a.name.localeCompare(b.name)), [tree.children]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="px-4 pt-3 pb-2 shrink-0">
-        <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-widest">
-          {t.graph.folders}
-        </span>
-      </div>
+    /* `fill` rather than a stored height: Folders is the last section, so it absorbs whatever the sections above leave instead of needing its own drag handle. */
+    <CollapsibleSection id="folders" title={t.graph.folders} fill>
       <div className="px-3 pb-2.5 border-b border-border/30 shrink-0">
         <div className="relative">
           <input
@@ -173,6 +170,6 @@ export function Sidebar({ nodes, onSelectPath, selectedPath }: SidebarProps) {
           </button>
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

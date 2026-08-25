@@ -61,3 +61,29 @@ export const STELLAR_LEGEND = [
   { type: "K (Orange)", color: "#ffa060", description: "2-3 connections" },
   { type: "M (Red Dwarf)", color: "#ff6050", description: "0-1 connections" },
 ];
+
+/* Node label → what the indexer means by it. Each line is verified against the code that creates the node, named beside it. A label with no entry here gets no tooltip rather than a guessed one. */
+const LABEL_DESCRIPTIONS: Record<string, string> = {
+  Project: "The indexed repository itself — one per project (pipeline.c).",
+  Branch: "The git branch the index was built from (pipeline.c).",
+  Folder: "A directory in the repository (pipeline.c).",
+  File: "A discovered file, indexed or not (pipeline.c).",
+  Module: "A parsed source file's top-level scope — one per file — or a TypeScript namespace (extract_defs.c).",
+  Package: "An external dependency declared in a manifest or Helm chart. Not code in this repo (pass_k8s.c).",
+  Section: "A Markdown heading, spanning to the next heading of equal or higher level (extract_defs.c).",
+  Class: "A class, or a Go/Rust/Swift named type (extract_defs.c).",
+  Struct: "A Go/Rust/Swift/D struct, kept distinct from Class (extract_defs.c).",
+  Interface: "An interface declaration (extract_defs.c).",
+  Protocol: "A Swift protocol — treated as an interface (pass_lsp_cross.c).",
+  Enum: "An enum declaration (extract_defs.c).",
+  Type: "A type alias or named type declaration (extract_defs.c).",
+  Function: "A free function — one not attached to a class (extract_defs.c).",
+  Method: "A function that belongs to a class (extract_defs.c).",
+  Variable: "A top-level or member variable or constant (extract_defs.c).",
+  Route: "An HTTP route path found in a web framework (pass_route_nodes.c).",
+  EnvVar: "An environment variable the code reads (pass_definitions.c).",
+};
+
+export function describeLabel(label: string): string | undefined {
+  return LABEL_DESCRIPTIONS[label];
+}

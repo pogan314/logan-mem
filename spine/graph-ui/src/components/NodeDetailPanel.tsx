@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { colorForLabel } from "../lib/colors";
+import { colorForLabel, describeLabel } from "../lib/colors";
 import { callTool } from "../api/rpc";
 import type { GraphNode, GraphEdge, RepoInfo } from "../lib/types";
 
@@ -123,6 +123,7 @@ export function NodeDetailPanel({
             </div>
             <span
               className="inline-block px-2 py-0.5 rounded-md text-[10px] font-medium"
+              title={describeLabel(node.label) ?? node.label}
               style={{ backgroundColor: colorForLabel(node.label) + "18", color: colorForLabel(node.label) }}
             >
               {node.label}
